@@ -7,6 +7,9 @@ import {
   ChartBar,
   X,
   CaretLeft,
+  Phone,
+  PhoneCall,
+  VideoCamera,
 } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -19,17 +22,23 @@ import { Avatar } from '../common/Avatar';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator } from '../../utils/date';
 import { uploadAsset } from '../../lib/supabase';
+import { OnlineTripMember } from './useTripPresence';
+import { GroupCallManager } from './useGroupCall';
 
 interface MessagesViewProps {
   onKeyboardStateChange?: (isOpen: boolean) => void;
   initialMention?: string;
   onClearInitialMention?: () => void;
+  onlineMembers: OnlineTripMember[];
+  call: GroupCallManager;
 }
 
 export const MessagesView: React.FC<MessagesViewProps> = ({
   onKeyboardStateChange,
   initialMention,
   onClearInitialMention,
+  onlineMembers,
+  call,
 }) => {
   const {
     currentTrip,
@@ -44,7 +53,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     endPoll,
     exitTrip,
   } = useTrip();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
 
   const [inputText, setInputText] = useState('');
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -52,6 +61,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
   const [isPollSheetOpen, setIsPollSheetOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
@@ -419,11 +429,52 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </span>
           </div>
 
-          <div className="w-14 flex justify-end">
-            <Avatar
-              name={profile?.display_name || user?.email}
-              size={32}
-            />
+          <div className="relative w-14 flex justify-end">
+            <button
+              type="button"
+              aria-label="Start a call"
+              aria-expanded={isCallMenuOpen}
+              onClick={() => setIsCallMenuOpen((open) => !open)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg active:scale-95"
+            >
+              <Phone size={20} weight="fill" />
+            </button>
+            {isCallMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close call menu"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setIsCallMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-2xl border border-white/10 bg-[#202024]/95 p-2 shadow-xl backdrop-blur-xl">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-slate-400">
+                    Start a call
+                  </div>
+                  {([
+                    ['audio', 'Voice call', PhoneCall],
+                    ['video', 'Video call', VideoCamera],
+                  ] as const).map(([kind, label, Icon]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => {
+                        void call.startCall(kind, onlineMembers);
+                      }}
+                      className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-white hover:bg-white/10"
+                    >
+                      <Icon size={19} className="text-sky-400" />
+                      {label}
+                    </button>
+                  ))}
+                  {call.callError && (
+                    <div className="px-3 pb-2 pt-1 text-xs text-red-300">
+                      {call.callError}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -442,8 +493,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           className={`flex flex-col justify-start min-h-full px-4 ${hasOpenPolls ? 'pt-24' : 'pt-3'}`}
           style={{
             paddingBottom: isKeyboardOpen
-              ? `${Math.max(76, keyboardOffset + 66)}px`
-              : '110px',
+              ? `${Math.max(112, keyboardOffset + 102)}px`
+              : '150px',
           }}
         >
           {messageGroups.map(({ message, isFirstInGroup, isLastInGroup, showDaySeparator, dayLabel }) => {
@@ -485,8 +536,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             backdropFilter: 'blur(24px) saturate(180%)',
             WebkitBackdropFilter: 'blur(24px) saturate(180%)',
             bottom: isKeyboardOpen
-              ? `${Math.max(8, keyboardOffset + 6) + 60}px`
-              : '120px',
+              ? `${Math.max(8, keyboardOffset + 6) + 96}px`
+              : '156px',
           }}
           className="absolute left-3.5 right-3.5 z-30 px-4 py-2.5 flex items-center gap-2 bg-[#202024]/90 border border-white/[0.12] rounded-[20px] text-xs text-white shadow-lg animate-spring-in transition-[bottom] duration-150 ease-out"
         >
@@ -517,6 +568,29 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         }}
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
+        {onlineMembers.length > 0 && (
+          <div
+            aria-label={`${onlineMembers.length} members currently active`}
+            title={`${onlineMembers.length} members currently active`}
+            className="absolute bottom-[calc(100%+8px)] right-0 flex max-w-full items-center justify-end -space-x-2"
+          >
+            {onlineMembers.slice(0, 7).map((member) => (
+              <div key={member.userId} className="relative rounded-full border-2 border-black">
+                <Avatar
+                  name={member.profile.display_name}
+                  avatarUrl={member.profile.avatar_url}
+                  color={member.profile.color}
+                  size={28}
+                />
+              </div>
+            ))}
+            {onlineMembers.length > 7 && (
+              <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                +{onlineMembers.length - 7}
+              </span>
+            )}
+          </div>
+        )}
         <input
           type="file"
           ref={photoInputRef}
@@ -727,6 +801,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleCameraCapture}
       />
+
     </div>
   );
 };

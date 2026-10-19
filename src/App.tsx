@@ -12,6 +12,9 @@ import { MealsView } from './components/meals/MealsView';
 import { ScheduleView } from './components/schedule/ScheduleView';
 import { SettingsView } from './components/settings/SettingsView';
 import tripLogo from '../trip-logo.png';
+import { useTripPresence } from './components/messages/useTripPresence';
+import { useGroupCall } from './components/messages/useGroupCall';
+import { CallOverlay } from './components/messages/CallOverlay';
 
 type AppViewKey = 'trips' | TabKey;
 
@@ -25,8 +28,10 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
 };
 
 const MainAppContent: React.FC = () => {
-  const { user, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const { currentTrip } = useTrip();
+  const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile);
+  const call = useGroupCall(currentTrip?.id, user?.id, profile);
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
@@ -147,6 +152,8 @@ const MainAppContent: React.FC = () => {
                 onKeyboardStateChange={setIsKeyboardOpen}
                 initialMention={targetMention}
                 onClearInitialMention={() => setTargetMention(undefined)}
+                onlineMembers={onlineMembers}
+                call={call}
               />
             )}
             {activeView === 'groceries' && <GroceriesView />}
@@ -166,6 +173,7 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
       />
+      <CallOverlay call={call} userId={user.id} />
     </div>
   );
 };
