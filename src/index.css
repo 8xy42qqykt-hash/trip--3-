@@ -1,0 +1,216 @@
+@import "tailwindcss";
+@import "@fontsource/outfit/300.css";
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+
+@layer base {
+  :root {
+    --accent: #0A84FF;
+    --accent-hover: #007AFF;
+    --bg-page: #000000;
+    --bg-surface: rgba(28, 28, 32, 0.72);
+    --bg-grouped: #1c1c1e;
+    --text-primary: #ffffff;
+    --text-secondary: #8e8e93;
+    --text-tertiary: #636366;
+    --bubble-other: #262629;
+    --bubble-self: #0A84FF;
+    --glass-bg: rgba(28, 28, 32, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --separator: rgba(84, 84, 88, 0.2);
+  }
+
+  html {
+    font-size: 16px;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  @media (max-width: 640px) {
+    html {
+      font-size: 17px;
+    }
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #000000;
+    color: #ffffff;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    touch-action: pan-x pan-y;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+  }
+
+  *, *::before, *::after {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input, textarea, button, select {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    outline: none;
+    border: none;
+  }
+
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+.glass-surface {
+  background: rgba(28, 28, 32, 0.75);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-floating {
+  background: rgba(28, 28, 32, 0.85);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.35);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: 0px;
+}
+
+.reply-preview-content {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.active-press {
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), opacity 140ms ease;
+}
+.active-press:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
+@keyframes springPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-spring-in {
+  animation: springPopIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes calmFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-calm-fade-in {
+  animation: calmFadeIn 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sheetSlideUp {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetSlideDown {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdropFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes popInSmooth {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheetSlideUp 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-sheet-down {
+  animation: sheetSlideDown 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-backdrop-in {
+  animation: backdropFadeIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-backdrop-out {
+  animation: backdropFadeOut 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pop-in {
+  animation: popInSmooth 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.chat-bubble-touch {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
