@@ -8,7 +8,10 @@ import { BottomSheet } from '../common/BottomSheet';
 import { Plus, Hash, CalendarBlank, SignOut, CaretLeft, CaretRight, Check, X } from '@phosphor-icons/react';
 import { useLanguage } from '../../context/LanguageContext';
 
-export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSelected }) => {
+export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?: () => void }> = ({
+  onTripSelecting,
+  onTripSelected,
+}) => {
   const { t } = useLanguage();
   const {
     createTrip,
@@ -192,6 +195,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   key={trip.id}
                   type="button"
                   onClick={() => {
+                    onTripSelecting?.();
                     selectTrip(trip);
                     onTripSelected?.();
                   }}

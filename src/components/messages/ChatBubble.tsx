@@ -151,18 +151,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         setBubbleRect(bubbleRef.current.getBoundingClientRect());
       }
       setShowReactionPicker(true);
-    }, 320);
+    }, 500);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!startPosRef.current) return;
     const dx = Math.abs(e.clientX - startPosRef.current.x);
     const dy = Math.abs(e.clientY - startPosRef.current.y);
-    if (dx > 8 || dy > 8) {
+    if (dx > 10 || dy > 10) {
       if (pressTimerRef.current) {
         clearTimeout(pressTimerRef.current);
         pressTimerRef.current = null;
       }
+      startPosRef.current = null;
     }
   };
 
@@ -171,6 +172,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
+    startPosRef.current = null;
     if (didLongPressRef.current) {
       return;
     }
@@ -189,6 +191,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+  };
+
+  const handlePointerCancel = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    startPosRef.current = null;
   };
 
   const playReactionBurst = () => {
@@ -321,6 +331,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
               onContextMenu={handleContextMenu}
               onClick={() => {
                 if (!didLongPressRef.current) setSelectedImage(message.image_url!);
@@ -355,6 +366,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
                 onContextMenu={handleContextMenu}
                 className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 [overflow-wrap:anywhere] ${getBubbleRadiusClasses()} ${
                   isOwn

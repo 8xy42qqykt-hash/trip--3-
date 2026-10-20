@@ -139,7 +139,7 @@ const MainAppContent: React.FC = () => {
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
       setSlideDirection(tripExitDirectionRef.current
-        ?? (activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1));
+        ?? (activeTab === 'my_trip' || activeTab === 'settings' || activeTab === 'messages' ? -1 : 1));
       tripExitDirectionRef.current = null;
       setIsKeyboardOpen(false);
     }
@@ -393,7 +393,10 @@ const MainAppContent: React.FC = () => {
             data-app-view="inactive"
           >
             {activeView === 'trips' && (
-              <TripGate onTripSelected={() => setActiveTab('messages')} />
+              <TripGate
+                onTripSelecting={() => setSlideDirection(1)}
+                onTripSelected={() => setActiveTab('messages')}
+              />
             )}
             {activeView === 'messages' && (
               <MessagesView
