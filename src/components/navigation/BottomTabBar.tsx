@@ -56,7 +56,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
       role="navigation"
       aria-label={t('Bottom Navigation')}
       style={{
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingBottom: 'max(0px, calc(env(safe-area-inset-bottom, 0px) - 8px))',
       }}
       className="fixed bottom-0 left-0 right-0 z-40 isolate select-none pointer-events-auto"
     >
@@ -68,7 +68,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         }}
       />
       {/* Completely flush bar with pure black bg and no empty space under nav buttons */}
-      <div className="relative z-10 max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-1.5">
+      <div className="relative z-10 max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-1">
         {tabs.map(({ key, label, Icon }) => {
           const isActive = activeTab === key;
           return (

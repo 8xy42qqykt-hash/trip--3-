@@ -136,12 +136,16 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                   key={idx}
                   type="button"
                   onClick={() => setCurrentIndex(idx)}
-                  className={`h-2 rounded-full transition-all duration-200 ${
-                    idx === activeIndex
-                      ? 'w-5 bg-[#0A84FF]'
-                      : 'w-2 bg-white/20'
-                  }`}
-                />
+                  aria-label={`${t('Poll')} ${idx + 1}`}
+                  aria-current={idx === activeIndex ? 'true' : undefined}
+                  className="flex h-10 w-10 items-center justify-center rounded-full active:bg-white/[0.08]"
+                >
+                  <span
+                    className={`h-2.5 rounded-full transition-all duration-200 ${
+                      idx === activeIndex ? 'w-6 bg-[#0A84FF]' : 'w-2.5 bg-white/25'
+                    }`}
+                  />
+                </button>
               ))}
             </div>
           )}
@@ -167,7 +171,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                     <button
                       type="button"
                       onClick={() => onVote(poll.id, opt.id)}
-                      className={`relative w-full min-h-[48px] rounded-[18px] overflow-hidden px-4 py-2 flex items-center justify-between text-left active:scale-[0.99] cursor-pointer transition-all ${
+                      className={`relative w-full min-h-[54px] rounded-[18px] overflow-hidden px-4 py-2.5 flex items-center justify-between text-left active:scale-[0.99] cursor-pointer transition-all ${
                         isLosing
                           ? 'bg-white/5 opacity-75'
                           : 'bg-white/10'
@@ -185,7 +189,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
 
                       <div className="relative z-10 flex items-center gap-2.5 flex-1 pr-2 truncate">
                         <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
+                          className={`w-[22px] h-[22px] rounded-full flex items-center justify-center transition-all duration-200 ${
                             hasVoted
                               ? 'bg-[#0A84FF] text-white shadow-xs'
                               : 'border-2 border-white/30'

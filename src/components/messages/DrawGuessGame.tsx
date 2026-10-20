@@ -68,6 +68,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guessInputRef = useRef<HTMLInputElement>(null);
+  const gameContentRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const draftRef = useRef<Stroke | null>(null);
@@ -404,6 +405,18 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     return () => window.cancelAnimationFrame(frame);
   }, [game?.id, game?.status, game?.drawer_id, game?.round_number, game?.winner_id, userId]);
 
+  useEffect(() => {
+    if (!game || game.status !== 'playing' || game.drawer_id === userId || game.winner_id || keyboardOffset <= 0) return;
+    const container = gameContentRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+    const containerBounds = container.getBoundingClientRect();
+    const canvasBounds = canvas.getBoundingClientRect();
+    const scrollTop = container.scrollTop + canvasBounds.top - containerBounds.top
+      - (container.clientHeight - canvasBounds.height) / 2;
+    container.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
+  }, [game?.status, game?.drawer_id, game?.winner_id, keyboardOffset, userId]);
+
   const submitGuess = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const guess = guessText.trim();
@@ -466,8 +479,13 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       </header>
 
       <div
+        ref={gameContentRef}
         className="flex min-h-0 flex-1 flex-col px-4 pt-3"
-        style={{ paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? '62px' : '12px' }}
+        style={{
+          paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? '62px' : '12px',
+          overflowY: game?.status === 'playing' && !isDrawer && !game.winner_id ? 'auto' : 'hidden',
+          overscrollBehavior: 'contain',
+        }}
       >
         {game?.status === 'lobby' ? (
           <div className="flex flex-col items-start gap-3">

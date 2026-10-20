@@ -11,6 +11,7 @@ import {
   User,
   X,
   CaretDown,
+  ArrowClockwise,
 } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
@@ -34,6 +35,8 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages }) => {
   const { language, setLanguage, t } = useLanguage();
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
+  const [appUpdateStatus, setAppUpdateStatus] = useState('');
   const { user, profile, updateProfile, signOut } = useAuth();
   const {
     currentTrip,
@@ -246,6 +249,94 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
     } finally {
       setIsRemoving(false);
       setConfirmRemove(false);
+    }
+  };
+
+  const handleAppUpdate = async () => {
+    if (!('serviceWorker' in navigator)) {
+      setAppUpdateStatus(t('App updates are not supported by this browser.'));
+      return;
+    }
+    setIsCheckingForUpdate(true);
+    setAppUpdateStatus(t('Checking for app updates…'));
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        throw new Error(t('Could not find the app update service.'));
+      }
+
+      let updateFoundTimeout = 0;
+      const updateFound = new Promise<ServiceWorker | null>((resolve) => {
+        const onUpdateFound = () => {
+          registration.removeEventListener('updatefound', onUpdateFound);
+          window.clearTimeout(updateFoundTimeout);
+          resolve(registration.installing);
+        };
+        registration.addEventListener('updatefound', onUpdateFound, { once: true });
+        updateFoundTimeout = window.setTimeout(() => {
+          registration.removeEventListener('updatefound', onUpdateFound);
+          resolve(null);
+        }, 10_000);
+      });
+      await registration.update();
+      let worker = registration.waiting;
+      if (!worker && registration.installing) worker = registration.installing;
+      if (!worker) worker = await updateFound;
+      if (!worker) {
+        setAppUpdateStatus(t('App is already up to date.'));
+        return;
+      }
+
+      if (worker.state !== 'installed' && worker.state !== 'activated') {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => {
+            worker?.removeEventListener('statechange', onStateChange);
+            reject(new Error(t('The app update is taking too long. Please try again.')));
+          }, 30_000);
+          const onStateChange = () => {
+            if (worker?.state === 'installed' || worker?.state === 'activated') {
+              window.clearTimeout(timeout);
+              worker.removeEventListener('statechange', onStateChange);
+              resolve();
+            } else if (worker?.state === 'redundant') {
+              window.clearTimeout(timeout);
+              worker.removeEventListener('statechange', onStateChange);
+              reject(new Error(t('The app update could not be installed.')));
+            }
+          };
+          worker?.addEventListener('statechange', onStateChange);
+        });
+      }
+
+      if (worker.state === 'installed' || worker.state === 'activated') {
+        setAppUpdateStatus(t('Update found. Reloading the app…'));
+        if (worker.state === 'activated') {
+          window.location.reload();
+          return;
+        }
+        let reloaded = false;
+        const reloadApp = () => {
+          if (reloaded) return;
+          reloaded = true;
+          window.location.reload();
+        };
+        navigator.serviceWorker.addEventListener('controllerchange', reloadApp, { once: true });
+        worker.addEventListener('statechange', function onWorkerStateChange() {
+          if (worker?.state === 'activated' && !navigator.serviceWorker.controller) reloadApp();
+          if (worker?.state === 'activated' || worker?.state === 'redundant') {
+            worker.removeEventListener('statechange', onWorkerStateChange);
+          }
+        });
+        worker.postMessage({ type: 'SKIP_WAITING' });
+        return;
+      }
+
+      setAppUpdateStatus(t('App is already up to date.'));
+    } catch (error) {
+      console.error('Could not update the installed app:', error);
+      setAppUpdateStatus(error instanceof Error ? error.message : t('Could not check for app updates.'));
+    } finally {
+      setIsCheckingForUpdate(false);
     }
   };
 
@@ -589,6 +680,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         {/* Install App */}
         <div className="flex justify-center pt-2">
           <PWAInstallPrompt />
+        </div>
+
+        {/* Update App */}
+        <div className="space-y-2 pt-2">
+          <button
+            type="button"
+            onClick={() => void handleAppUpdate()}
+            disabled={isCheckingForUpdate}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.08] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.12] active-press disabled:opacity-60"
+          >
+            <ArrowClockwise size={18} weight="bold" className={isCheckingForUpdate ? 'animate-spin' : ''} />
+            <span>{t('Update App')}</span>
+          </button>
+          {appUpdateStatus && <p role="status" className="text-center text-xs text-slate-400">{appUpdateStatus}</p>}
         </div>
 
         {/* Sign Out */}

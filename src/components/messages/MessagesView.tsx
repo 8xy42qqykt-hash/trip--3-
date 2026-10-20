@@ -266,6 +266,19 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const handleFocus = () => {
     isInputFocusedRef.current = true;
     notifyKeyboard(true);
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    });
+    window.setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }, 80);
     const offset = calcKeyboardOffset();
     setKeyboardOffset(offset);
     setTimeout(() => {

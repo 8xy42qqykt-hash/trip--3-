@@ -33,6 +33,13 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'CLEAR_NOTIFICATION_BADGE') {
     event.waitUntil(updateUnreadCount(true).then(() => self.navigator.clearAppBadge?.()));
   }
+  if (event.data?.type === 'SKIP_WAITING') {
+    event.waitUntil(self.skipWaiting());
+  }
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('push', (event) => {

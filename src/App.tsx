@@ -109,13 +109,13 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     const currentTripId = currentTrip?.id || null;
     if (prevTripIdRef.current === null && currentTripId !== null) {
-      // Selected a trip -> slide in opposite direction (-1: enters from left, trips slides right)
-      setSlideDirection(-1);
+      // The selected trip enters from the right as the Trips view exits left.
+      setSlideDirection(1);
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
-      // Exited a trip -> slide in opposite direction (1: enters from right, messages slides left)
-      setSlideDirection(1);
+      // The Trips view enters from the left as the trip view exits right.
+      setSlideDirection(-1);
       setIsKeyboardOpen(false);
     }
     prevTripIdRef.current = currentTripId;
