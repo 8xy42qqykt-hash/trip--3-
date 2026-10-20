@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, isCloudActive } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Trip, TripInvitation, TripMember, Message, Reaction, Poll, GroceryItem, Meal, EventItem, Profile } from '../types';
@@ -12,6 +12,7 @@ interface TripContextType {
   tripMembers: TripMember[];
   isOwner: boolean;
   isLoadingTrips: boolean;
+  isLoadingMessages: boolean;
   pendingInvitations: TripInvitation[];
   loadInvitations: () => Promise<void>;
   createTripInvitations: (emails: string[]) => Promise<{ error?: string; warning?: string }>;
@@ -139,6 +140,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [tripMembers, setTripMembers] = useState<TripMember[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const loadedMessagesTripIdsRef = useRef(new Set<string>());
   const [polls, setPolls] = useState<Poll[]>([]);
   const [groceries, setGroceries] = useState<GroceryItem[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -375,6 +378,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = useCallback(async () => {
     if (!currentTrip || !user) return;
+    const isInitialMessageLoad = !loadedMessagesTripIdsRef.current.has(currentTrip.id);
+    if (isInitialMessageLoad) setIsLoadingMessages(true);
     if (isCloudActive && supabase) {
       try {
         const { data: membersData } = await supabase
@@ -398,6 +403,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select('*, reactions(*), profiles(*)')
           .eq('trip_id', currentTrip.id)
           .order('created_at', { ascending: true });
+        loadedMessagesTripIdsRef.current.add(currentTrip.id);
         if (messagesData) {
           const cloudMessages: Message[] = messagesData.map((m: any) => ({
               ...m,
@@ -418,6 +424,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
             (first, second) => first.created_at.localeCompare(second.created_at),
           ));
         }
+        if (isInitialMessageLoad) setIsLoadingMessages(false);
 
         const { data: pollsData } = await supabase
           .from('polls')
@@ -505,6 +512,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err) {
         console.warn('Error refreshing data from cloud:', err);
+        if (isInitialMessageLoad) setIsLoadingMessages(false);
       }
     } else {
       // Local storage fallback
@@ -537,6 +545,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sender: getProfile(m.user_id),
         }));
       setMessages(tripMsg);
+      loadedMessagesTripIdsRef.current.add(currentTrip.id);
+      if (isInitialMessageLoad) setIsLoadingMessages(false);
 
       const allPolls: Poll[] = getStore('trip_local_polls');
       const allVotes: any[] = getStore('trip_local_poll_votes');
@@ -1622,6 +1632,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tripMembers,
         isOwner,
         isLoadingTrips,
+        isLoadingMessages,
         pendingInvitations,
         loadInvitations,
         createTripInvitations,

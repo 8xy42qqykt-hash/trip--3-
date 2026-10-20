@@ -33,6 +33,7 @@ import { GroupCallManager } from './useGroupCall';
 import { useTripLocations } from '../trip/useTripLocations';
 import { DrawGuessGame } from './DrawGuessGame';
 import { useLanguage } from '../../context/LanguageContext';
+import tripLogo from '../../../trip-logo.png';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan';
@@ -56,6 +57,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     currentTrip,
     tripMembers,
     messages,
+    isLoadingMessages,
     polls,
     sendMessage,
     updateMessage,
@@ -94,6 +96,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
+  const [messageRevealPhase, setMessageRevealPhase] = useState<'loading' | 'revealing' | 'shown'>(
+    isLoadingMessages ? 'loading' : 'shown',
+  );
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -350,6 +355,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages.length]);
+
+  useEffect(() => {
+    if (isLoadingMessages) {
+      setMessageRevealPhase('loading');
+      return;
+    }
+    if (messageRevealPhase !== 'loading') return;
+    setMessageRevealPhase('revealing');
+    const timer = window.setTimeout(() => setMessageRevealPhase('shown'), 1100);
+    return () => window.clearTimeout(timer);
+  }, [isLoadingMessages, messageRevealPhase]);
 
   useEffect(() => {
     if (!isKeyboardOpen || !isInputFocusedRef.current) return;
@@ -886,13 +902,27 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           }`}>
             {pageTitle}
           </h1>
-          {messageGroups.map(({ message, isFirstInGroup, isLastInGroup, showDaySeparator, dayLabel }) => {
+          {messageGroups.map(({ message, isFirstInGroup, isLastInGroup, showDaySeparator, dayLabel }, index) => {
             const replyMsg = message.reply_to
               ? visibleMessages.find((m) => m.id === message.reply_to)
               : null;
+            const firstAnimatedIndex = Math.max(0, messageGroups.length - 10);
+            const isRecentMessage = index >= firstAnimatedIndex;
+            const revealDelay = isRecentMessage ? (index - firstAnimatedIndex) * 0.065 : 0;
 
             return (
-              <React.Fragment key={message.id}>
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={messageRevealPhase === 'loading'
+                  ? { opacity: 0, y: 5 }
+                  : { opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.28,
+                  delay: isRecentMessage ? revealDelay : 0.12,
+                  ease: 'easeOut',
+                }}
+              >
                 {showDaySeparator && (
                   <div className="flex justify-center my-4 animate-calm-fade-in">
                     <span className="text-xs font-medium text-slate-500 select-none">
@@ -919,11 +949,33 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onProfileClick={setSelectedProfileId}
                   onOpenDrawGame={setActiveDrawGameId}
                 />
-              </React.Fragment>
+              </motion.div>
             );
           })}
         </div>
       </CustomScrollArea>
+
+      {messageRevealPhase !== 'shown' && (
+        <motion.div
+          initial={{ opacity: 1 }}
+          animate={{ opacity: messageRevealPhase === 'loading' ? 1 : 0 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center bg-black"
+        >
+          <motion.img
+            src={tripLogo}
+            alt={t('Trip')}
+            initial={{ scale: 0.92, opacity: 1 }}
+            animate={messageRevealPhase === 'loading'
+              ? { scale: [0.92, 1.04, 0.96, 1.04], opacity: 1 }
+              : { scale: 3.6, opacity: 0 }}
+            transition={messageRevealPhase === 'loading'
+              ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' }
+              : { duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="h-16 w-16 object-contain"
+          />
+        </motion.div>
+      )}
 
       {/* Reply Banner */}
       {replyingTo && !isFilteredView && (
@@ -933,7 +985,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             WebkitBackdropFilter: 'blur(24px) saturate(180%)',
             bottom: isKeyboardOpen
               ? `${Math.max(8, keyboardOffset + 6) + 96}px`
-              : 'calc(144px + env(safe-area-inset-bottom, 0px))',
+              : 'calc(132px + env(safe-area-inset-bottom, 0px))',
           }}
           data-reaction-clearance
           className="absolute left-3.5 right-3.5 z-30 px-4 py-2.5 flex items-center gap-2 bg-[#202024]/90 border border-white/[0.12] rounded-[20px] text-xs text-white shadow-lg animate-spring-in transition-[bottom] duration-150 ease-out"
@@ -961,7 +1013,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         style={{
           bottom: isKeyboardOpen
             ? `${Math.max(8, keyboardOffset + 6)}px`
-            : 'calc(54px + env(safe-area-inset-bottom, 0px))',
+            : 'calc(42px + env(safe-area-inset-bottom, 0px))',
         }}
         data-reaction-clearance
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"

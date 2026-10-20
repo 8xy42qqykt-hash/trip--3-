@@ -35,6 +35,7 @@ const MainAppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
+  const [isLaunchAnimationVisible, setIsLaunchAnimationVisible] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
   const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
@@ -98,6 +99,13 @@ const MainAppContent: React.FC = () => {
     }, 1200);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+    setIsLaunchAnimationVisible(true);
+    const timer = window.setTimeout(() => setIsLaunchAnimationVisible(false), 1250);
+    return () => window.clearTimeout(timer);
+  }, [isLoading, user?.id]);
 
   // Listen to keyboard toggle events across all views
   useEffect(() => {
@@ -240,6 +248,28 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
       />
+      {isLaunchAnimationVisible && (
+        <motion.div
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          className="pointer-events-none fixed inset-0 z-[20000] flex items-center justify-center bg-black"
+          aria-hidden="true"
+        >
+          <motion.img
+            src={tripLogo}
+            alt=""
+            initial={{ scale: 1 }}
+            animate={{ scale: [1, 0.78, 1, 4.4], opacity: [1, 1, 1, 0] }}
+            transition={{
+              duration: 1.2,
+              times: [0, 0.18, 0.38, 1],
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className="h-16 w-16 object-contain"
+          />
+        </motion.div>
+      )}
       {(call.activeCall || call.incomingCall) && (
         <CallOverlay call={call} userId={user?.id} />
       )}
