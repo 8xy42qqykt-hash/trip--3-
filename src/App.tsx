@@ -114,8 +114,8 @@ const MainAppContent: React.FC = () => {
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
-      // The Trips view enters from the right as the trip view exits left.
-      setSlideDirection(1);
+      // Return to Trips with the same direction as entering a trip: content exits right, Trips enters left.
+      setSlideDirection(-1);
       setIsKeyboardOpen(false);
     }
     prevTripIdRef.current = currentTripId;

@@ -346,6 +346,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     scrollToBottom();
   }, [messages.length]);
 
+  useEffect(() => {
+    if (!isKeyboardOpen || !isInputFocusedRef.current) return;
+
+    let frame = window.requestAnimationFrame(() => {
+      scrollToBottom();
+      frame = window.requestAnimationFrame(scrollToBottom);
+    });
+    const settleTimer = window.setTimeout(scrollToBottom, 180);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+    };
+  }, [isKeyboardOpen, keyboardOffset]);
+
   useEffect(() => () => {
     if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
   }, [pendingPhoto]);
@@ -922,62 +937,46 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         />
 
         {/* Member Mention Autocomplete Popup */}
-        {mentionQuery !== null && mentionCandidates.length > 0 && (
-          <div
-            className="absolute bottom-[calc(100%+10px)] left-0 z-50 flex max-h-56 w-full flex-col items-start overflow-y-auto animate-calm-fade-in"
-          >
-            {mentionCandidates.map((m) => (
-              <button
-                key={m.user_id}
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault(); // Prevent blur of textarea
-                }}
-                onClick={() => handleSelectMention(m)}
-                className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
-              >
-                <Avatar
-                  name={m.profile?.display_name}
-                  avatarUrl={m.profile?.avatar_url}
-                  color={m.profile?.color}
-                  size={30}
-                />
-                <span className="truncate text-sm font-semibold text-white">
-                  {m.profile?.display_name}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
         {pendingPhoto && (
-          <div className="mb-2 flex justify-start" key={pendingPhoto.id}>
+          <div className="mb-2 flex justify-end" key={pendingPhoto.id}>
             <div className="relative max-w-[70%] overflow-hidden rounded-[18px] border border-white/10 bg-[#222226]">
               <img
                 src={pendingPhoto.previewUrl}
                 alt={t('Photo upload preview')}
                 className="block max-h-32 w-auto max-w-full object-contain"
               />
-              <button
-                type="button"
-                aria-label={t('Remove photo')}
-                onClick={() => {
-                  const nextText = inputText.replace(/(?:^|\s)@photo(?=\s|$)/i, ' ').trim();
-                  URL.revokeObjectURL(pendingPhoto.previewUrl);
-                  setPendingPhoto(null);
-                  setInputText(nextText);
-                  textareaRef.current?.focus({ preventScroll: true });
-                }}
-                className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white"
-              >
-                <X size={17} weight="bold" />
-              </button>
             </div>
           </div>
         )}
 
         {/* items-end: The + button and send button stay anchored at the bottom line when textarea expands */}
         <form onSubmit={handleSend} className="relative flex items-end gap-2">
+          {mentionQuery !== null && mentionCandidates.length > 0 && (
+            <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 flex max-h-56 w-full flex-col items-start overflow-y-auto animate-calm-fade-in">
+              {mentionCandidates.map((m) => (
+                <button
+                  key={m.user_id}
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => handleSelectMention(m)}
+                  className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
+                >
+                  <Avatar
+                    name={m.profile?.display_name}
+                    avatarUrl={m.profile?.avatar_url}
+                    color={m.profile?.color}
+                    size={30}
+                  />
+                  <span className="truncate text-sm font-semibold text-white">
+                    {m.profile?.display_name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Type-specific tabs have a fixed composer mode and do not show mode toggles. */}
           {!isFilteredView && <button
             type="button"
