@@ -683,10 +683,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  if (!currentTrip) {
-    return null;
-  }
-
   const visibleMessages = isFilteredView
     ? messages.filter((message) => message.type === viewMode)
     : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan');
@@ -782,6 +778,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       window.visualViewport?.removeEventListener('scroll', updatePosition);
     };
   }, [mentionCandidates.length, mentionQuery]);
+
+  if (!currentTrip) {
+    return null;
+  }
 
   return (
     <div className="h-full w-full flex flex-col bg-black text-white overflow-hidden relative select-none">
