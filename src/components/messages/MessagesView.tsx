@@ -86,7 +86,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const callButtonRef = useRef<HTMLButtonElement>(null);
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string } | null>(null);
+  const uploadInProgressRef = useRef(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string; file: File } | null>(null);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
@@ -343,18 +344,30 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length, pendingPhoto?.id]);
+  }, [messages.length]);
+
+  useEffect(() => () => {
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+  }, [pendingPhoto]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
 
     // Check for @mention query at cursor position
-    const cursorPos = e.target.selectionStart || val.length;
+    const cursorPos = e.target.selectionStart ?? val.length;
     const textBeforeCursor = val.slice(0, cursorPos);
-    const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_\s]{0,20})$/);
-    if (match) {
-      setMentionQuery(match[1]);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    const textBeforeAt = atIndex >= 0 ? textBeforeCursor.slice(0, atIndex) : '';
+    const mentionQueryText = atIndex >= 0 ? textBeforeCursor.slice(atIndex + 1) : '';
+    if (
+      atIndex >= 0
+      && (!textBeforeAt || /\s$/.test(textBeforeAt))
+      && !/[\n@]/.test(mentionQueryText)
+      && !/^photo$/i.test(mentionQueryText)
+      && !/\s$/.test(mentionQueryText)
+    ) {
+      setMentionQuery(mentionQueryText);
     } else {
       setMentionQuery(null);
     }
@@ -380,12 +393,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     const cursorPos = textarea ? textarea.selectionStart : inputText.length;
     const textBeforeCursor = inputText.slice(0, cursorPos);
     const textAfterCursor = inputText.slice(cursorPos);
-
-    // Replace the trailing @... with @Name 
-    const replacedBefore = textBeforeCursor.replace(/(?:^|\s)@([a-zA-Z0-9_\s]{0,20})$/, (match) => {
-      const leadingSpace = match.startsWith(' ') ? ' ' : '';
-      return `${leadingSpace}@${name} `;
-    });
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    const textBeforeAt = atIndex >= 0 ? textBeforeCursor.slice(0, atIndex) : textBeforeCursor;
+    if (atIndex >= 0 && textBeforeAt && !/\s$/.test(textBeforeAt)) return;
+    const replacedBefore = `${textBeforeAt}@${name} `;
 
     const newText = replacedBefore + textAfterCursor;
     setInputText(newText);
@@ -405,25 +416,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const clean = inputText.trim();
-    if (!clean || (composerMode === 'plan' && !planDate)) return;
+    if (uploadingImage || uploadInProgressRef.current) return;
+    const typedText = inputText.trim();
+    const clean = pendingPhoto
+      ? typedText.replace(/(?:^|\s)@photo(?=\s|$)/gi, ' ').trim()
+      : typedText;
+    if ((!clean && !pendingPhoto) || (composerMode === 'plan' && !planDate)) return;
     setComposerError('');
-
-    setInputText('');
-    setMentionQuery(null);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '40px';
-      // Keep textarea focused so user can keep typing and keyboard stays up!
-      textareaRef.current.focus({ preventScroll: true });
-    }
-    isInputFocusedRef.current = true;
-    notifyKeyboard(true);
-
     const replyId = replyingTo?.id;
-    setReplyingTo(null);
-
-    const type = composerMode === 'message' ? 'text' : composerMode;
-    const editing = editingMessageId ? messages.find((message) => message.id === editingMessageId) : undefined;
+    const type = pendingPhoto ? 'text' : composerMode === 'message' ? 'text' : composerMode;
+    const editing = !pendingPhoto && editingMessageId ? messages.find((message) => message.id === editingMessageId) : undefined;
     const previousMetadata = editing?.metadata || {};
     const previousCheckedByText = new Map<string, boolean[]>();
     for (const item of previousMetadata.items || []) {
@@ -431,30 +433,50 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       matchingItems.push(Boolean(item.checked));
       previousCheckedByText.set(item.text, matchingItems);
     }
-    const metadata = composerMode === 'grocery_list'
-      ? {
-          items: clean.split(/\r?\n/).map((text) => text.trim()).filter(Boolean).map((text, index) => ({
-            text,
-            checked: draftCheckedItems.includes(index) || previousCheckedByText.get(text)?.shift() || false,
-          })),
-        }
-      : composerMode === 'meal'
-        ? { ...previousMetadata, time: mealTime || null, cooks: previousMetadata.cooks || [] }
-        : composerMode === 'plan'
-          ? { ...previousMetadata, date: planDate, time: planTime || null, contributors: previousMetadata.contributors || [] }
-          : undefined;
+    const metadata = pendingPhoto
+      ? undefined
+      : composerMode === 'grocery_list'
+        ? {
+            items: clean.split(/\r?\n/).map((text) => text.trim()).filter(Boolean).map((text, index) => ({
+              text,
+              checked: draftCheckedItems.includes(index) || previousCheckedByText.get(text)?.shift() || false,
+            })),
+          }
+        : composerMode === 'meal'
+          ? { ...previousMetadata, time: mealTime || null, cooks: previousMetadata.cooks || [] }
+          : composerMode === 'plan'
+            ? { ...previousMetadata, date: planDate, time: planTime || null, contributors: previousMetadata.contributors || [] }
+            : undefined;
+    if (pendingPhoto) uploadInProgressRef.current = true;
+    setUploadingImage(Boolean(pendingPhoto));
     try {
-      if (editingMessageId) {
+      if (pendingPhoto) {
+        const imageUrl = await uploadAsset(pendingPhoto.file, 'chat');
+        await sendMessage(clean, imageUrl, replyId);
+        URL.revokeObjectURL(pendingPhoto.previewUrl);
+        setPendingPhoto(null);
+      } else if (editingMessageId) {
         await updateMessage(editingMessageId, { content: clean, type, metadata });
         setEditingMessageId(null);
       } else {
         await sendMessage(clean, undefined, replyId, type, metadata);
       }
+      setInputText('');
+      setMentionQuery(null);
+      setReplyingTo(null);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '40px';
+        textareaRef.current.focus({ preventScroll: true });
+      }
+      isInputFocusedRef.current = true;
+      notifyKeyboard(true);
     } catch (error) {
       console.error('Could not send or update the chat message:', error);
-      setInputText(clean);
       setComposerError(error instanceof Error ? error.message : 'Could not send the message. Try again.');
       return;
+    } finally {
+      uploadInProgressRef.current = false;
+      setUploadingImage(false);
     }
     setComposerMode(isFilteredView ? viewMode : 'message');
     setDraftCheckedItems([]);
@@ -468,6 +490,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (e.key === 'Escape') {
       setMentionQuery(null);
       return;
+    }
+    if (e.key === 'Backspace' && pendingPhoto) {
+      const cursor = e.currentTarget.selectionStart;
+      const beforeCursor = inputText.slice(0, cursor);
+      const photoToken = /(?:^|\s)@photo\s?$/i.exec(beforeCursor);
+      if (photoToken) {
+        e.preventDefault();
+        const tokenStart = photoToken.index + (photoToken[0].startsWith(' ') ? 1 : 0);
+        const nextText = `${inputText.slice(0, tokenStart)}${inputText.slice(cursor)}`.trimEnd();
+        URL.revokeObjectURL(pendingPhoto.previewUrl);
+        setPendingPhoto(null);
+        setInputText(nextText);
+        window.requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        return;
+      }
     }
     if (e.key === 'Enter' && !e.shiftKey && composerMode !== 'grocery_list') {
       e.preventDefault();
@@ -500,36 +537,28 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
     const previewUrl = URL.createObjectURL(file);
-    setPendingPhoto({ id: `pending-photo-${Date.now()}`, previewUrl });
-    setUploadingImage(true);
+    setPendingPhoto({ id: `pending-photo-${Date.now()}`, previewUrl, file });
     setIsPlusMenuOpen(false);
-    try {
-      const url = await uploadAsset(file, 'chat');
-      await new Promise<void>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error(t('The uploaded photo could not be loaded.')));
-        image.src = url;
-      });
-      const replyId = replyingTo?.id;
-      setReplyingTo(null);
-      await sendMessage('', url, replyId);
-      setPendingPhoto(null);
-      setTimeout(scrollToBottom, 50);
-    } catch (err) {
-      console.warn('Image upload error:', err);
-      setPendingPhoto(null);
-      setComposerError(err instanceof Error ? err.message : 'Could not send this photo. Try again.');
-    } finally {
-      URL.revokeObjectURL(previewUrl);
-      setUploadingImage(false);
-      if (photoInputRef.current) photoInputRef.current.value = '';
-    }
+    const currentText = (pendingPhoto
+      ? inputText.replace(/(?:^|\s)@photo(?=\s|$)/gi, ' ')
+      : inputText).trimEnd();
+    const nextText = currentText ? `${currentText} @photo ` : '@photo ';
+    setInputText(nextText);
+    window.setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(nextText.length, nextText.length);
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
+    }, 20);
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   const handleDoubleTapHeart = (messageId: string) => {
@@ -688,10 +717,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       ? tripMembers
           .filter((m) => {
             const name = m.profile?.display_name || '';
+            if (!name) return false;
             if (!mentionQuery.trim()) return true;
             return name.toLowerCase().includes(mentionQuery.toLowerCase());
           })
-          .slice(0, 5)
       : [];
 
   return (
@@ -833,20 +862,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               </React.Fragment>
             );
           })}
-          {pendingPhoto && (
-            <div className="mb-2 flex justify-end" key={pendingPhoto.id} aria-live="polite">
-              <div className="relative max-w-[78%] overflow-hidden rounded-[22px] bg-[#222226]">
-                <img
-                  src={pendingPhoto.previewUrl}
-                  alt={t('Photo upload preview')}
-                  className="block max-h-80 w-auto max-w-full animate-pulse object-contain opacity-45"
-                />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-label={t('Uploading photo')} />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </CustomScrollArea>
 
@@ -909,44 +924,55 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         {/* Member Mention Autocomplete Popup */}
         {mentionQuery !== null && mentionCandidates.length > 0 && (
           <div
-            style={{
-              backdropFilter: 'blur(30px) saturate(190%)',
-              WebkitBackdropFilter: 'blur(30px) saturate(190%)',
-              backgroundColor: 'rgba(24, 24, 28, 0.95)',
-            }}
-            className="mb-2 max-h-48 overflow-y-auto border border-white/[0.14] rounded-[20px] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.6)] animate-calm-fade-in divide-y divide-white/[0.06]"
+            className="absolute bottom-[calc(100%+10px)] left-0 z-50 flex max-h-56 w-full flex-col items-start overflow-y-auto animate-calm-fade-in"
           >
-            <div className="px-3 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Mention Member
-            </div>
             {mentionCandidates.map((m) => (
               <button
                 key={m.user_id}
                 type="button"
-                onMouseDown={(e) => {
+                onPointerDown={(e) => {
                   e.preventDefault(); // Prevent blur of textarea
                 }}
                 onClick={() => handleSelectMention(m)}
-                className="mention-autocomplete-item w-full px-3 py-2 rounded-xl flex items-center justify-between hover:bg-white/10 active:bg-white/15 cursor-pointer transition-colors text-left"
+                className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Avatar
-                    name={m.profile?.display_name}
-                    avatarUrl={m.profile?.avatar_url}
-                    color={m.profile?.color}
-                    size={28}
-                  />
-                  <div className="truncate">
-                    <div className="text-sm font-semibold text-white truncate">
-                      {m.profile?.display_name || t('Member')}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[11px] text-sky-400 font-mono shrink-0 ml-2">
-                  @{m.profile?.display_name || 'member'}
+                <Avatar
+                  name={m.profile?.display_name}
+                  avatarUrl={m.profile?.avatar_url}
+                  color={m.profile?.color}
+                  size={30}
+                />
+                <span className="truncate text-sm font-semibold text-white">
+                  {m.profile?.display_name}
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {pendingPhoto && (
+          <div className="mb-2 flex justify-start" key={pendingPhoto.id}>
+            <div className="relative max-w-[70%] overflow-hidden rounded-[18px] border border-white/10 bg-[#222226]">
+              <img
+                src={pendingPhoto.previewUrl}
+                alt={t('Photo upload preview')}
+                className="block max-h-32 w-auto max-w-full object-contain"
+              />
+              <button
+                type="button"
+                aria-label={t('Remove photo')}
+                onClick={() => {
+                  const nextText = inputText.replace(/(?:^|\s)@photo(?=\s|$)/i, ' ').trim();
+                  URL.revokeObjectURL(pendingPhoto.previewUrl);
+                  setPendingPhoto(null);
+                  setInputText(nextText);
+                  textareaRef.current?.focus({ preventScroll: true });
+                }}
+                className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white"
+              >
+                <X size={17} weight="bold" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -961,9 +987,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 setComposerMode('message');
                 setEditingMessageId(null);
                 setInputText('');
+                setDraftCheckedItems([]);
                 setMealTime('');
                 setPlanDate('');
                 setPlanTime('');
+                setMentionQuery(null);
+                setComposerError('');
                 return;
               }
               if (textareaRef.current) {
@@ -1000,7 +1029,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
                   backgroundColor: 'rgba(28, 28, 32, 0.94)',
                 }}
-                className="absolute left-0 bottom-14 z-40 w-48 border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] origin-bottom-left animate-pop-in"
+                className="absolute left-0 bottom-14 z-40 flex w-48 flex-col border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] origin-bottom-left animate-pop-in"
               >
                 <button
                   type="button"
@@ -1008,7 +1037,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     setIsPlusMenuOpen(false);
                     photoInputRef.current?.click();
                   }}
-                  className="w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                  className="order-6 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
                 >
                   <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                     <ImageIcon size={16} weight="bold" />
@@ -1028,7 +1057,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       setInputText('');
                       setComposerMode(mode);
                     }}
-                    className="w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                    className={`${mode === 'plan' ? 'order-1' : mode === 'grocery_list' ? 'order-2' : 'order-3'} w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all`}
                   >
                     <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-slate-200">
                       <Icon size={16} weight="bold" />
@@ -1039,7 +1068,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 <button
                   type="button"
                   onClick={() => void createDrawGame()}
-                  className="w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                  className="order-4 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
                 >
                   <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-300">
                     <GameController size={16} weight="bold" />
@@ -1052,7 +1081,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     setIsPlusMenuOpen(false);
                     setIsPollSheetOpen(true);
                   }}
-                  className="w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                  className="order-5 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
                 >
                   <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
                     <ChartBar size={16} weight="bold" />
@@ -1233,6 +1262,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}
         location={sharedLocations.find((location) => location.user_id === selectedProfileId)}
         onClose={() => setSelectedProfileId(null)}
+        onMention={() => {
+          const member = tripMembers.find((candidate) => candidate.user_id === selectedProfileId);
+          if (member) handleSelectMention(member);
+          setSelectedProfileId(null);
+        }}
       />
       {activeDrawGameId && user && (
         <DrawGuessGame

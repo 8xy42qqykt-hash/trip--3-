@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { At } from '@phosphor-icons/react';
 import { Avatar } from './Avatar';
 import { BottomSheet } from './BottomSheet';
 import { Profile } from '../../types';
 import { SharedTripLocation } from '../trip/useTripLocations';
+import { useLanguage } from '../../context/LanguageContext';
 
 const reverseGeocodeCache = new Map<string, string>();
 let lastReverseGeocodeAt = 0;
@@ -11,9 +13,11 @@ interface MemberProfileSheetProps {
   profile: Profile | null;
   location?: SharedTripLocation;
   onClose: () => void;
+  onMention?: () => void;
 }
 
-export const MemberProfileSheet: React.FC<MemberProfileSheetProps> = ({ profile, location, onClose }) => {
+export const MemberProfileSheet: React.FC<MemberProfileSheetProps> = ({ profile, location, onClose, onMention }) => {
+  const { t } = useLanguage();
   const [placeName, setPlaceName] = useState('');
 
   useEffect(() => {
@@ -72,6 +76,16 @@ export const MemberProfileSheet: React.FC<MemberProfileSheetProps> = ({ profile,
             <p className="max-w-full text-sm text-slate-300">
               {placeName || `${location.latitude?.toFixed(4)}, ${location.longitude?.toFixed(4)}`}
             </p>
+          )}
+          {onMention && (
+            <button
+              type="button"
+              onClick={onMention}
+              className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-full bg-white/10 px-5 text-sm font-semibold text-white active:bg-white/15"
+            >
+              <At size={17} weight="bold" />
+              {t('Mention')}
+            </button>
           )}
         </div>
       )}

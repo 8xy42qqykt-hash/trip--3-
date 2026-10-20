@@ -46,23 +46,63 @@ const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
   Question,
 };
 
-const renderContentWithMentions = (content: string, isOwnBubble: boolean) => {
+const renderContentWithMentions = (content: string, isOwnBubble: boolean, members: TripMember[]) => {
   if (!content) return null;
-  const parts = content.split(/(@[^\s@]+)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith('@')) {
-      return (
+  const names = members
+    .map((member) => member.profile?.display_name?.trim())
+    .filter((name): name is string => Boolean(name))
+    .sort((left, right) => right.length - left.length);
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  while (cursor < content.length) {
+    const previous = cursor === 0 ? '' : content[cursor - 1];
+    const isBoundary = cursor === 0 || /\s/.test(previous);
+    let matchedText: string | null = null;
+    let isStyled = false;
+    if (isBoundary && content[cursor] === '@') {
+      const candidate = names.find((name) => {
+        const mention = `@${name}`;
+        const match = content.slice(cursor, cursor + mention.length);
+        const nextChar = content[cursor + mention.length] || '';
+        return match.toLocaleLowerCase() === mention.toLocaleLowerCase()
+          && (!nextChar || !/[\p{L}\p{N}_]/u.test(nextChar));
+      });
+      if (candidate) {
+        matchedText = `@${candidate}`;
+        isStyled = true;
+      }
+    }
+    if (content[cursor] === '#') {
+      const hashtag = content.slice(cursor).match(/^#(?:\s+)?[^\s#]+/)?.[0];
+      if (hashtag) {
+        matchedText = hashtag;
+        isStyled = true;
+      }
+    }
+    if (isStyled && matchedText) {
+      parts.push(
         <span
-          key={index}
+          key={`styled-${cursor}`}
           className={`font-semibold inline-block rounded px-1 -mx-0.5 ${
             isOwnBubble
               ? 'bg-white/25 text-white underline decoration-white/40'
               : 'bg-[#0A84FF]/25 text-[#70baff] font-bold'
           }`}
         >
-          {part}
-        </span>
+          {matchedText}
+        </span>,
       );
+      cursor += matchedText.length;
+      continue;
+    }
+    let textEnd = cursor + 1;
+    while (textEnd < content.length && content[textEnd] !== '@' && content[textEnd] !== '#') textEnd += 1;
+    parts.push(content.slice(cursor, textEnd));
+    cursor = textEnd;
+  }
+  return parts.map((part, index) => {
+    if (typeof part === 'string') {
+      return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
     }
     return part;
   });
@@ -106,19 +146,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     pressTimerRef.current = setTimeout(() => {
       didLongPressRef.current = true;
       if (bubbleRef.current) {
-        const rect = bubbleRef.current.getBoundingClientRect();
-        const unscaledWidth = Math.ceil(bubbleRef.current.offsetWidth || rect.width);
-        const unscaledHeight = Math.ceil(bubbleRef.current.offsetHeight || rect.height);
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        setBubbleRect({
-          left: centerX - unscaledWidth / 2,
-          top: centerY - unscaledHeight / 2,
-          width: unscaledWidth,
-          height: unscaledHeight,
-          right: centerX + unscaledWidth / 2,
-          bottom: centerY + unscaledHeight / 2,
-        } as DOMRect);
+        setBubbleRect(bubbleRef.current.getBoundingClientRect());
       }
       setShowReactionPicker(true);
     }, 320);
@@ -311,7 +339,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               />
               {message.content && (
                 <p className="min-w-0 max-w-full px-1.5 text-base text-white whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                  {renderContentWithMentions(message.content, isOwn)}
+                  {renderContentWithMentions(message.content, isOwn, members)}
                 </p>
               )}
             </div>
@@ -385,7 +413,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : message.type === 'meal' || message.type === 'plan' ? (
                   <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
-                    <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn)}</p>
+                    <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn, members)}</p>
                   </div>
                 ) : message.type === 'draw_game' ? (
                   <DrawGameInviteCard
@@ -425,7 +453,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : (
                   <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                    {renderContentWithMentions(message.content, isOwn)}
+                    {renderContentWithMentions(message.content, isOwn, members)}
                   </p>
                 )}
               </div>

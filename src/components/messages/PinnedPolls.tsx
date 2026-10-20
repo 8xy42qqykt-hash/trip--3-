@@ -130,7 +130,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
 
           {/* Swipe dots if multiple open polls */}
           {openPolls.length > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-2.5">
+            <div className="flex items-center justify-center gap-0">
               {openPolls.map((_, idx) => (
                 <button
                   key={idx}
@@ -138,7 +138,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                   onClick={() => setCurrentIndex(idx)}
                   aria-label={`${t('Poll')} ${idx + 1}`}
                   aria-current={idx === activeIndex ? 'true' : undefined}
-                  className="flex h-10 w-10 items-center justify-center rounded-full active:bg-white/[0.08]"
+                  className="flex h-10 w-10 items-center justify-center p-0"
                 >
                   <span
                     className={`h-2.5 rounded-full transition-all duration-200 ${

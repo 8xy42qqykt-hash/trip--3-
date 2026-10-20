@@ -178,14 +178,15 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
           })}
         </div>
 
-        {/* Lifted Message Box: Unscaled max-content width so text NEVER wraps onto more lines */}
+        {/* Keep the lifted copy at the measured dimensions so long-press cannot reflow the message. */}
         <div
           style={{
             top: `${targetBubbleTop}px`,
             left: `${targetBubbleLeft}px`,
             width: `${bubbleWidth}px`,
-            minWidth: `${bubbleWidth}px`,
-            maxWidth: `${bubbleWidth}px`,
+            height: `${bubbleHeight}px`,
+            overflow: 'hidden',
+            boxSizing: 'border-box',
           }}
           className="absolute pointer-events-none"
         >
@@ -219,6 +220,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
               className={`min-w-[190px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl text-white ${defaultRadius} ${
                 isOwnMessage ? 'bg-[#0A84FF]' : 'bg-[#262629]'
               }`}
+              style={{ width: '100%', height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}
             >
               <div className="space-y-2">
                 <div className="text-xs font-semibold tracking-wide text-white/70">{t('Grocery list')}</div>
@@ -242,10 +244,10 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
                 isOwnMessage ? 'bg-[#0A84FF] text-white' : 'bg-[#262629] text-white'
               }`}
               style={{
-                width: 'max-content',
-                minWidth: `${bubbleWidth}px`,
-                maxWidth: `${bubbleWidth}px`,
+                width: '100%',
+                height: '100%',
                 boxSizing: 'border-box',
+                overflow: 'hidden',
               }}
             >
               {message.content}
@@ -271,10 +273,10 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
                   : 'bg-[#262629] text-white'
               }`}
               style={{
-                width: 'max-content',
-                minWidth: `${bubbleWidth}px`,
-                maxWidth: `${bubbleWidth}px`,
+                width: '100%',
+                height: '100%',
                 boxSizing: 'border-box',
+                overflow: 'hidden',
               }}
             >
               {message.content}

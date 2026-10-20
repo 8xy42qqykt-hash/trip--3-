@@ -261,6 +261,8 @@ const translations: Record<string, string> = {
   'The game was created, but its chat invitation could not be sent.': 'Peli luotiin, mutta pelikutsua ei voitu lähettää keskusteluun.',
   'Shared trip photo': 'Jaettu matkakuva',
   'Photo upload preview': 'Kuvan lähetyksen esikatselu',
+  'Remove photo': 'Poista kuva',
+  'Mention': 'Mainitse',
   'Uncheck': 'Poista valinta',
   'Check': 'Valitse',
   'grocery item': 'ostoslistan tuote',
