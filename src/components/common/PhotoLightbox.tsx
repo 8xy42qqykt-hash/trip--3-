@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
 import { Download, X } from '@phosphor-icons/react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -14,6 +15,9 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ imageUrl, onClose 
   const { t } = useLanguage();
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [isOpen, setIsOpen] = useState(true);
+
+  const requestClose = () => setIsOpen(false);
 
   const downloadPhoto = async () => {
     setIsDownloading(true);
@@ -45,13 +49,19 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ imageUrl, onClose 
   };
 
   return createPortal((
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isOpen ? 1 : 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      onAnimationComplete={() => {
+        if (!isOpen) onClose();
+      }}
       className="fixed inset-0 z-[11000] flex flex-col items-center justify-center bg-black/95 p-4"
       style={{
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
         paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
       }}
-      onClick={onClose}
+      onClick={requestClose}
     >
       <div className="flex w-full max-w-3xl items-center justify-end gap-2 pb-3" onClick={(event) => event.stopPropagation()}>
         <button
@@ -65,7 +75,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ imageUrl, onClose 
         </button>
         <button
           type="button"
-          onClick={onClose}
+          onClick={requestClose}
           aria-label={t('Close photo')}
           style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white"
@@ -78,12 +88,15 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ imageUrl, onClose 
           {t(downloadError)}
         </p>
       )}
-      <img
+      <motion.img
         src={imageUrl}
         alt={t('Shared trip photo')}
         onClick={(event) => event.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.88, y: 12 }}
+        animate={isOpen ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.92, y: 8 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
         className="max-h-[82dvh] max-w-full object-contain"
       />
-    </div>
+    </motion.div>
   ), document.body);
 };

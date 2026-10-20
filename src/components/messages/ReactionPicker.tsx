@@ -71,7 +71,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const menuWidth = 216;
 
   // Top and bottom clearance from header and input/nav bars
-  const topMargin = 78;
+  const topMargin = 124;
   const bottomMargin = 96;
 
   // Find container boundaries (e.g. max-w-lg chat container) so elements NEVER open outside the screen on the right
@@ -129,11 +129,12 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
       <div
         onClick={onClose}
         style={{
+          top: 'calc(env(safe-area-inset-top, 0px) + 72px)',
           backdropFilter: 'blur(28px) saturate(180%)',
           WebkitBackdropFilter: 'blur(28px) saturate(180%)',
           backgroundColor: 'rgba(0, 0, 0, 0.72)',
         }}
-        className="fixed inset-0 animate-backdrop-in"
+        className="fixed inset-x-0 bottom-0 animate-backdrop-in"
       />
 
       {/* Floating container with smooth slide */}

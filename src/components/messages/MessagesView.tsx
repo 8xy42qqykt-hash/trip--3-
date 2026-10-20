@@ -15,6 +15,7 @@ import {
   ForkKnife,
   CalendarBlank,
   GameController,
+  CircleNotch,
 } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -87,6 +88,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const uploadInProgressRef = useRef(false);
+  const sendInProgressRef = useRef(false);
+  const [isSending, setIsSending] = useState(false);
   const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string; file: File } | null>(null);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
@@ -99,6 +102,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerFormRef = useRef<HTMLFormElement>(null);
+  const [mentionListPosition, setMentionListPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const mealTimeInputRef = useRef<HTMLInputElement>(null);
   const planDateInputRef = useRef<HTMLInputElement>(null);
@@ -431,7 +436,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (uploadingImage || uploadInProgressRef.current) return;
+    if (sendInProgressRef.current || uploadingImage || uploadInProgressRef.current) return;
     const typedText = inputText.trim();
     const clean = pendingPhoto
       ? typedText.replace(/(?:^|\s)@photo(?=\s|$)/gi, ' ').trim()
@@ -463,7 +468,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             ? { ...previousMetadata, date: planDate, time: planTime || null, contributors: previousMetadata.contributors || [] }
             : undefined;
     if (pendingPhoto) uploadInProgressRef.current = true;
+    sendInProgressRef.current = true;
     setUploadingImage(Boolean(pendingPhoto));
+    setIsSending(Boolean(pendingPhoto));
+    const sendingIndicatorTimer = pendingPhoto
+      ? null
+      : window.setTimeout(() => setIsSending(true), 250);
     try {
       if (pendingPhoto) {
         const imageUrl = await uploadAsset(pendingPhoto.file, 'chat');
@@ -494,8 +504,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       setComposerError(error instanceof Error ? error.message : 'Could not send the message. Try again.');
       return;
     } finally {
+      if (sendingIndicatorTimer !== null) window.clearTimeout(sendingIndicatorTimer);
+      sendInProgressRef.current = false;
       uploadInProgressRef.current = false;
       setUploadingImage(false);
+      setIsSending(false);
     }
     setComposerMode(isFilteredView ? viewMode : 'message');
     setDraftCheckedItems([]);
@@ -742,6 +755,34 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           })
       : [];
 
+  useEffect(() => {
+    if (mentionQuery === null || mentionCandidates.length === 0) {
+      setMentionListPosition(null);
+      return;
+    }
+    const updatePosition = () => {
+      const rect = composerFormRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const height = Math.min(mentionCandidates.length * 44, 224);
+      setMentionListPosition({
+        top: Math.max(8, rect.top - height - 8),
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    window.visualViewport?.addEventListener('resize', updatePosition);
+    window.visualViewport?.addEventListener('scroll', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.visualViewport?.removeEventListener('resize', updatePosition);
+      window.visualViewport?.removeEventListener('scroll', updatePosition);
+    };
+  }, [mentionCandidates.length, mentionQuery]);
+
   return (
     <div className="h-full w-full flex flex-col bg-black text-white overflow-hidden relative select-none">
       {/* Top Header - Trip Title & Exit Button (Extended cleanly through top danger zone) */}
@@ -954,33 +995,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         )}
 
         {/* items-end: The + button and send button stay anchored at the bottom line when textarea expands */}
-        <form onSubmit={handleSend} className="relative flex items-end gap-2">
-          {mentionQuery !== null && mentionCandidates.length > 0 && (
-            <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 flex max-h-56 w-full flex-col items-start overflow-y-auto animate-calm-fade-in">
-              {mentionCandidates.map((m) => (
-                <button
-                  key={m.user_id}
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                  }}
-                  onClick={() => handleSelectMention(m)}
-                  className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
-                >
-                  <Avatar
-                    name={m.profile?.display_name}
-                    avatarUrl={m.profile?.avatar_url}
-                    color={m.profile?.color}
-                    size={30}
-                  />
-                  <span className="truncate text-sm font-semibold text-white">
-                    {m.profile?.display_name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
+        <form ref={composerFormRef} onSubmit={handleSend} className="relative flex items-end gap-2">
           {/* Type-specific tabs have a fixed composer mode and do not show mode toggles. */}
           {!isFilteredView && <button
             type="button"
@@ -1237,7 +1252,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           >
             <button
               type="submit"
-              disabled={!inputText.trim() || (composerMode === 'plan' && !planDate)}
+              disabled={!inputText.trim() || (composerMode === 'plan' && !planDate) || isSending}
               onMouseDown={(e) => {
                 // Prevent focus shift away from textarea
                 e.preventDefault();
@@ -1247,9 +1262,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 e.preventDefault();
                 handleSend();
               }}
-              className="w-[46px] h-[46px] min-w-[46px] min-h-[46px] rounded-full bg-[#0A84FF] text-white flex items-center justify-center cursor-pointer shadow-lg active:scale-90 transition-transform"
+              aria-label={t(isSending ? 'Sending…' : 'Send')}
+              className="w-[46px] h-[46px] min-w-[46px] min-h-[46px] rounded-full bg-[#0A84FF] text-white flex items-center justify-center cursor-pointer shadow-lg active:scale-90 transition-transform disabled:cursor-wait"
             >
-              <ArrowUp size={20} weight="bold" />
+              {isSending
+                ? <CircleNotch size={20} weight="bold" className="animate-spin" />
+                : <ArrowUp size={20} weight="bold" />}
             </button>
           </div>
         </form>
@@ -1279,6 +1297,36 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           onClose={() => setActiveDrawGameId(null)}
           sendMessage={sendMessage}
         />
+      )}
+
+      {mentionQuery !== null && mentionCandidates.length > 0 && mentionListPosition && createPortal(
+        <div
+          style={{
+            top: `${mentionListPosition.top}px`,
+            left: `${mentionListPosition.left}px`,
+            width: `${mentionListPosition.width}px`,
+          }}
+          className="fixed z-[12002] flex max-h-56 flex-col items-start overflow-y-auto animate-calm-fade-in"
+        >
+          {mentionCandidates.map((member) => (
+            <button
+              key={member.user_id}
+              type="button"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => handleSelectMention(member)}
+              className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
+            >
+              <Avatar
+                name={member.profile?.display_name}
+                avatarUrl={member.profile?.avatar_url}
+                color={member.profile?.color}
+                size={30}
+              />
+              <span className="truncate text-sm font-semibold text-white">{member.profile?.display_name}</span>
+            </button>
+          ))}
+        </div>,
+        document.body,
       )}
 
       {createPortal(
