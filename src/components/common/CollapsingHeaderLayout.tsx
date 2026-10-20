@@ -41,7 +41,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 -bottom-12"
+          className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
             backdropFilter: 'blur(28px) saturate(180%)',
