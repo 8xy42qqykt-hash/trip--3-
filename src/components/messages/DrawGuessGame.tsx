@@ -237,7 +237,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
 
   const announceResults = async (scores: Record<string, number>, participants: string[]) => {
     const results = participants
-      .map((id) => `${memberName(id)}:${scores[id] || 0}`)
+      .map((id) => `${memberName(id)}: ${scores[id] || 0}`)
       .join('\n');
     await sendMessage(
       `${t('Draw and Guess')}\n${results}`,
@@ -543,19 +543,24 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                 }}
                 className="fixed left-3.5 right-3.5 z-[12001] mx-auto flex min-h-[46px] max-w-2xl items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
-                <div className="flex min-w-0 w-0 flex-1 items-center">
+                <div className="flex min-w-0 flex-1 items-center">
                   <input
                     ref={guessInputRef}
                     value={guessText}
                     onChange={(event) => setGuessText(event.target.value)}
                     placeholder={t('Type your guess')}
-                    className="w-full min-w-0 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
+                    className="block w-full min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
                     enterKeyHint="send"
                   />
                 </div>
                 <div
-                  className="flex shrink-0 items-center justify-end overflow-hidden transition-[width,opacity] duration-200 ease-out"
-                  style={{ width: guessText.trim() ? 40 : 0, opacity: guessText.trim() ? 1 : 0 }}
+                  className="flex min-w-0 shrink-0 items-center justify-end overflow-hidden"
+                  style={{
+                    width: guessText.trim() ? 40 : 0,
+                    flexBasis: guessText.trim() ? 40 : 0,
+                    opacity: guessText.trim() ? 1 : 0,
+                    transition: 'width 200ms cubic-bezier(0.16, 1, 0.3, 1), flex-basis 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out',
+                  }}
                 >
                   <button
                     type="submit"
