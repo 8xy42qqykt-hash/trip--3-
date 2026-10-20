@@ -1,6 +1,6 @@
 /// <reference path="./web-push.d.ts" />
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import webPush from 'npm:web-push@3.6.7';
 
 type NotificationEvent = {

@@ -197,13 +197,12 @@ export const NotificationPermissionButton: React.FC = () => {
   };
 
   return (
-    <section className="border-y border-white/[0.08] py-4">
+    <div>
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A84FF]/20 text-[#0A84FF]">
           <Bell size={18} weight="bold" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-bold text-white">Notifications</h3>
           <p className="text-xs text-slate-400">{preferences.enabled ? 'On for this device' : 'Off for this device'}</p>
         </div>
         <button
@@ -226,6 +225,6 @@ export const NotificationPermissionButton: React.FC = () => {
       {isLoading && <p className="mt-2 text-xs text-slate-400">Loading notification settings…</p>}
       {isBusy && <p className="mt-2 text-xs text-slate-400">Updating notification settings…</p>}
       {status && <p role="status" className="mt-3 text-xs text-slate-300">{status}</p>}
-    </section>
+    </div>
   );
 };

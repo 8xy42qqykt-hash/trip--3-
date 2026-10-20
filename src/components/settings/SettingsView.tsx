@@ -326,10 +326,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
           </div>
         </div>
 
-        <section className="border-y border-white/[0.08] py-4">
-          <h3 className="mb-3 text-base font-bold text-white">Notifications</h3>
-          <NotificationPermissionButton />
-        </section>
+        <NotificationPermissionButton />
         {isOwner && <section className="space-y-3 border-y border-white/[0.08] py-4">
           <div>
             <h3 className="text-base font-bold text-white">Invite people</h3>
