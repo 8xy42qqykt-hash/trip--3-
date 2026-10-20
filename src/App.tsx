@@ -49,6 +49,7 @@ const MainAppContent: React.FC = () => {
   const edgeSwipeOffset = useMotionValue(0);
   const [edgeSwipeSide, setEdgeSwipeSide] = useState<'left' | 'right' | null>(null);
   const [canCommitEdgeSwipe, setCanCommitEdgeSwipe] = useState(false);
+  const edgeSwipeArmedRef = useRef(false);
   const isHorizontalSwipeRef = useRef(false);
   const [isGestureTransitioning, setIsGestureTransitioning] = useState(false);
   const gestureTransitionTimerRef = useRef<number | null>(null);
@@ -133,8 +134,7 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     const currentTripId = currentTrip?.id || null;
     if (prevTripIdRef.current === null && currentTripId !== null) {
-      // The selected trip enters from the left as the Trips view exits right.
-      setSlideDirection(-1);
+      setSlideDirection(1);
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
@@ -179,6 +179,7 @@ const MainAppContent: React.FC = () => {
     if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .leaflet-container, [role="dialog"]')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side: null, pointerId: event.pointerId };
+    edgeSwipeArmedRef.current = false;
     isHorizontalSwipeRef.current = false;
     edgeSwipeOffset.set(0);
   };
@@ -188,6 +189,21 @@ const MainAppContent: React.FC = () => {
     if (!start || event.pointerId !== start.pointerId) return;
     const deltaX = event.clientX - start.x;
     const deltaY = event.clientY - start.y;
+    const threshold = window.innerWidth / 6;
+    if (edgeSwipeArmedRef.current) {
+      const returnedToEdge = start.side === 'left' ? deltaX <= 8 : deltaX >= -8;
+      if (returnedToEdge) {
+        edgeSwipeArmedRef.current = false;
+        setCanCommitEdgeSwipe(false);
+        setEdgeSwipeSide(null);
+        edgeSwipeOffset.set(0);
+        return;
+      }
+      event.preventDefault();
+      isHorizontalSwipeRef.current = true;
+      edgeSwipeOffset.set(start.side === 'left' ? threshold : -threshold);
+      return;
+    }
     if (Math.abs(deltaY) > 20 && Math.abs(deltaY) > Math.abs(deltaX)) {
       edgeSwipeRef.current = null;
       isHorizontalSwipeRef.current = false;
@@ -203,16 +219,17 @@ const MainAppContent: React.FC = () => {
     isHorizontalSwipeRef.current = true;
     event.preventDefault();
     setEdgeSwipeSide(side);
-    const maxOffset = window.innerWidth * 0.45;
-    const offset = side === 'left'
-      ? Math.max(0, Math.min(maxOffset, deltaX))
-      : Math.min(0, Math.max(-maxOffset, deltaX));
-    edgeSwipeOffset.set(offset);
-    const swipeThreshold = window.innerWidth / 4;
     const isValidDirection = side === 'left'
       ? (activeTab === 'messages' || ['groceries', 'schedule', 'my_trip', 'settings'].includes(activeTab))
       : activeTab !== 'settings';
-    setCanCommitEdgeSwipe(Math.abs(deltaX) >= swipeThreshold && isValidDirection);
+    const hasReachedThreshold = Math.abs(deltaX) >= threshold && isValidDirection;
+    if (hasReachedThreshold) {
+      edgeSwipeArmedRef.current = true;
+    }
+    setCanCommitEdgeSwipe(edgeSwipeArmedRef.current);
+    edgeSwipeOffset.set(side === 'left'
+      ? Math.max(0, Math.min(threshold, deltaX))
+      : Math.min(0, Math.max(-threshold, deltaX)));
   };
 
   useEffect(() => {
@@ -225,6 +242,13 @@ const MainAppContent: React.FC = () => {
       const start = edgeSwipeRef.current;
       edgeSwipeRef.current = null;
       isHorizontalSwipeRef.current = false;
+      const deltaX = event && start ? event.clientX - start.x : 0;
+      const returnedToEdge = start?.side === 'left' ? deltaX <= 8 : deltaX >= -8;
+      if (edgeSwipeArmedRef.current && returnedToEdge) {
+        edgeSwipeArmedRef.current = false;
+      }
+      const wasArmed = edgeSwipeArmedRef.current;
+      edgeSwipeArmedRef.current = false;
       if (!start || !start.side || (event && event.pointerId !== start.pointerId)) {
         setEdgeSwipeSide(null);
         setCanCommitEdgeSwipe(false);
@@ -232,20 +256,15 @@ const MainAppContent: React.FC = () => {
         return;
       }
 
-      const deltaX = event ? event.clientX - start.x : 0;
-      const deltaY = event ? event.clientY - start.y : 0;
-      if (event && deltaX !== 0) start.side = deltaX > 0 ? 'left' : 'right';
       if (start.side) setEdgeSwipeSide(start.side);
-      const threshold = window.innerWidth / 4;
-      const isCommitGesture = Math.abs(deltaX) >= threshold
-        && Math.abs(deltaY) <= Math.min(100, threshold * 0.4)
+      const isCommitGesture = wasArmed
         && currentTrip
         && activeTab !== 'trips';
       const tabs = ['messages', 'groceries', 'schedule', 'my_trip', 'settings'] as const;
       let transitionDirection = 0;
       let commitTransition: (() => void) | null = null;
 
-      if (isCommitGesture && start.side === 'left' && deltaX > 0) {
+      if (isCommitGesture && start.side === 'left') {
         if (activeTab === 'messages') {
           transitionDirection = -1;
           commitTransition = () => {
@@ -265,7 +284,7 @@ const MainAppContent: React.FC = () => {
             };
           }
         }
-      } else if (isCommitGesture && start.side === 'right' && deltaX < 0) {
+      } else if (isCommitGesture && start.side === 'right') {
         const nextTab = tabs.indexOf(activeTab) + 1;
         if (nextTab < tabs.length) {
           transitionDirection = 1;
@@ -280,10 +299,8 @@ const MainAppContent: React.FC = () => {
       if (commitTransition) {
         setIsGestureTransitioning(true);
         setEdgeSwipeSide(start.side);
-        const maxOffset = window.innerWidth * 0.45;
-        edgeSwipeOffset.set(start.side === 'left'
-          ? Math.max(0, Math.min(maxOffset, deltaX))
-          : Math.min(0, Math.max(-maxOffset, deltaX)));
+        const threshold = window.innerWidth / 6;
+        edgeSwipeOffset.set(start.side === 'left' ? threshold : -threshold);
       }
       const arrowExitDirection = transitionDirection > 0 ? -1 : 1;
       animate(edgeSwipeOffset, commitTransition ? arrowExitDirection * (window.innerWidth + 64) : 0, {

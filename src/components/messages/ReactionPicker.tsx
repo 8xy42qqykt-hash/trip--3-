@@ -141,7 +141,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
           top: 0,
           backdropFilter: 'blur(28px) saturate(180%)',
           WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.72)',
+          backgroundImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.08) 48%, rgba(0, 0, 0, 0.94) 100%)',
         }}
         className="fixed inset-0 animate-backdrop-in"
       />
