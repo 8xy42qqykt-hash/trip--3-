@@ -38,7 +38,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
       <header
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
-          backgroundColor: '#000000',
+          backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
           backdropFilter: isScrolled ? 'blur(28px) saturate(180%)' : 'none',
           WebkitBackdropFilter: isScrolled ? 'blur(28px) saturate(180%)' : 'none',
         }}

@@ -45,7 +45,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
     { key: 'messages', label: 'Messages', Icon: PaperPlaneTilt },
     { key: 'groceries', label: 'Groceries', Icon: ShoppingCart },
     { key: 'meals', label: 'Meals', Icon: ForkKnife },
-    { key: 'schedule', label: 'Schedule', Icon: CalendarBlank },
+    { key: 'schedule', label: 'Plans', Icon: CalendarBlank },
     { key: 'settings', label: 'Settings', Icon: Gear },
   ];
 
@@ -54,10 +54,10 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
       role="navigation"
       aria-label="Bottom Navigation"
       style={{
-        backgroundColor: '#000000',
+        backgroundImage: 'linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
-      className="fixed bottom-0 left-0 right-0 z-40 bg-black select-none pointer-events-auto"
+      className="fixed bottom-0 left-0 right-0 z-40 select-none pointer-events-auto"
     >
       {/* Completely flush bar with pure black bg and no empty space under nav buttons */}
       <div className="max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-1.5">

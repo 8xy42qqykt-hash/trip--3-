@@ -95,7 +95,7 @@ export const ScheduleView: React.FC = () => {
 
   return (
     <CollapsingHeaderLayout
-      title="Schedule"
+      title="Plans"
       headerSubContent={
         <div>
           <div className="flex items-center justify-between pb-1.5 pt-1">

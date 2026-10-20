@@ -618,7 +618,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       <div
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
-          backgroundColor: '#000000',
+          backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
           backdropFilter: 'blur(24px) saturate(180%)',
           WebkitBackdropFilter: 'blur(24px) saturate(180%)',
         }}
@@ -638,7 +638,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           <div className="flex flex-col items-center max-w-[200px] truncate text-center">
             <span className="text-base font-bold text-white tracking-tight truncate">
               {isFilteredView
-                ? viewMode === 'grocery_list' ? 'Groceries' : viewMode === 'meal' ? 'Meals' : 'Schedule'
+                ? viewMode === 'grocery_list' ? 'Groceries' : viewMode === 'meal' ? 'Meals' : 'Plans'
                 : currentTrip.name}
             </span>
             <span className="text-[11px] text-slate-400 font-medium -mt-0.5">

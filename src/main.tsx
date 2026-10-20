@@ -27,6 +27,11 @@ if (typeof window !== 'undefined') {
       void badgeNavigator.clearAppBadge?.().catch((error: unknown) => {
         console.error('Could not clear the app badge:', error);
       });
+      navigator.serviceWorker?.ready.then((registration) => {
+        registration.active?.postMessage({ type: 'CLEAR_NOTIFICATION_BADGE' });
+      }).catch((error: unknown) => {
+        console.error('Could not reset the notification badge count:', error);
+      });
     }
   });
 }

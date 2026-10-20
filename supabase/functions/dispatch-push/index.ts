@@ -106,13 +106,37 @@ Deno.serve(async (request) => {
   if (profileError) console.error('Could not load notification sender names:', profileError);
   if (tripError) console.error('Could not load trip title for push:', tripError);
 
-  const latest = allowedEvents[allowedEvents.length - 1];
+  const latestCall = [...allowedEvents].reverse().find((item) => item.category === 'calls');
+  const latest = latestCall || allowedEvents[allowedEvents.length - 1];
   const senderName = profiles?.find((profile) => profile.id === latest.actor_id)?.display_name || 'Trip member';
-  const isCall = allowedEvents.some((item) => item.category === 'calls' && item.high_priority);
-  const title = isCall ? `Incoming call from ${senderName}` : `${senderName} · ${trip?.name || 'Trip'}`;
-  const body = allowedEvents.length > 1
-    ? `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
-    : latest.preview;
+  const isCall = latest.category === 'calls';
+  const title = trip?.name || 'Trip';
+  const callType = /video/i.test(latest.preview) ? 'Video call' : 'Voice call';
+  const preview = latest.preview.toLowerCase();
+  const isGrocery = /^(sent|updated) (a )?grocery list|^updated the grocery list/.test(preview);
+  const isMeal = /^(added|updated) (a )?meal|^added or updated a meal/.test(preview);
+  const isPlan = /^(added|updated) (a )?plan|^added or updated a plan/.test(preview);
+  const category = isCall
+    ? 'Call'
+    : latest.category === 'polls'
+      ? 'Poll'
+      : latest.category === 'reactions'
+        ? 'Chat'
+        : isGrocery
+          ? 'Grocery'
+          : isMeal
+            ? 'Meal'
+            : isPlan
+              ? 'Plan'
+              : 'Chat';
+  const messagePreview = isCall
+    ? callType
+    : allowedEvents.length > 1
+      ? `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
+      : latest.preview;
+  const body = isCall
+    ? `${senderName} · ${category}\n${callType}`
+    : `${senderName} · ${category}\n${messagePreview}`;
   const appBase = new URL(Deno.env.get('APP_PUBLIC_URL') || supabaseUrl);
   if (!appBase.pathname.endsWith('/')) appBase.pathname += '/';
   const destination = new URL((latest.destination || '/').replace(/^\/+/, ''), appBase).href;
