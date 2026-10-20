@@ -237,12 +237,10 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
 
   const announceResults = async (scores: Record<string, number>, participants: string[]) => {
     const results = participants
-      .map((id) => [id, scores[id] || 0] as [string, number])
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, score]) => `${memberName(id)}: ${score}`)
-      .join(' · ');
+      .map((id) => `${memberName(id)}:${scores[id] || 0}`)
+      .join('\n');
     await sendMessage(
-      `Draw and Guess results — ${results}`,
+      `${t('Draw and Guess')}\n${results}`,
       undefined,
       undefined,
       'text',
@@ -254,17 +252,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     if (!game || game.status !== 'playing' || !game.winner_id || game.creator_id !== userId) return;
     if (nextRoundTimerRef.current !== null) window.clearTimeout(nextRoundTimerRef.current);
     nextRoundTimerRef.current = window.setTimeout(() => {
-      if (game.players.length < 2) {
-        void (async () => {
-          const { error: finishError } = await supabase!.rpc('finish_draw_game', { p_game_id: game.id });
-          if (finishError) {
-            console.error('Could not finish Draw and Guess game:', finishError);
-            setError(t('Could not finish the game.'));
-            return;
-          }
-          await announceResults(game.scores || {}, game.participant_ids || game.players);
-        })();
-      } else {
+      if (game.players.length >= 2) {
         void startRound();
       }
     }, 3000);
@@ -294,7 +282,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       onClose();
       return;
     }
-    if (game.status === 'lobby' && game.creator_id === userId) {
+    if (game.status === 'lobby' && game.round_number === 0 && game.creator_id === userId) {
       const { error: cancelError } = await supabase.rpc('cancel_draw_game', { p_game_id: game.id });
       if (cancelError) {
         console.error('Could not cancel Draw and Guess game:', cancelError);
@@ -313,7 +301,20 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       return;
     }
     if (finished) {
-      await announceResults(game.scores || {}, game.participant_ids || game.players);
+      const { data: finalGame, error: finalGameError } = await supabase
+        .from('draw_games')
+        .select('scores, participant_ids, players')
+        .eq('id', game.id)
+        .maybeSingle();
+      if (finalGameError) {
+        console.error('Could not load final Draw and Guess scores:', finalGameError);
+        setError(t('Could not load final game results.'));
+        return;
+      }
+      await announceResults(
+        (finalGame?.scores || game.scores || {}) as Record<string, number>,
+        finalGame?.participant_ids || game.participant_ids || game.players,
+      );
     }
     onClose();
   };
@@ -542,7 +543,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                 }}
                 className="fixed left-3.5 right-3.5 z-[12001] mx-auto flex min-h-[46px] max-w-2xl items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
-                <div className="flex min-w-0 flex-1 items-center">
+                <div className="flex min-w-0 w-0 flex-1 items-center">
                   <input
                     ref={guessInputRef}
                     value={guessText}
@@ -552,7 +553,10 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                     enterKeyHint="send"
                   />
                 </div>
-                <div className={`flex shrink-0 items-center justify-end overflow-hidden transition-[width,opacity] duration-200 ease-out ${guessText.trim() ? 'w-10 opacity-100' : 'w-0 opacity-0'}`}>
+                <div
+                  className="flex shrink-0 items-center justify-end overflow-hidden transition-[width,opacity] duration-200 ease-out"
+                  style={{ width: guessText.trim() ? 40 : 0, opacity: guessText.trim() ? 1 : 0 }}
+                >
                   <button
                     type="submit"
                     aria-label={t('Send guess')}

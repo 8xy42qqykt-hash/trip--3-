@@ -68,6 +68,7 @@ const translations: Record<string, string> = {
   'Could not leave the game. Please try again.': 'Pelistä poistuminen epäonnistui. Yritä uudelleen.',
   'Could not save the latest drawing stroke.': 'Viimeisimmän piirrosjäljen tallentaminen epäonnistui.',
   'Could not undo the latest drawing stroke.': 'Viimeisimmän piirrosjäljen kumoaminen epäonnistui.',
+  'Could not load final game results.': 'Pelin lopputulosten lataaminen epäonnistui.',
   'Undo drawing': 'Kumoa piirros',
   'Live drawing canvas': 'Piirtoalue',
   'Could not load the game chat.': 'Pelin keskustelun lataaminen epäonnistui.',
