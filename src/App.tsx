@@ -45,6 +45,13 @@ const MainAppContent: React.FC = () => {
   const deepLinkHandledRef = useRef(false);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('_appUpdate')) return;
+    url.searchParams.delete('_appUpdate');
+    window.history.replaceState(window.history.state, '', url);
+  }, []);
+
+  useEffect(() => {
     if (profile?.language === 'en' || profile?.language === 'fi') {
       setLanguage(profile.language);
     }
@@ -109,12 +116,12 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     const currentTripId = currentTrip?.id || null;
     if (prevTripIdRef.current === null && currentTripId !== null) {
-      // The selected trip enters from the left as the Trips view exits right.
-      setSlideDirection(-1);
+      // The selected trip enters from the right as the Trips view exits left.
+      setSlideDirection(1);
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
-      // Return to Trips with the same direction as entering a trip: content exits right, Trips enters left.
+      // Return to Trips with content exiting right and Trips entering from the left.
       setSlideDirection(-1);
       setIsKeyboardOpen(false);
     }

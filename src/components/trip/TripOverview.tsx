@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CaretDown, CaretLeft, CloudSun, Download, X } from '@phosphor-icons/react';
+import { CaretDown, CaretLeft, CloudSun } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { useTripLocations, type SharedTripLocation } from './useTripLocations';
 import { Profile } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
+import { PhotoLightbox } from '../common/PhotoLightbox';
 
 type ForecastHour = { time: string; temperature: number };
 type ForecastDay = {
@@ -19,8 +20,6 @@ type ForecastDay = {
   code: number;
   hours: ForecastHour[];
 };
-
-let photoDownloadSequence = 0;
 
 const timeAgo = (timestamp: string) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
@@ -138,7 +137,6 @@ export const TripOverview: React.FC = () => {
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
 
@@ -206,34 +204,6 @@ export const TripOverview: React.FC = () => {
       void loadWeather(location.latitude, location.longitude);
     }
   }, [locations, ownLocation]);
-
-  const downloadSelectedPhoto = async () => {
-    if (!selectedPhoto) return;
-    setIsDownloading(true);
-    try {
-      const response = await fetch(selectedPhoto);
-      if (!response.ok) throw new Error(`Could not download photo (${response.status}).`);
-      const blob = await response.blob();
-      const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-      const filename = `trip-photo-${++photoDownloadSequence}.${extension}`;
-      const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        await navigator.share({ files: [file], title: 'Save trip photo' });
-        return;
-      }
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = filename;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch (downloadError) {
-      console.error('Could not download trip photo:', downloadError);
-      setError(downloadError instanceof Error ? downloadError.message : 'Could not download this photo.');
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   if (!currentTrip) return null;
 
@@ -374,19 +344,7 @@ export const TripOverview: React.FC = () => {
         onClose={() => setSelectedProfileId(null)}
       />
 
-      {selectedPhoto && (
-        <div className="fixed inset-0 z-[11000] flex flex-col items-center justify-center bg-black/95 p-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
-          <div className="flex w-full max-w-3xl items-center justify-end gap-2 pb-3">
-            <button type="button" onClick={() => void downloadSelectedPhoto()} disabled={isDownloading} className="flex min-h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white disabled:opacity-60">
-              <Download size={18} /> {t(isDownloading ? 'Saving…' : 'Save photo')}
-            </button>
-            <button type="button" onClick={() => setSelectedPhoto(null)} aria-label={t('Close photo')} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
-              <X size={20} />
-            </button>
-          </div>
-          <img src={selectedPhoto} alt={t('Shared trip photo')} className="max-h-[82dvh] max-w-full object-contain" />
-        </div>
-      )}
+      {selectedPhoto && <PhotoLightbox imageUrl={selectedPhoto} onClose={() => setSelectedPhoto(null)} />}
     </div>
   );
 };

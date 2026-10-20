@@ -260,7 +260,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
     setIsCheckingForUpdate(true);
     setAppUpdateStatus(t('Checking for app updates…'));
     try {
-      const registration = await navigator.serviceWorker.getRegistration();
+      const registration = await navigator.serviceWorker.getRegistration(window.location.href);
       if (!registration) {
         throw new Error(t('Could not find the app update service.'));
       }
@@ -270,31 +270,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         const onUpdateFound = () => {
           registration.removeEventListener('updatefound', onUpdateFound);
           window.clearTimeout(updateFoundTimeout);
-          resolve(registration.installing);
+          resolve(registration.installing || null);
         };
         registration.addEventListener('updatefound', onUpdateFound, { once: true });
         updateFoundTimeout = window.setTimeout(() => {
           registration.removeEventListener('updatefound', onUpdateFound);
           resolve(null);
-        }, 10_000);
+        }, 3_000);
       });
       await registration.update();
       let worker = registration.waiting;
       if (!worker && registration.installing) worker = registration.installing;
       if (!worker) worker = await updateFound;
-      if (!worker) {
-        setAppUpdateStatus(t('App is already up to date.'));
-        return;
-      }
-
-      if (worker.state !== 'installed' && worker.state !== 'activated') {
+      if (worker && worker.state !== 'installed') {
         await new Promise<void>((resolve, reject) => {
           const timeout = window.setTimeout(() => {
             worker?.removeEventListener('statechange', onStateChange);
             reject(new Error(t('The app update is taking too long. Please try again.')));
           }, 30_000);
           const onStateChange = () => {
-            if (worker?.state === 'installed' || worker?.state === 'activated') {
+            if (worker?.state === 'installed') {
               window.clearTimeout(timeout);
               worker.removeEventListener('statechange', onStateChange);
               resolve();
@@ -308,30 +303,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         });
       }
 
-      if (worker.state === 'installed' || worker.state === 'activated') {
+      let reloaded = false;
+      const reloadLatestFiles = () => {
+        if (reloaded) return;
+        reloaded = true;
+        const freshUrl = new URL(window.location.href);
+        freshUrl.searchParams.set('_appUpdate', String(Date.now()));
+        window.location.replace(freshUrl.toString());
+      };
+
+      if (worker?.state === 'installed' && registration.waiting === worker) {
         setAppUpdateStatus(t('Update found. Reloading the app…'));
-        if (worker.state === 'activated') {
-          window.location.reload();
-          return;
-        }
-        let reloaded = false;
-        const reloadApp = () => {
-          if (reloaded) return;
-          reloaded = true;
-          window.location.reload();
-        };
-        navigator.serviceWorker.addEventListener('controllerchange', reloadApp, { once: true });
-        worker.addEventListener('statechange', function onWorkerStateChange() {
-          if (worker?.state === 'activated' && !navigator.serviceWorker.controller) reloadApp();
-          if (worker?.state === 'activated' || worker?.state === 'redundant') {
+        const onControllerChange = () => reloadLatestFiles();
+        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange, { once: true });
+        const activationTimeout = window.setTimeout(() => {
+          navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+          reloadLatestFiles();
+        }, 10_000);
+        const onWorkerStateChange = () => {
+          if (worker?.state === 'activated') {
+            window.clearTimeout(activationTimeout);
             worker.removeEventListener('statechange', onWorkerStateChange);
+            reloadLatestFiles();
+          } else if (worker?.state === 'redundant') {
+            window.clearTimeout(activationTimeout);
+            worker.removeEventListener('statechange', onWorkerStateChange);
+            navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+            setAppUpdateStatus(t('The app update could not be installed.'));
           }
-        });
+        };
+        worker.addEventListener('statechange', onWorkerStateChange);
         worker.postMessage({ type: 'SKIP_WAITING' });
         return;
       }
 
-      setAppUpdateStatus(t('App is already up to date.'));
+      setAppUpdateStatus(t('App is already up to date. Reloading the latest files…'));
+      window.setTimeout(reloadLatestFiles, 350);
     } catch (error) {
       console.error('Could not update the installed app:', error);
       setAppUpdateStatus(error instanceof Error ? error.message : t('Could not check for app updates.'));

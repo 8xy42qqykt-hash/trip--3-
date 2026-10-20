@@ -16,6 +16,7 @@ import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
 import { DrawGameInviteCard } from './DrawGameInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
+import { PhotoLightbox } from '../common/PhotoLightbox';
 
 interface ChatBubbleProps {
   message: Message;
@@ -131,6 +132,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [reactionBurst, setReactionBurst] = useState(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -320,6 +322,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onContextMenu={handleContextMenu}
+              onClick={() => {
+                if (!didLongPressRef.current) setSelectedImage(message.image_url!);
+              }}
               className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5"
             >
               {replyMessage && (
@@ -533,6 +538,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             <ProfileRow label={t('Participants:')} ids={message.metadata?.participantIds || []} members={members} onProfileClick={onProfileClick} />
           )}
         </div>
+      )}
+
+      {selectedImage && (
+        <PhotoLightbox imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
       )}
     </div>
   );
