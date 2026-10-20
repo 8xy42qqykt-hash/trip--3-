@@ -616,15 +616,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     <div className="h-full w-full flex flex-col bg-black text-white overflow-hidden relative select-none">
       {/* Top Header - Trip Title & Exit Button (Extended cleanly through top danger zone) */}
       <div
-        style={{
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-        }}
-        className="shrink-0 w-full border-b border-white/[0.08] z-20"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        className="relative isolate z-20 w-full shrink-0"
       >
-        <div className="h-14 w-full flex items-center justify-between px-3.5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 -bottom-12"
+          style={{
+            backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
+            backdropFilter: 'blur(28px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+            maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+          }}
+        />
+        <div className="relative z-10 h-14 w-full flex items-center justify-between px-3.5">
           <button
             type="button"
             onClick={exitTrip}

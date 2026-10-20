@@ -54,13 +54,23 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
       role="navigation"
       aria-label="Bottom Navigation"
       style={{
-        backgroundImage: 'linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
-      className="fixed bottom-0 left-0 right-0 z-40 select-none pointer-events-auto"
+      className="fixed bottom-0 left-0 right-0 z-40 isolate select-none pointer-events-auto"
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-12 bottom-0"
+        style={{
+          backgroundImage: 'linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
+          backdropFilter: 'blur(28px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          maskImage: 'linear-gradient(to top, #000 0%, #000 35%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to top, #000 0%, #000 35%, transparent 100%)',
+        }}
+      />
       {/* Completely flush bar with pure black bg and no empty space under nav buttons */}
-      <div className="max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-1.5">
+      <div className="relative z-10 max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-1.5">
         {tabs.map(({ key, label, Icon }) => {
           const isActive = activeTab === key;
           return (

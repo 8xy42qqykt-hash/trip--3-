@@ -36,19 +36,23 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
     <div className="relative flex flex-col h-full w-full max-w-lg mx-auto bg-black overflow-hidden select-none">
       {/* Sticky top bar */}
       <header
-        style={{
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 48%, rgba(0, 0, 0, 0) 100%)',
-          backdropFilter: isScrolled ? 'blur(28px) saturate(180%)' : 'none',
-          WebkitBackdropFilter: isScrolled ? 'blur(28px) saturate(180%)' : 'none',
-        }}
-        className={`shrink-0 z-20 transition-all duration-200 ${
-          isScrolled
-            ? 'border-b border-white/[0.08]'
-            : 'border-b border-transparent'
-        }`}
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        className="relative isolate z-20 shrink-0"
       >
-        <div className="h-12 px-4 flex items-center justify-between">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 -bottom-12"
+          style={{
+            backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
+            backdropFilter: 'blur(28px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+            maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+          }}
+        />
+        <div className={`relative z-10 h-12 px-4 flex items-center justify-between transition-all duration-200 ${
+          isScrolled ? 'border-b border-white/[0.08]' : 'border-b border-transparent'
+        }`}>
           <div className="w-24 flex items-center">
             {topBarLeft ? (
               topBarLeft
