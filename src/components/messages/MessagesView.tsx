@@ -467,9 +467,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     try {
       if (pendingPhoto) {
         const imageUrl = await uploadAsset(pendingPhoto.file, 'chat');
-        await sendMessage(clean, imageUrl, replyId);
+        await sendMessage('', imageUrl, replyId);
         URL.revokeObjectURL(pendingPhoto.previewUrl);
         setPendingPhoto(null);
+        if (clean) {
+          setInputText(clean);
+          await sendMessage(clean);
+        }
       } else if (editingMessageId) {
         await updateMessage(editingMessageId, { content: clean, type, metadata });
         setEditingMessageId(null);
