@@ -182,8 +182,8 @@ export const NotificationPermissionButton: React.FC = () => {
             preferences.enabled ? 'bg-[#0A84FF]' : 'bg-white/20'
           }`}
         >
-          <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${
-            preferences.enabled ? 'translate-x-[26px]' : 'translate-x-1'
+          <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${
+            preferences.enabled ? 'translate-x-6' : 'translate-x-0'
           }`} />
         </button>
       </div>
