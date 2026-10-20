@@ -45,11 +45,14 @@ const MainAppContent: React.FC = () => {
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
   const deepLinkHandledRef = useRef(false);
-  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right'; pointerId: number } | null>(null);
+  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right' | null; pointerId: number } | null>(null);
   const edgeSwipeOffset = useMotionValue(0);
   const [edgeSwipeSide, setEdgeSwipeSide] = useState<'left' | 'right' | null>(null);
+  const [canCommitEdgeSwipe, setCanCommitEdgeSwipe] = useState(false);
+  const isHorizontalSwipeRef = useRef(false);
   const [isGestureTransitioning, setIsGestureTransitioning] = useState(false);
   const gestureTransitionTimerRef = useRef<number | null>(null);
+  const tripExitDirectionRef = useRef<number | null>(null);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -135,7 +138,9 @@ const MainAppContent: React.FC = () => {
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
-      setSlideDirection(activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1);
+      setSlideDirection(tripExitDirectionRef.current
+        ?? (activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1));
+      tripExitDirectionRef.current = null;
       setIsKeyboardOpen(false);
     }
     prevTripIdRef.current = currentTripId;
@@ -169,13 +174,12 @@ const MainAppContent: React.FC = () => {
 
   const handleEdgePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' || !currentTrip || activeTab === 'trips') return;
-    const side = event.clientX <= 24 ? 'left'
-      : event.clientX >= window.innerWidth - 24 ? 'right'
-        : null;
     const target = event.target;
-    if (!side || !(target instanceof Element)) return;
+    if (!(target instanceof Element)) return;
     if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .leaflet-container, [role="dialog"]')) return;
-    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side, pointerId: event.pointerId };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side: null, pointerId: event.pointerId };
+    isHorizontalSwipeRef.current = false;
     edgeSwipeOffset.set(0);
   };
 
@@ -186,29 +190,52 @@ const MainAppContent: React.FC = () => {
     const deltaY = event.clientY - start.y;
     if (Math.abs(deltaY) > 20 && Math.abs(deltaY) > Math.abs(deltaX)) {
       edgeSwipeRef.current = null;
+      isHorizontalSwipeRef.current = false;
       setEdgeSwipeSide(null);
+      setCanCommitEdgeSwipe(false);
       edgeSwipeOffset.set(0);
       return;
     }
     if (Math.abs(deltaX) < Math.abs(deltaY) || Math.abs(deltaX) < 6) return;
 
+    const side = deltaX > 0 ? 'left' : 'right';
+    start.side = side;
+    isHorizontalSwipeRef.current = true;
     event.preventDefault();
-    setEdgeSwipeSide(start.side);
+    setEdgeSwipeSide(side);
     const maxOffset = window.innerWidth * 0.45;
-    const offset = start.side === 'left'
+    const offset = side === 'left'
       ? Math.max(0, Math.min(maxOffset, deltaX))
       : Math.min(0, Math.max(-maxOffset, deltaX));
     edgeSwipeOffset.set(offset);
+    const swipeThreshold = window.innerWidth / 4;
+    const isValidDirection = side === 'left'
+      ? (activeTab === 'messages' || ['groceries', 'schedule', 'my_trip', 'settings'].includes(activeTab))
+      : activeTab !== 'settings';
+    setCanCommitEdgeSwipe(Math.abs(deltaX) >= swipeThreshold && isValidDirection);
   };
 
   useEffect(() => {
+    const preventScrollDuringSwipe = (event: TouchEvent) => {
+      if (isHorizontalSwipeRef.current) event.preventDefault();
+    };
+    window.addEventListener('touchmove', preventScrollDuringSwipe, { passive: false });
+
     const finishEdgeSwipe = (event: PointerEvent | null) => {
       const start = edgeSwipeRef.current;
       edgeSwipeRef.current = null;
-      if (!start || (event && event.pointerId !== start.pointerId)) return;
+      isHorizontalSwipeRef.current = false;
+      if (!start || !start.side || (event && event.pointerId !== start.pointerId)) {
+        setEdgeSwipeSide(null);
+        setCanCommitEdgeSwipe(false);
+        edgeSwipeOffset.set(0);
+        return;
+      }
 
       const deltaX = event ? event.clientX - start.x : 0;
       const deltaY = event ? event.clientY - start.y : 0;
+      if (event && deltaX !== 0) start.side = deltaX > 0 ? 'left' : 'right';
+      if (start.side) setEdgeSwipeSide(start.side);
       const threshold = window.innerWidth / 4;
       const isCommitGesture = Math.abs(deltaX) >= threshold
         && Math.abs(deltaY) <= Math.min(100, threshold * 0.4)
@@ -220,10 +247,11 @@ const MainAppContent: React.FC = () => {
 
       if (isCommitGesture && start.side === 'left' && deltaX > 0) {
         if (activeTab === 'messages') {
-          transitionDirection = 1;
+          transitionDirection = -1;
           commitTransition = () => {
             setSlideDirection(transitionDirection);
             setIsKeyboardOpen(false);
+            tripExitDirectionRef.current = -1;
             exitTrip();
           };
         } else {
@@ -263,6 +291,7 @@ const MainAppContent: React.FC = () => {
         ease: [0.22, 1, 0.36, 1],
         onComplete: () => {
           setEdgeSwipeSide(null);
+          setCanCommitEdgeSwipe(false);
           if (!commitTransition) return;
           commitTransition();
           if (gestureTransitionTimerRef.current !== null) {
@@ -284,6 +313,7 @@ const MainAppContent: React.FC = () => {
     return () => {
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('touchmove', preventScrollDuringSwipe);
     };
   }, [activeTab, currentTrip?.id, edgeSwipeOffset, exitTrip]);
 
@@ -388,7 +418,7 @@ const MainAppContent: React.FC = () => {
         <motion.div
           initial={{ opacity: 1 }}
           animate={{ opacity: 0 }}
-          transition={{ duration: 1.2, ease: 'easeOut' }}
+          transition={{ duration: 1.2, delay: 0.38, ease: 'easeOut' }}
           className="pointer-events-none fixed inset-0 z-[20000] flex items-center justify-center bg-black"
           aria-hidden="true"
         >
@@ -417,11 +447,18 @@ const MainAppContent: React.FC = () => {
           }`}
           style={{ x: edgeSwipeOffset }}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-[0_4px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <motion.div
+            animate={{
+              backgroundColor: canCommitEdgeSwipe ? '#0A84FF' : 'rgba(0,0,0,0.6)',
+              borderColor: canCommitEdgeSwipe ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.2)',
+            }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="flex h-12 w-12 items-center justify-center rounded-full border text-white shadow-[0_4px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+          >
             {edgeSwipeSide === 'left'
               ? <ArrowRight size={22} weight="bold" />
               : <ArrowLeft size={22} weight="bold" />}
-          </div>
+          </motion.div>
         </motion.div>
       )}
       {isGestureTransitioning && (
