@@ -124,17 +124,17 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const defaultRadius = bubbleRadiusClasses || (isOwnMessage ? 'rounded-[22px] rounded-br-[6px]' : 'rounded-[22px] rounded-bl-[6px]');
 
   const content = (
-    <div className="fixed inset-0 z-[9998] select-none">
+    <div className="fixed inset-0 z-[15] select-none">
       {/* Blurred & dimmed backdrop */}
       <div
         onClick={onClose}
         style={{
-          top: 'calc(env(safe-area-inset-top, 0px) + 72px)',
+          top: 0,
           backdropFilter: 'blur(28px) saturate(180%)',
           WebkitBackdropFilter: 'blur(28px) saturate(180%)',
           backgroundColor: 'rgba(0, 0, 0, 0.72)',
         }}
-        className="fixed inset-x-0 bottom-0 animate-backdrop-in"
+        className="fixed inset-0 animate-backdrop-in"
       />
 
       {/* Floating container with smooth slide */}
@@ -375,5 +375,6 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     </div>
   );
 
-  return createPortal(content, document.body);
+  const appView = document.querySelector('[data-app-view="active"]');
+  return createPortal(content, appView || document.body);
 };

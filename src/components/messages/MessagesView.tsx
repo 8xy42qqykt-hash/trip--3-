@@ -867,7 +867,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
       {/* Chat Messages List */}
       <CustomScrollArea
-        className="-mt-[calc(3.5rem+env(safe-area-inset-top,0px))] flex-1 overflow-hidden"
+        className="relative z-0 isolate -mt-[calc(3.5rem+env(safe-area-inset-top,0px))] flex-1 overflow-hidden"
         scrollRef={scrollRef}
         onScroll={handleChatScroll}
       >

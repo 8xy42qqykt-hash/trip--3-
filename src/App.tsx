@@ -131,6 +131,9 @@ const MainAppContent: React.FC = () => {
   const activeView: AppViewKey = !currentTrip ? 'trips' : activeTab;
 
   useEffect(() => {
+    document.querySelectorAll<HTMLElement>('[data-view-key]').forEach((view) => {
+      view.dataset.appView = view.dataset.viewKey === activeView ? 'active' : 'inactive';
+    });
     prevViewRef.current = activeView;
   }, [activeView]);
 
@@ -195,6 +198,8 @@ const MainAppContent: React.FC = () => {
               opacity: { duration: 0.15 },
             }}
             className="absolute inset-0 w-full h-full overflow-hidden flex flex-col"
+            data-view-key={activeView}
+            data-app-view="inactive"
           >
             {activeView === 'trips' && (
               <TripGate onTripSelected={() => setActiveTab('messages')} />
