@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   ForkKnife,
   CalendarBlank,
+  GameController,
 } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -22,14 +23,17 @@ import { ChatBubble } from './ChatBubble';
 import { PinnedPolls } from './PinnedPolls';
 import { PollSheet } from './PollSheet';
 import { Avatar } from '../common/Avatar';
+import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
-import { uploadAsset } from '../../lib/supabase';
+import { supabase, uploadAsset } from '../../lib/supabase';
 import { OnlineTripMember } from './useTripPresence';
 import { GroupCallManager } from './useGroupCall';
+import { useTripLocations } from '../trip/useTripLocations';
+import { DrawGuessGame } from './DrawGuessGame';
 
 interface MessagesViewProps {
-  viewMode?: 'messages' | 'grocery_list' | 'meal' | 'plan';
+  viewMode?: 'messages' | 'grocery_list' | 'plan';
   onKeyboardStateChange?: (isOpen: boolean) => void;
   initialMention?: string;
   onClearInitialMention?: () => void;
@@ -60,8 +64,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     exitTrip,
   } = useTrip();
   const { user } = useAuth();
+  const sharedLocations = useTripLocations(currentTrip?.id);
 
   const [inputText, setInputText] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
@@ -72,12 +78,14 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [mealTime, setMealTime] = useState('');
   const [planDate, setPlanDate] = useState('');
   const [planTime, setPlanTime] = useState('');
+  const [draftCheckedItems, setDraftCheckedItems] = useState<number[]>([]);
   const [isPollSheetOpen, setIsPollSheetOpen] = useState(false);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const callButtonRef = useRef<HTMLButtonElement>(null);
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [composerError, setComposerError] = useState('');
+  const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -223,7 +231,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           textareaRef.current.setSelectionRange(len, len);
           textareaRef.current.style.height = 'auto';
           const scrollH = textareaRef.current.scrollHeight;
-          textareaRef.current.style.height = `${Math.max(40, Math.min(scrollH, 130))}px`;
+          textareaRef.current.style.height = `${Math.max(40, scrollH)}px`;
         }
         isInputFocusedRef.current = true;
         notifyKeyboard(true);
@@ -335,8 +343,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (textarea) {
       textarea.style.height = 'auto';
       const scrollH = textarea.scrollHeight;
-      const newHeight = Math.min(scrollH, 130);
-      textarea.style.height = `${Math.max(40, newHeight)}px`;
+      textarea.style.height = `${Math.max(40, scrollH)}px`;
     }
   };
 
@@ -344,7 +351,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.max(40, Math.min(textarea.scrollHeight, 130))}px`;
+    textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
   }, [inputText, composerMode]);
 
   const handleSelectMention = (member: TripMember) => {
@@ -371,7 +378,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         textareaRef.current.setSelectionRange(newPos, newPos);
         textareaRef.current.style.height = 'auto';
         const scrollH = textareaRef.current.scrollHeight;
-        textareaRef.current.style.height = `${Math.max(40, Math.min(scrollH, 130))}px`;
+        textareaRef.current.style.height = `${Math.max(40, scrollH)}px`;
       }
     }, 20);
   };
@@ -406,9 +413,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
     const metadata = composerMode === 'grocery_list'
       ? {
-          items: clean.split(/\r?\n/).map((text) => text.trim()).filter(Boolean).map((text) => ({
+          items: clean.split(/\r?\n/).map((text) => text.trim()).filter(Boolean).map((text, index) => ({
             text,
-            checked: previousCheckedByText.get(text)?.shift() || false,
+            checked: draftCheckedItems.includes(index) || previousCheckedByText.get(text)?.shift() || false,
           })),
         }
       : composerMode === 'meal'
@@ -430,6 +437,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       return;
     }
     setComposerMode(isFilteredView ? viewMode : 'message');
+    setDraftCheckedItems([]);
     setMealTime('');
     setPlanDate('');
     setPlanTime('');
@@ -501,6 +509,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (!['grocery_list', 'meal', 'plan'].includes(message.type)) return;
     setEditingMessageId(message.id);
     setInputText(message.content);
+    setDraftCheckedItems((message.metadata?.items || [])
+      .flatMap((item: { checked?: boolean }, index: number) => item.checked ? [index] : []));
     setComposerMode(message.type === 'grocery_list' || message.type === 'meal' || message.type === 'plan'
       ? message.type
       : 'message');
@@ -543,13 +553,50 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     });
   };
 
+  const createDrawGame = async () => {
+    if (!currentTrip || !user || !supabase) {
+      setComposerError('Draw and Guess needs an online connection.');
+      return;
+    }
+    setIsPlusMenuOpen(false);
+    setComposerError('');
+    const gameId = crypto.randomUUID();
+    const { error } = await supabase.from('draw_games').insert({
+      id: gameId,
+      trip_id: currentTrip.id,
+      creator_id: user.id,
+      status: 'lobby',
+      players: [user.id],
+      scores: {},
+      drawing: [],
+    });
+    if (error) {
+      console.error('Could not create Draw and Guess game:', error);
+      setComposerError('Could not start a game. Please try again.');
+      return;
+    }
+    try {
+      await sendMessage(
+        'Draw and Guess — join the game!',
+        undefined,
+        undefined,
+        'draw_game',
+        { gameId },
+      );
+      setActiveDrawGameId(gameId);
+    } catch (sendError) {
+      console.error('Could not post Draw and Guess invitation:', sendError);
+      setComposerError('The game was created, but its chat invitation could not be sent.');
+    }
+  };
+
   if (!currentTrip) {
     return null;
   }
 
   const visibleMessages = isFilteredView
     ? messages.filter((message) => message.type === viewMode)
-    : messages;
+    : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan');
 
   // Calculate day separators & consecutive grouping
   const messageGroups: Array<{
@@ -644,7 +691,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           <div className="flex flex-col items-center max-w-[200px] truncate text-center">
             <span className="text-base font-bold text-white tracking-tight truncate">
               {isFilteredView
-                ? viewMode === 'grocery_list' ? 'Groceries' : viewMode === 'meal' ? 'Meals' : 'Plans'
+                ? viewMode === 'grocery_list' ? 'Groceries' : 'Plans'
                 : currentTrip.name}
             </span>
             <span className="text-[11px] text-slate-400 font-medium -mt-0.5">
@@ -739,6 +786,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onToggleListItem={handleToggleListItem}
                   onToggleAction={handleToggleMessageAction}
                   onJoinCall={(callId) => void call.joinCall(callId)}
+                  onProfileClick={setSelectedProfileId}
+                  onOpenDrawGame={setActiveDrawGameId}
                 />
               </React.Fragment>
             );
@@ -934,6 +983,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 ))}
                 <button
                   type="button"
+                  onClick={() => void createDrawGame()}
+                  className="w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                >
+                  <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-300">
+                    <GameController size={16} weight="bold" />
+                  </div>
+                  <span>Draw and Guess</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setIsPlusMenuOpen(false);
                     setIsPollSheetOpen(true);
@@ -998,14 +1057,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     className="ml-auto flex shrink-0 items-center justify-end -space-x-2"
                   >
                     {onlineMembers.slice(0, 7).map((member) => (
-                      <div key={member.userId} className="relative rounded-full border-2 border-black">
+                      <button
+                        key={member.userId}
+                        type="button"
+                        onClick={() => setSelectedProfileId(member.userId)}
+                        aria-label={`View ${member.profile.display_name} profile`}
+                        className="relative rounded-full border-2 border-black"
+                      >
                         <Avatar
                           name={member.profile.display_name}
                           avatarUrl={member.profile.avatar_url}
                           color={member.profile.color}
                           size={28}
                         />
-                      </div>
+                      </button>
                     ))}
                     {onlineMembers.length > 7 && (
                       <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
@@ -1023,8 +1088,29 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 backdropFilter: 'blur(28px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(28px) saturate(180%)',
               }}
-              className="flex min-w-0 items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
+              className="relative flex min-w-0 items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
             >
+              {composerMode === 'grocery_list' && (
+                <div className="absolute left-3.5 top-[12px] z-10 flex flex-col" aria-label="Draft grocery item checkboxes">
+                  {inputText.split(/\r?\n/).map((_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      aria-label={`${draftCheckedItems.includes(index) ? 'Uncheck' : 'Check'} grocery item ${index + 1}`}
+                      aria-pressed={draftCheckedItems.includes(index)}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => setDraftCheckedItems((current) => (
+                        current.includes(index) ? current.filter((item) => item !== index) : [...current, index]
+                      ))}
+                      className={`mb-[4px] flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-[background-color,border-color,transform] duration-200 ${
+                        draftCheckedItems.includes(index) ? 'border-white bg-white text-[#0A84FF]' : 'border-white/65 bg-transparent'
+                      }`}
+                    >
+                      {draftCheckedItems.includes(index) && <span className="text-xs font-bold">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 id="chat-message-input"
@@ -1046,7 +1132,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                className="flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] max-h-32 overflow-y-auto"
+                className={`flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden ${
+                  composerMode === 'grocery_list' ? 'pl-8' : ''
+                }`}
                 style={{ minHeight: '40px', height: '40px' }}
               />
             </div>
@@ -1086,6 +1174,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         onClose={() => setIsPollSheetOpen(false)}
         onCreatePoll={createPoll}
       />}
+      <MemberProfileSheet
+        profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}
+        location={sharedLocations.find((location) => location.user_id === selectedProfileId)}
+        onClose={() => setSelectedProfileId(null)}
+      />
+      {activeDrawGameId && user && (
+        <DrawGuessGame
+          gameId={activeDrawGameId}
+          userId={user.id}
+          members={tripMembers}
+          onClose={() => setActiveDrawGameId(null)}
+          sendMessage={sendMessage}
+        />
+      )}
 
       {createPortal(
         <AnimatePresence>

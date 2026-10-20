@@ -12,6 +12,8 @@ import { SettingsView } from './components/settings/SettingsView';
 import tripLogo from '../trip-logo.png';
 import { useTripPresence } from './components/messages/useTripPresence';
 import { useGroupCall } from './components/messages/useGroupCall';
+import { TripOverview } from './components/trip/TripOverview';
+import { TripLocationTracker } from './components/trip/TripLocationTracker';
 
 type AppViewKey = 'trips' | TabKey;
 
@@ -19,8 +21,8 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
   trips: -1,
   messages: 0,
   groceries: 1,
-  meals: 2,
-  schedule: 3,
+  schedule: 2,
+  my_trip: 3,
   settings: 4,
 };
 
@@ -62,8 +64,8 @@ const MainAppContent: React.FC = () => {
     }
     if (currentTrip?.id !== targetTrip.id) selectTrip(targetTrip);
     const targetTab: TabKey = view === 'groceries' ? 'groceries'
-      : view === 'meals' ? 'meals'
-        : view === 'schedule' ? 'schedule'
+      : view === 'schedule' ? 'schedule'
+        : view === 'my_trip' ? 'my_trip'
           : view === 'settings' ? 'settings'
             : 'messages';
     setActiveTab(targetTab);
@@ -193,11 +195,11 @@ const MainAppContent: React.FC = () => {
             {activeView === 'groceries' && (
               <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />
             )}
-            {activeView === 'meals' && (
-              <MessagesView viewMode="meal" onlineMembers={onlineMembers} call={call} />
-            )}
             {activeView === 'schedule' && (
               <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
+            )}
+            {activeView === 'my_trip' && (
+              <TripOverview />
             )}
             {activeView === 'settings' && (
               <SettingsView onNavigateToMessages={handleNavigateToMessages} />
@@ -205,6 +207,10 @@ const MainAppContent: React.FC = () => {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {currentTrip && user && (
+        <TripLocationTracker tripId={currentTrip.id} userId={user.id} />
+      )}
 
       {/* Nav bar is completely closed whenever input is active/focused or outside of active trip */}
       <BottomTabBar

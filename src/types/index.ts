@@ -49,7 +49,7 @@ export interface Message {
   id: string;
   trip_id: string;
   user_id: string;
-  type: 'text' | 'image' | 'poll_result' | 'grocery_list' | 'meal' | 'plan' | 'call';
+  type: 'text' | 'image' | 'poll_result' | 'grocery_list' | 'meal' | 'plan' | 'call' | 'draw_game';
   content: string;
   image_url?: string | null;
   reply_to?: string | null;

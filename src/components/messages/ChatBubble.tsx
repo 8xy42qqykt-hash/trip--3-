@@ -14,6 +14,7 @@ import { ReactionPicker } from './ReactionPicker';
 import { PollResultMessage } from './PollResultMessage';
 import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
+import { DrawGameInviteCard } from './DrawGameInviteCard';
 
 interface ChatBubbleProps {
   message: Message;
@@ -31,6 +32,8 @@ interface ChatBubbleProps {
   onToggleListItem?: (message: Message, itemIndex: number) => void;
   onToggleAction?: (message: Message, action: 'Cook' | 'Contribute') => void;
   onJoinCall?: (callId: string) => void;
+  onProfileClick?: (userId: string) => void;
+  onOpenDrawGame?: (gameId: string) => void;
 }
 
 const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
@@ -80,6 +83,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onToggleListItem,
   onToggleAction,
   onJoinCall,
+  onProfileClick,
+  onOpenDrawGame,
 }) => {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
@@ -216,12 +221,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         {!isOwn && (
           <div className="w-8 h-8 shrink-0 flex items-end">
             {isLastInGroup ? (
-              <Avatar
-                name={message.sender?.display_name}
-                avatarUrl={message.sender?.avatar_url}
-                color={message.sender?.color}
-                size={32}
-              />
+              <button
+                type="button"
+                onClick={() => message.sender?.id && onProfileClick?.(message.sender.id)}
+                aria-label={`View ${message.sender?.display_name || 'member'} profile`}
+                className="rounded-full"
+              >
+                <Avatar
+                  name={message.sender?.display_name}
+                  avatarUrl={message.sender?.avatar_url}
+                  color={message.sender?.color}
+                  size={32}
+                />
+              </button>
             ) : (
               <div className="w-8 h-8" />
             )}
@@ -357,6 +369,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   <div className="min-w-[170px]">
                     <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn)}</p>
                   </div>
+                ) : message.type === 'draw_game' ? (
+                  <DrawGameInviteCard
+                    gameId={message.metadata?.gameId}
+                    onOpen={onOpenDrawGame}
+                  />
                 ) : message.type === 'call' ? (
                   <div className="min-w-[200px]">
                     <div className="mb-1 text-xs font-semibold tracking-wide text-white/70">
@@ -442,17 +459,20 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             <div className="flex min-h-5 items-center gap-2">
               {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
               {message.metadata?.time && <span>{message.metadata.time}</span>}
-              {isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
+              {isLastInGroup
+                && !(message.type === 'meal' && message.metadata?.time)
+                && !(message.type === 'plan' && (message.metadata?.date || message.metadata?.time))
+                && <span>{formatMessageTime(message.created_at)}</span>}
             </div>
           ) : isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
           {message.type === 'meal' && (
-            <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} />
+            <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} onProfileClick={onProfileClick} />
           )}
           {message.type === 'plan' && (
-            <ProfileRow label="Contributors:" ids={message.metadata?.contributors || []} members={members} />
+            <ProfileRow label="Contributors:" ids={message.metadata?.contributors || []} members={members} onProfileClick={onProfileClick} />
           )}
           {message.type === 'call' && (
-            <ProfileRow label="Participants:" ids={message.metadata?.participantIds || []} members={members} />
+            <ProfileRow label="Participants:" ids={message.metadata?.participantIds || []} members={members} onProfileClick={onProfileClick} />
           )}
         </div>
       )}
@@ -460,7 +480,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   );
 };
 
-const ProfileRow: React.FC<{ label: string; ids: string[]; members: TripMember[] }> = ({ label, ids, members }) => {
+const ProfileRow: React.FC<{
+  label: string;
+  ids: string[];
+  members: TripMember[];
+  onProfileClick?: (userId: string) => void;
+}> = ({ label, ids, members, onProfileClick }) => {
   const profiles = ids
     .map((id) => members.find((member) => member.user_id === id)?.profile)
     .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
@@ -470,14 +495,20 @@ const ProfileRow: React.FC<{ label: string; ids: string[]; members: TripMember[]
       <span className="shrink-0 text-[11px] font-medium text-slate-500">{label}</span>
       <div className="flex items-center -space-x-2">
         {profiles.map((profile) => (
-          <div key={profile.id} className="rounded-full border-2 border-black">
+          <button
+            key={profile.id}
+            type="button"
+            onClick={() => onProfileClick?.(profile.id)}
+            aria-label={`View ${profile.display_name} profile`}
+            className="rounded-full border-2 border-black"
+          >
             <Avatar
               name={profile.display_name}
               avatarUrl={profile.avatar_url}
               color={profile.color}
               size={22}
             />
-          </div>
+          </button>
         ))}
       </div>
     </div>

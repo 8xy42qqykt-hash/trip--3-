@@ -7,12 +7,13 @@
 3. Start the app with `npm run dev`.
 4. Run `npm run lint` and `npm run build`.
 
-The login screen supports email/password only. Groceries, Meals, and Schedule are filtered views of the same real-time chat messages. Calls and structured messages are stored with the chat.
+The login screen supports email/password only. Groceries and Plans are filtered views of the real-time chat; meals are added from Messages and stay in that chat.
 
 ## Supabase database setup
 
 - **Existing project with data:** Take a backup, then run [20261020_trip_features.sql](./supabase/migrations/20261020_trip_features.sql) once in Supabase Dashboard → SQL Editor. It adds call-session, invitation, and push-notification support without dropping the existing trip data. This migration also scopes trip-content policies to joined trip members.
-- **Fresh/reset project:** [schema.sql](./supabase/schema.sql) drops every table in the `public` schema and rebuilds the schema. Do not use it on data you intend to keep. It preserves Storage objects and buckets because Supabase prohibits deleting Storage tables directly from SQL.
+- **Trip overview and Draw and Guess:** Run [20261021_trip_overview_game.sql](./supabase/migrations/20261021_trip_overview_game.sql) after the previous feature migration on an existing project. On a fresh/reset project, run it after [schema.sql](./supabase/schema.sql). It creates the opt-in location, Where you at?, and multiplayer game tables and RPC functions.
+- **Fresh/reset project:** [schema.sql](./supabase/schema.sql) drops every table in the `public` schema and rebuilds the schema. Do not use it on data you intend to keep. It preserves Storage objects and buckets because Supabase prohibits deleting Storage tables directly from SQL. Apply the Trip overview and Draw and Guess migration after the reset.
 - Configure Supabase Auth email/password, email confirmation, and the production site/redirect URLs in Authentication → URL Configuration.
 
 ## Web Push setup (iPhone and Android)
@@ -62,5 +63,7 @@ The invitation function also needs `APP_PUBLIC_URL` from the Push setup. Invites
 ## Calls and mobile behavior
 
 - Calls use private Supabase Realtime signaling and a six-person peer-to-peer mesh. Calls are represented by persistent chat cards; entering or answering a call opens the full-screen call view, and calls can be left and rejoined while active. STUN-only calls may fail on restrictive networks; configure `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` for a TURN provider. Use short-lived TURN credentials because client settings are public.
+- My Trip weather uses Open-Meteo, and map tiles use OpenStreetMap. Location sharing is opt-in and depends on HTTPS, device permission, and foreground browser execution; mobile browsers do not guarantee location updates while the PWA is backgrounded.
+- Draw and Guess uses Supabase Realtime and the `draw_games` RPCs. The round word is readable only by the assigned drawer. Apply the Trip overview and Draw and Guess migration before using these features.
 - The manifest is `standalone`; serve over HTTPS. The SQL reset preserves Storage; remove files separately through Supabase Dashboard or the Storage API if needed.
 - `npm run lint` and `npm run build` validate the web client. Physical iPhone Safari/Home Screen and Android Chrome testing is still required for actual camera/microphone permissions, keyboard behavior, push delivery, and device-specific animation smoothness.

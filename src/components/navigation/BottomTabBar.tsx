@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   PaperPlaneTilt,
   ShoppingCart,
-  ForkKnife,
   CalendarBlank,
+  MapTrifold,
   Gear,
 } from '@phosphor-icons/react';
 
-export type TabKey = 'trips' | 'messages' | 'groceries' | 'meals' | 'schedule' | 'settings';
+export type TabKey = 'trips' | 'messages' | 'groceries' | 'schedule' | 'my_trip' | 'settings';
 
 interface BottomTabBarProps {
   activeTab: TabKey;
@@ -44,8 +44,8 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   const tabs: { key: TabKey; label: string; Icon: React.ComponentType<any> }[] = [
     { key: 'messages', label: 'Messages', Icon: PaperPlaneTilt },
     { key: 'groceries', label: 'Groceries', Icon: ShoppingCart },
-    { key: 'meals', label: 'Meals', Icon: ForkKnife },
     { key: 'schedule', label: 'Plans', Icon: CalendarBlank },
+    { key: 'my_trip', label: 'My Trip', Icon: MapTrifold },
     { key: 'settings', label: 'Settings', Icon: Gear },
   ];
 
