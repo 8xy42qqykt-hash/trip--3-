@@ -7,6 +7,7 @@ import { AuthScreen } from './components/auth/AuthScreen';
 import { TripGate } from './components/trip/TripGate';
 import { BottomTabBar, TabKey } from './components/navigation/BottomTabBar';
 import { MessagesView } from './components/messages/MessagesView';
+import { CallOverlay } from './components/messages/CallOverlay';
 import { SettingsView } from './components/settings/SettingsView';
 import tripLogo from '../trip-logo.png';
 import { useTripPresence } from './components/messages/useTripPresence';
@@ -212,6 +213,9 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
       />
+      {(call.activeCall || call.incomingCall) && (
+        <CallOverlay call={call} userId={user?.id} />
+      )}
     </div>
   );
 };

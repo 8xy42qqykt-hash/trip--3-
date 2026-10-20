@@ -23,11 +23,10 @@ import { PinnedPolls } from './PinnedPolls';
 import { PollSheet } from './PollSheet';
 import { Avatar } from '../common/Avatar';
 import { CustomScrollArea } from '../common/CustomScrollArea';
-import { formatMessageDaySeparator } from '../../utils/date';
+import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
 import { uploadAsset } from '../../lib/supabase';
 import { OnlineTripMember } from './useTripPresence';
 import { GroupCallManager } from './useGroupCall';
-import { CallOverlay } from './CallOverlay';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'meal' | 'plan';
@@ -88,6 +87,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const mealTimeInputRef = useRef<HTMLInputElement>(null);
+  const planDateInputRef = useRef<HTMLInputElement>(null);
+  const planTimeInputRef = useRef<HTMLInputElement>(null);
   const isFilteredView = viewMode !== 'messages';
   const seenCallIdsRef = useRef(new Set<string>());
   const trackedCallRef = useRef<{ callId: string; startedAt: number } | null>(null);
@@ -669,11 +671,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         </div>
       </div>
 
+      {/* Pinned Polls Banner */}
       {!isFilteredView && !call.activeCall && !call.incomingCall && call.callError && (
-        <CallOverlay call={call} userId={user?.id} />
+        <div role="alert" className="mx-3 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-[#202024]/95 px-4 py-3 text-sm text-red-200">
+          <span>{call.callError}</span>
+          <button
+            type="button"
+            onClick={call.clearCallError}
+            className="shrink-0 font-semibold text-white"
+            aria-label="Dismiss call error"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
-      {/* Pinned Polls Banner */}
       {!isFilteredView && <PinnedPolls
         polls={polls}
         onVote={votePoll}
@@ -722,11 +734,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onToggleAction={handleToggleMessageAction}
                   onJoinCall={(callId) => void call.joinCall(callId)}
                 />
-                {!isFilteredView
-                  && message.type === 'call'
-                  && (call.activeCall?.callId === message.metadata?.callId
-                    || call.incomingCall?.callId === message.metadata?.callId)
-                  && <CallOverlay call={call} userId={user?.id} />}
               </React.Fragment>
             );
           })}
@@ -959,6 +966,69 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
+          {(composerMode === 'meal' || composerMode === 'plan') && (
+            <div className="mb-1.5 flex min-h-8 items-center gap-4 pl-1">
+              {composerMode === 'plan' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const picker = planDateInputRef.current;
+                      if (!picker) return;
+                      if (typeof picker.showPicker === 'function') picker.showPicker();
+                      else picker.click();
+                    }}
+                    className="min-h-8 text-sm font-medium text-slate-400 active:text-white"
+                  >
+                    {planDate ? formatTripDate(planDate) : 'Add date'}
+                  </button>
+                  <input
+                    ref={planDateInputRef}
+                    type="date"
+                    aria-label="Plan date"
+                    value={planDate}
+                    onChange={(event) => setPlanDate(event.target.value)}
+                    className="pointer-events-none absolute h-px w-px opacity-0"
+                    tabIndex={-1}
+                  />
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const picker = composerMode === 'meal' ? mealTimeInputRef.current : planTimeInputRef.current;
+                  if (!picker) return;
+                  if (typeof picker.showPicker === 'function') picker.showPicker();
+                  else picker.click();
+                }}
+                className="min-h-8 text-sm font-medium text-slate-400 active:text-white"
+              >
+                {(composerMode === 'meal' ? mealTime : planTime) || 'Add time'}
+              </button>
+              {composerMode === 'meal' ? (
+                <input
+                  ref={mealTimeInputRef}
+                  type="time"
+                  aria-label="Meal time"
+                  value={mealTime}
+                  onChange={(event) => setMealTime(event.target.value)}
+                  className="pointer-events-none absolute h-px w-px opacity-0"
+                  tabIndex={-1}
+                />
+              ) : (
+                <input
+                  ref={planTimeInputRef}
+                  type="time"
+                  aria-label="Plan time"
+                  value={planTime}
+                  onChange={(event) => setPlanTime(event.target.value)}
+                  className="pointer-events-none absolute h-px w-px opacity-0"
+                  tabIndex={-1}
+                />
+              )}
+            </div>
+          )}
+
           {/* Floating Pill Input Box - expands UPWARDS */}
           <div
             style={{
@@ -967,33 +1037,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             }}
             className="flex-1 min-w-0 flex items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
           >
-            {composerMode === 'meal' && (
-              <input
-                type="time"
-                aria-label="Meal time (optional)"
-                value={mealTime}
-                onChange={(event) => setMealTime(event.target.value)}
-                className="mr-2 w-24 shrink-0 bg-transparent text-[16px] text-slate-300"
-              />
-            )}
-            {composerMode === 'plan' && (
-              <div className="mr-2 flex shrink-0 flex-col gap-1">
-                <input
-                  type="date"
-                  aria-label="Plan date (required)"
-                  value={planDate}
-                  onChange={(event) => setPlanDate(event.target.value)}
-                  className="w-32 bg-transparent text-[16px] text-slate-300"
-                />
-                <input
-                  type="time"
-                  aria-label="Plan time (optional)"
-                  value={planTime}
-                  onChange={(event) => setPlanTime(event.target.value)}
-                  className="w-32 bg-transparent text-[16px] text-slate-300"
-                />
-              </div>
-            )}
             <textarea
               ref={textareaRef}
               id="chat-message-input"

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Microphone,
   MicrophoneSlash,
@@ -147,11 +148,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
       })),
     ];
     const spotlight = tiles.find(({ participant }) => participant.userId === spotlightId);
-    const columns = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(tiles.length))));
+    const columnLimit = window.innerWidth < 640 ? 2 : 3;
+    const columns = Math.min(columnLimit, Math.max(1, Math.ceil(Math.sqrt(tiles.length))));
 
-    return (
-      <section className="mx-3 mt-3 shrink-0 rounded-3xl border border-white/10 bg-[#17171b] p-3 text-white shadow-lg">
-        <header className="flex items-center justify-between gap-2 pb-3">
+    return createPortal((
+      <section className="fixed inset-0 z-[9990] flex h-[100dvh] w-screen flex-col overflow-hidden bg-black text-white">
+        <header
+          className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 pb-4"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
+        >
           <div>
             <div className="text-base font-bold">
               {call.activeCall.kind === 'video' ? 'Video call' : 'Voice call'}
@@ -169,9 +174,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           </div>
         )}
 
-        <main className="min-h-0">
+        <main className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-3 py-4">
           {spotlight ? (
-            <div className="space-y-2">
+            <div className="mx-auto w-full max-w-5xl space-y-3">
               <VideoTile
                 profile={spotlight.participant.profile}
                 stream={spotlight.stream}
@@ -181,7 +186,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
                 spotlight
                 onClick={() => setSpotlightId(null)}
               />
-              <div className="flex gap-2 overflow-x-auto">
+              <div className="flex gap-2 overflow-x-auto pb-1">
                 {tiles.filter(({ participant }) => participant.userId !== spotlightId).map(({ participant, stream, muted }) => (
                   <div key={participant.userId} className="w-28 shrink-0">
                     <VideoTile
@@ -197,12 +202,14 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap justify-center gap-2">
+            <div
+              className="mx-auto grid w-full max-w-6xl content-center justify-items-center gap-3"
+              style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+            >
               {tiles.map(({ participant, stream, muted }) => (
                 <div
                   key={participant.userId}
-                  className="min-w-0 transition-[flex-basis] duration-300 ease-out"
-                  style={{ flex: `0 1 calc((100% - ${(columns - 1) * 8}px) / ${columns})` }}
+                  className="w-full min-w-0 max-w-2xl transition-[width,transform] duration-300 ease-out"
                 >
                   <VideoTile
                     profile={participant.profile}
@@ -221,7 +228,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           )}
         </main>
 
-        <footer className="flex shrink-0 items-center justify-center gap-3 pt-3">
+        <footer
+          className="flex shrink-0 items-center justify-center gap-4 border-t border-white/10 px-4 pt-4"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}
+        >
           <button
             type="button"
             onClick={() => setIsMicrophoneOn(call.toggleMicrophone())}
@@ -254,62 +264,52 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           </button>
         </footer>
       </section>
-    );
+    ), document.body);
   }
 
   if (call.incomingCall) {
-    return (
-      <section className="mx-3 mt-3 shrink-0 rounded-3xl border border-white/10 bg-[#17171b] p-5 text-center text-white shadow-lg">
-          <Avatar
-            name={call.incomingCall.hostProfile.display_name}
-            avatarUrl={call.incomingCall.hostProfile.avatar_url}
-            color={call.incomingCall.hostProfile.color}
-            size={72}
-            className="mx-auto mb-4"
-          />
-          <h2 className="text-xl font-bold text-white">
-            {call.incomingCall.hostProfile.display_name} is calling
-          </h2>
-          <p className="mt-1 text-sm text-slate-400">
-            {call.incomingCall.kind === 'video' ? 'Video call' : 'Voice call'} · up to 6 people
-          </p>
-          {call.callError && <p className="mt-3 text-sm text-red-300">{call.callError}</p>}
-          <div className="mt-4 flex justify-center gap-5">
-            <button
-              type="button"
-              onClick={call.declineCall}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600"
-              aria-label="Decline call"
-            >
-              <PhoneDisconnect size={24} weight="fill" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void call.acceptCall()}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500"
-              aria-label="Accept call"
-            >
-              <Phone size={24} weight="fill" />
-            </button>
-          </div>
+    return createPortal((
+      <section
+        className="fixed inset-0 z-[9990] flex h-[100dvh] w-screen flex-col items-center justify-center bg-black px-6 text-center text-white"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <Avatar
+          name={call.incomingCall.hostProfile.display_name}
+          avatarUrl={call.incomingCall.hostProfile.avatar_url}
+          color={call.incomingCall.hostProfile.color}
+          size={88}
+          className="mb-5"
+        />
+        <h2 className="text-2xl font-bold text-white">
+          {call.incomingCall.hostProfile.display_name} is calling
+        </h2>
+        <p className="mt-2 text-sm text-slate-400">
+          {call.incomingCall.kind === 'video' ? 'Video call' : 'Voice call'} · up to 6 people
+        </p>
+        {call.callError && <p className="mt-3 text-sm text-red-300">{call.callError}</p>}
+        <div className="mt-8 flex justify-center gap-6">
+          <button
+            type="button"
+            onClick={call.declineCall}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600"
+            aria-label="Decline call"
+          >
+            <PhoneDisconnect size={28} weight="fill" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void call.acceptCall()}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500"
+            aria-label="Accept call"
+          >
+            <Phone size={28} weight="fill" />
+          </button>
+        </div>
       </section>
-    );
-  }
-
-  if (call.callError) {
-    return (
-      <div className="mx-3 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-[#202024]/95 px-4 py-3 text-sm text-red-200 shadow-xl backdrop-blur-xl">
-        <span>{call.callError}</span>
-        <button
-          type="button"
-          onClick={call.clearCallError}
-          className="shrink-0 font-semibold text-white"
-          aria-label="Dismiss call error"
-        >
-          Dismiss
-        </button>
-      </div>
-    );
+    ), document.body);
   }
 
   return null;

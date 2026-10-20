@@ -18,7 +18,7 @@ The login screen supports email/password only. Groceries, Meals, and Schedule ar
 ## Web Push setup (iPhone and Android)
 
 1. Generate a VAPID key pair, for example with `npx web-push generate-vapid-keys`.
-2. Set `VITE_VAPID_PUBLIC_KEY` to the public key in the frontend hosting environment, then rebuild/redeploy. Never put the private key in a `VITE_` variable.
+2. Set `VITE_VAPID_PUBLIC_KEY` to the public key in `.env.local` for local development and in the frontend hosting environment for production, then rebuild/redeploy. Never put the private key in a `VITE_` variable. The Settings notification toggle will show setup guidance if this key is missing.
 3. Install the Supabase CLI, run `supabase login`, and link the project with `supabase link --project-ref <project-ref>`.
 4. Generate a long random webhook secret and configure the server-side secrets:
 
@@ -34,9 +34,9 @@ The login screen supports email/password only. Groceries, Meals, and Schedule ar
    ```
 
 6. In Supabase Dashboard → Database → Webhooks, create an `INSERT` webhook for `public.notification_events`. Set its URL to `https://<project-ref>.supabase.co/functions/v1/dispatch-push`, method to `POST`, and add the header `x-webhook-secret: <same-random-secret>`. Use the standard Supabase database-webhook JSON payload. This single webhook dispatches the queued app events to all of a user's devices. Do not expose the webhook secret in the client.
-7. Users enable push from the onboarding Trips screen or Settings. On iPhone/iPad, notifications require iOS/iPadOS 16.4+ and the installed Home Screen app; the button explains how to install before asking for permission. The worker groups visible notifications by trip, supports call Join actions, and removes expired endpoints.
+7. Users enable or disable push with the single toggle in Settings. On iPhone/iPad, notifications require iOS/iPadOS 16.4+ and the installed Home Screen app; the toggle explains how to install before asking for permission. The worker groups visible notifications by trip, supports call Join actions, and removes expired endpoints.
 
-Notification preferences (master switch, categories, and mute-current-trip) are stored per user. Push delivery is skipped for the actor and for users whose app is open and focused on that trip's Messages view.
+The notification on/off setting is stored per user and device subscriptions are removed when notifications are switched off. Push delivery is skipped for the actor and for users whose app is open and focused on that trip's Messages view.
 
 ## Email invitations
 
@@ -50,6 +50,6 @@ The invitation function also needs `APP_PUBLIC_URL` from the Push setup. Invites
 
 ## Calls and mobile behavior
 
-- Calls use private Supabase Realtime signaling and a six-person peer-to-peer mesh. Calls are inline in Messages, represented by persistent chat cards, and can be left and rejoined while active. STUN-only calls may fail on restrictive networks; configure `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` for a TURN provider. Use short-lived TURN credentials because client settings are public.
+- Calls use private Supabase Realtime signaling and a six-person peer-to-peer mesh. Calls are represented by persistent chat cards; entering or answering a call opens the full-screen call view, and calls can be left and rejoined while active. STUN-only calls may fail on restrictive networks; configure `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` for a TURN provider. Use short-lived TURN credentials because client settings are public.
 - The manifest is `standalone`; serve over HTTPS. The SQL reset preserves Storage; remove files separately through Supabase Dashboard or the Storage API if needed.
 - `npm run lint` and `npm run build` validate the web client. Physical iPhone Safari/Home Screen and Android Chrome testing is still required for actual camera/microphone permissions, keyboard behavior, push delivery, and device-specific animation smoothness.

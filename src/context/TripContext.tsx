@@ -617,11 +617,45 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .channel(`trip_realtime_${currentTrip.id}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', filter: `trip_id=eq.${currentTrip.id}` },
+          { event: '*', schema: 'public', table: 'messages', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'trips', filter: `id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'trip_members', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'grocery_items', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'meals', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'events', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'polls', filter: `trip_id=eq.${currentTrip.id}` },
+          () => { void refreshData(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'call_sessions', filter: `trip_id=eq.${currentTrip.id}` },
           () => {
-            refreshData();
-            void loadInvitations();
-          }
+            void refreshData();
+          },
         )
         .on(
           'postgres_changes',
@@ -652,7 +686,14 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         )
         .subscribe();
+      const refreshOnReturn = () => {
+        if (document.visibilityState === 'visible') void refreshData();
+      };
+      const refreshInterval = window.setInterval(refreshOnReturn, 12_000);
+      document.addEventListener('visibilitychange', refreshOnReturn);
       return () => {
+        window.clearInterval(refreshInterval);
+        document.removeEventListener('visibilitychange', refreshOnReturn);
         supabase?.removeChannel(channel);
       };
     } else if (realtimeChannel) {
@@ -666,7 +707,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         realtimeChannel.removeEventListener('message', handleBroadcast);
       };
     }
-  }, [currentTrip, loadInvitations, refreshData]);
+  }, [currentTrip, refreshData]);
 
   // --- TRIPS ---
   const createTrip = async (name: string, startDate: string, endDate: string) => {

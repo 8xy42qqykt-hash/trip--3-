@@ -12,7 +12,7 @@ import { Message, Reaction } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { ReactionPicker } from './ReactionPicker';
 import { PollResultMessage } from './PollResultMessage';
-import { formatMessageTime } from '../../utils/date';
+import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
 
 interface ChatBubbleProps {
@@ -359,7 +359,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : message.type === 'call' ? (
                   <div className="min-w-[200px]">
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/70">
+                    <div className="mb-1 text-xs font-semibold tracking-wide text-white/70">
                       {message.metadata?.kind === 'video' ? 'Video call' : 'Voice call'}
                     </div>
                     <p className="font-semibold">
@@ -440,13 +440,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       </div>
 
       {(isLastInGroup || message.type === 'meal' || message.type === 'plan') && (
-        <div className={`mt-1 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500 ${
+        <div className={`mt-1 flex flex-col gap-1 text-[11px] font-medium text-slate-500 ${
           isOwn ? 'mr-1 justify-end' : 'ml-10 justify-start'
         }`}>
-          {message.type === 'meal' && message.metadata?.time && <span>{message.metadata.time}</span>}
-          {message.type === 'plan' && message.metadata?.date && <span>{message.metadata.date}</span>}
-          {message.type === 'plan' && message.metadata?.time && <span>{message.metadata.time}</span>}
-          {isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
+          {(message.type === 'meal' || message.type === 'plan') ? (
+            <div className="flex min-h-5 items-center gap-2">
+              {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
+              {message.metadata?.time && <span>{message.metadata.time}</span>}
+              {isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
+            </div>
+          ) : isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
           {message.type === 'meal' && (
             <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} />
           )}
@@ -465,17 +468,20 @@ const ProfileRow: React.FC<{ label: string; ids: string[]; members: TripMember[]
     .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
   if (profiles.length === 0) return null;
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[11px] font-medium text-slate-500">{label}</span>
-      {profiles.map((profile) => (
-        <Avatar
-          key={profile.id}
-          name={profile.display_name}
-          avatarUrl={profile.avatar_url}
-          color={profile.color}
-          size={22}
-        />
-      ))}
+    <div className="flex items-center gap-2">
+      <span className="shrink-0 text-[11px] font-medium text-slate-500">{label}</span>
+      <div className="flex items-center -space-x-2">
+        {profiles.map((profile) => (
+          <div key={profile.id} className="rounded-full border-2 border-black">
+            <Avatar
+              name={profile.display_name}
+              avatarUrl={profile.avatar_url}
+              color={profile.color}
+              size={22}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
