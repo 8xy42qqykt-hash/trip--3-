@@ -14,6 +14,7 @@ type ForecastDay = {
   maximum: number;
   minimum: number;
   average: number;
+  currentTemperature: number | null;
   code: number;
   hours: ForecastHour[];
 };
@@ -75,16 +76,19 @@ const TripLocationMap: React.FC<{
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
     const map = L.map(mapElementRef.current, { zoomControl: false }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 100);
+    const resizeObserver = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    resizeObserver.observe(mapElementRef.current);
+    const resizeTimer = window.setTimeout(() => map.invalidateSize({ pan: false }), 500);
     return () => {
       window.clearTimeout(resizeTimer);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
       markersRef.current = null;
@@ -151,6 +155,7 @@ export const TripOverview: React.FC = () => {
         latitude: String(latitude),
         longitude: String(longitude),
         daily: 'temperature_2m_max,temperature_2m_min,weather_code',
+        current: 'temperature_2m',
         hourly: 'temperature_2m',
         forecast_days: '5',
         timezone: 'auto',
@@ -159,6 +164,7 @@ export const TripOverview: React.FC = () => {
       if (!response.ok) throw new Error(`Weather request failed (${response.status}).`);
       const result = await response.json() as {
         daily: { time: string[]; temperature_2m_max: number[]; temperature_2m_min: number[]; weather_code: number[] };
+        current: { temperature_2m: number };
         hourly: { time: string[]; temperature_2m: number[] };
       };
       const days = result.daily.time.map((date, index) => {
@@ -174,6 +180,7 @@ export const TripOverview: React.FC = () => {
           maximum,
           minimum,
           average: Math.round((maximum + minimum) / 2),
+          currentTemperature: index === 0 ? Math.round(result.current.temperature_2m) : null,
           code: result.daily.weather_code[index],
           hours,
         };
@@ -234,13 +241,9 @@ export const TripOverview: React.FC = () => {
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-x-0 -top-8 -bottom-16"
           style={{
-            backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
-            backdropFilter: 'blur(28px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-            maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+            backgroundImage: 'linear-gradient(to bottom, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.94) 36%, rgba(0,0,0,0.72) 62%, rgba(0,0,0,0) 100%)',
           }}
         />
         <div className="relative z-10 flex h-14 w-full items-center justify-between px-3.5">
@@ -262,20 +265,20 @@ export const TripOverview: React.FC = () => {
         </div>
         {forecast.length ? (
           <>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="mb-4 grid grid-cols-5 gap-2">
               {forecast.map((day) => (
                 <button
                   key={day.date}
                   type="button"
                   onClick={() => setSelectedForecast(day)}
-                  className={`flex min-h-[68px] min-w-0 flex-col items-center justify-center rounded-2xl px-1 py-2 text-center ${
+                  className={`mx-auto flex h-14 w-14 min-w-0 flex-col items-center justify-center rounded-full px-2 text-center transition-colors ${
                     selectedForecast?.date === day.date ? 'bg-[#0A84FF] text-white' : 'text-slate-200'
                   }`}
                 >
-                  <span className="text-xs font-medium uppercase">
+                  <span className="text-[11px] font-medium uppercase leading-none">
                     {new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
                   </span>
-                  <span className="mt-1 text-sm font-semibold">{day.average}°</span>
+                  <span className="mt-1.5 text-base font-semibold leading-none">{day.currentTemperature ?? day.average}°</span>
                 </button>
               ))}
             </div>
@@ -293,21 +296,23 @@ export const TripOverview: React.FC = () => {
                   </span>
                   <CaretDown size={18} className={`shrink-0 text-slate-400 transition-transform ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                 </button>
-                {isWeatherExpanded && (
-                  <div className="border-t border-white/[0.08] px-4 pb-4 pt-3">
-                    <p className="mb-3 text-xs text-slate-400">
-                      Average {selectedForecast.average}°C · High {selectedForecast.maximum}°C · Low {selectedForecast.minimum}°C
-                    </p>
-                    <div className="grid grid-cols-4 gap-x-2 gap-y-3">
-                      {selectedForecast.hours.map((hour) => (
-                        <div key={hour.time} className="text-center">
-                          <span className="block text-[11px] text-slate-400">{hour.time}</span>
-                          <span className="mt-0.5 block text-sm font-semibold">{hour.temperature}°C</span>
-                        </div>
-                      ))}
+                <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${isWeatherExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="border-t border-white/[0.08] px-4 pb-4 pt-3">
+                      <p className="mb-3 text-xs text-slate-400">
+                        Average {selectedForecast.average}°C · High {selectedForecast.maximum}°C · Low {selectedForecast.minimum}°C
+                      </p>
+                      <div className="grid grid-cols-4 gap-x-2 gap-y-3">
+                        {selectedForecast.hours.map((hour) => (
+                          <div key={hour.time} className="text-center">
+                            <span className="block text-[11px] text-slate-400">{hour.time}</span>
+                            <span className="mt-0.5 block text-sm font-semibold">{hour.temperature}°C</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </>
@@ -337,9 +342,9 @@ export const TripOverview: React.FC = () => {
                 type="button"
                 onClick={() => photo.image_url && setSelectedPhoto(photo.image_url)}
                 aria-label="View shared trip photo"
-                className="mb-2 block w-full break-inside-avoid overflow-hidden rounded-2xl bg-white/[0.06]"
+                className="mb-2 block w-full break-inside-avoid overflow-hidden rounded-2xl bg-transparent"
               >
-                <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto max-h-72 w-full object-contain" />
+                <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto w-full rounded-2xl object-contain" />
               </button>
             ))}
           </div>

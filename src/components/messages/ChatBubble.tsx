@@ -89,6 +89,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
+  const [reactionBurst, setReactionBurst] = useState(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   const lastTapTimeRef = useRef<number>(0);
@@ -145,6 +146,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     const timeDiff = now - lastTapTimeRef.current;
     if (timeDiff < 300) {
       onDoubleTapHeart(message.id);
+      playReactionBurst();
       setShowHeartPop(true);
       setTimeout(() => setShowHeartPop(false), 900);
       lastTapTimeRef.current = 0;
@@ -155,6 +157,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+  };
+
+  const playReactionBurst = () => {
+    setReactionBurst((burst) => burst + 1);
+    window.setTimeout(() => setReactionBurst(0), 700);
   };
 
   const copyContent = () => {
@@ -187,19 +194,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
   const getBubbleRadiusClasses = () => {
     if (isImageOnly) return 'rounded-[22px]';
-    const hasMultipleFromSamePerson = !isFirstInGroup || !isLastInGroup;
     if (isOwn) {
-      if (hasMultipleFromSamePerson) {
-        // Both top-right and bottom-right corners share identical tight roundness (6px)
-        return 'rounded-[22px] rounded-tr-[6px] rounded-br-[6px]';
-      }
-      return 'rounded-[22px] rounded-br-[6px]';
+      return isFirstInGroup
+        ? 'rounded-[22px] rounded-br-[6px]'
+        : 'rounded-[22px] rounded-tr-[6px] rounded-br-[6px]';
     } else {
-      if (hasMultipleFromSamePerson) {
-        // Both top-left and bottom-left corners share identical tight roundness (6px)
-        return 'rounded-[22px] rounded-tl-[6px] rounded-bl-[6px]';
-      }
-      return 'rounded-[22px] rounded-bl-[6px]';
+      return isFirstInGroup
+        ? 'rounded-[22px] rounded-bl-[6px]'
+        : 'rounded-[22px] rounded-tl-[6px] rounded-bl-[6px]';
     }
   };
 
@@ -209,13 +211,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         isFirstInGroup ? 'mt-3' : 'mt-[3px]'
       } select-none`}
     >
-      {/* Sender name for others */}
-      {!isOwn && isFirstInGroup && (
-        <span className="text-xs font-semibold text-slate-400 ml-10 mb-1">
-          {message.sender?.display_name || 'Member'}
-        </span>
-      )}
-
       {/* Row containing avatar NEXT to bubble */}
       <div className={`relative flex items-end gap-2.5 max-w-[85%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
         {!isOwn && (
@@ -249,7 +244,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               bubbleRect={bubbleRect}
               bubbleRadiusClasses={getBubbleRadiusClasses()}
               currentReaction={userCurrentReaction}
-              onReact={(kind) => onReact(message.id, kind)}
+              onReact={(kind) => {
+                onReact(message.id, kind);
+                playReactionBurst();
+              }}
               onReply={() => onReply(message)}
               onCopy={copyContent}
               onDelete={isOwn && onDelete && message.type !== 'call' ? () => onDelete(message.id) : undefined}
@@ -263,6 +261,24 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {showHeartPop && (
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none animate-ping">
               <Heart size={48} weight="fill" className="text-red-500 drop-shadow-lg" />
+            </div>
+          )}
+          {reactionBurst > 0 && (
+            <div key={reactionBurst} aria-hidden="true" className="pointer-events-none absolute inset-0 z-30 overflow-visible">
+              {Array.from({ length: 10 }, (_, index) => {
+                const angle = (Math.PI * 2 * index) / 10;
+                return (
+                  <span
+                    key={index}
+                    className="reaction-particle"
+                    style={{
+                      '--particle-x': `${Math.cos(angle) * 44}px`,
+                      '--particle-y': `${Math.sin(angle) * 38}px`,
+                      '--particle-delay': `${index * 12}ms`,
+                    } as React.CSSProperties}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -292,20 +308,20 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 className="rounded-[22px] max-h-80 w-auto object-cover select-none shadow-md block"
               />
               {message.content && (
-                <p className="text-base px-1.5 text-white whitespace-pre-wrap break-words">
+                <p className="min-w-0 max-w-full px-1.5 text-base text-white whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {renderContentWithMentions(message.content, isOwn)}
                 </p>
               )}
             </div>
           ) : (
-            <div className="relative">
+            <div className="relative min-w-0 max-w-full [overflow-wrap:anywhere]">
               <div
                 ref={bubbleRef}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onContextMenu={handleContextMenu}
-                className={`chat-bubble-touch cursor-pointer relative px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 ${getBubbleRadiusClasses()} ${
+                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 [overflow-wrap:anywhere] ${getBubbleRadiusClasses()} ${
                   isOwn
                     ? 'bg-[#0A84FF] text-white shadow-xs'
                     : 'bg-[#262629] text-white shadow-xs'
@@ -366,7 +382,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                     </div>
                   </div>
                 ) : message.type === 'meal' || message.type === 'plan' ? (
-                  <div className="min-w-[170px]">
+                  <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
                     <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn)}</p>
                   </div>
                 ) : message.type === 'draw_game' ? (
@@ -406,7 +422,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                       )}
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap break-words">
+                  <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                     {renderContentWithMentions(message.content, isOwn)}
                   </p>
                 )}
@@ -462,9 +478,21 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               {isLastInGroup
                 && !(message.type === 'meal' && message.metadata?.time)
                 && !(message.type === 'plan' && (message.metadata?.date || message.metadata?.time))
-                && <span>{formatMessageTime(message.created_at)}</span>}
+                && (
+                  <span className="flex items-center gap-1">
+                    <span>{message.sender?.display_name || 'Member'}</span>
+                    <span aria-hidden="true">•</span>
+                    <span>{formatMessageTime(message.created_at)}</span>
+                  </span>
+                )}
             </div>
-          ) : isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
+          ) : isLastInGroup && (
+            <span className="flex min-h-5 items-center gap-1">
+              <span>{message.sender?.display_name || 'Member'}</span>
+              <span aria-hidden="true">•</span>
+              <span>{formatMessageTime(message.created_at)}</span>
+            </span>
+          )}
           {message.type === 'meal' && (
             <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} onProfileClick={onProfileClick} />
           )}

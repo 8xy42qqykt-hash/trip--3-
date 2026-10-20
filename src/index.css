@@ -137,6 +137,56 @@
   object-fit: cover;
 }
 
+.leaflet-tile {
+  filter: brightness(0.62) invert(1) hue-rotate(180deg) saturate(0.72) contrast(1.08);
+}
+
+.leaflet-container {
+  background: #17171a;
+}
+
+.reaction-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #ff375f;
+  box-shadow: 0 0 8px rgb(255 55 95 / 70%);
+  animation: reaction-particle-burst 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--particle-delay);
+}
+
+.reaction-particle:nth-child(3n) {
+  width: 4px;
+  height: 4px;
+  background: #ffd60a;
+  box-shadow: 0 0 7px rgb(255 214 10 / 70%);
+}
+
+.reaction-particle:nth-child(3n + 1) {
+  background: #0a84ff;
+  box-shadow: 0 0 7px rgb(10 132 255 / 70%);
+}
+
+@keyframes reaction-particle-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+      calc(-50% + var(--particle-x)),
+      calc(-50% + var(--particle-y))
+    ) scale(0);
+  }
+}
+
 .reply-preview-content {
   display: -webkit-box;
   overflow: hidden;

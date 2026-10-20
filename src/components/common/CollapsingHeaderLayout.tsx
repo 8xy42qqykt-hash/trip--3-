@@ -41,13 +41,9 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-x-0 -top-8 -bottom-16"
           style={{
-            backgroundImage: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
-            backdropFilter: 'blur(28px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-            maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+            backgroundImage: 'linear-gradient(to bottom, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.94) 36%, rgba(0,0,0,0.72) 62%, rgba(0,0,0,0) 100%)',
           }}
         />
         <div className={`relative z-10 h-12 px-4 flex items-center justify-between transition-all duration-200 ${

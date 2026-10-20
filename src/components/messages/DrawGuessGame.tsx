@@ -419,7 +419,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
 
       <div
         className="flex min-h-0 flex-1 flex-col px-4 pt-3"
-        style={{ paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? `${Math.max(62, keyboardOffset + 58)}px` : '12px' }}
+        style={{ paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? '62px' : '12px' }}
       >
         {game?.status === 'lobby' ? (
           <div className="flex flex-col items-start gap-3">
@@ -453,7 +453,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                     type="button"
                     onClick={() => setColor(swatch)}
                     aria-label={`Choose ${swatch} pen`}
-                    className={`h-9 w-9 rounded-full border-2 ${color === swatch ? 'scale-110 border-white' : 'border-white/20'}`}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full border-2 ${color === swatch ? 'scale-110 border-white' : 'border-white/20'}`}
                     style={{ backgroundColor: swatch }}
                   >
                     {color === swatch && <Check size={14} className={swatch === '#ffffff' ? 'text-black' : 'text-white'} />}
@@ -472,7 +472,11 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             {!isDrawer && !game.winner_id && (
               <form
                 onSubmit={(event) => void submitGuess(event)}
-                style={{ bottom: `calc(${Math.max(8, keyboardOffset + 8)}px + env(safe-area-inset-bottom, 0px))` }}
+                style={{
+                  bottom: keyboardOffset > 0
+                    ? `${Math.max(8, keyboardOffset + 6)}px`
+                    : 'calc(8px + env(safe-area-inset-bottom, 0px))',
+                }}
                 className="fixed left-3.5 right-3.5 z-[12001] mx-auto flex min-h-[46px] max-w-2xl items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
                 <input
@@ -482,11 +486,16 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                   className="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
                   enterKeyHint="send"
                 />
-                {guessText.trim() && (
-                  <button type="submit" aria-label="Send guess" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0A84FF]">
+                <div className={`flex shrink-0 items-center justify-end transition-[width,opacity] duration-200 ease-out ${guessText.trim() ? 'w-10 opacity-100' : 'w-0 opacity-0'}`}>
+                  <button
+                    type="submit"
+                    aria-label="Send guess"
+                    tabIndex={guessText.trim() ? 0 : -1}
+                    className={`flex h-10 w-10 origin-right items-center justify-center rounded-full bg-[#0A84FF] transition-transform duration-200 ${guessText.trim() ? 'scale-100' : 'scale-0'}`}
+                  >
                     <ArrowUp size={17} weight="bold" />
                   </button>
-                )}
+                </div>
               </form>
             )}
           </>
