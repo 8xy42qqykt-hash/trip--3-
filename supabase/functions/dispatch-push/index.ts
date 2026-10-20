@@ -110,7 +110,8 @@ Deno.serve(async (request) => {
   const latest = latestCall || allowedEvents[allowedEvents.length - 1];
   const senderName = profiles?.find((profile) => profile.id === latest.actor_id)?.display_name || 'Trip member';
   const isCall = latest.category === 'calls';
-  const title = trip?.name || 'Trip';
+  const tripName = trip?.name || 'Trip';
+  const title = senderName;
   const callType = /video/i.test(latest.preview) ? 'Video call' : 'Voice call';
   const preview = latest.preview.toLowerCase();
   const isGrocery = /^(sent|updated) (a )?grocery list|^updated the grocery list/.test(preview);
@@ -135,8 +136,8 @@ Deno.serve(async (request) => {
       ? `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
       : latest.preview;
   const body = isCall
-    ? `${senderName} · ${category}\n${callType}`
-    : `${senderName} · ${category}\n${messagePreview}`;
+    ? `From ${tripName}\n${category}\n${callType}`
+    : `From ${tripName}\n${category}\n${messagePreview}`;
   const appBase = new URL(Deno.env.get('APP_PUBLIC_URL') || supabaseUrl);
   if (!appBase.pathname.endsWith('/')) appBase.pathname += '/';
   const destination = new URL((latest.destination || '/').replace(/^\/+/, ''), appBase).href;

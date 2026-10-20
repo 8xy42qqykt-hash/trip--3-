@@ -96,7 +96,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           transition: isDraggingRef.current ? 'none' : undefined,
           backdropFilter: 'blur(36px) saturate(200%)',
           WebkitBackdropFilter: 'blur(36px) saturate(200%)',
-          backgroundColor: 'rgba(24, 24, 28, 0.94)',
+          backgroundImage: 'linear-gradient(to bottom, rgba(30, 30, 36, 0.96) 0%, rgba(12, 12, 14, 0.98) 58%, #000000 100%)',
         }}
         className={`relative z-10 w-full max-w-lg mx-auto border-t border-white/[0.14] rounded-t-[32px] pt-3.5 px-6 pb-7 shadow-[0_-16px_48px_rgba(0,0,0,0.7)] ${sheetAnimationClass}`}
       >
