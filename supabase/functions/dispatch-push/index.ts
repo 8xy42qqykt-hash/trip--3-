@@ -60,7 +60,11 @@ Deno.serve(async (request) => {
     .select('enabled, categories, muted_trip_ids')
     .eq('user_id', recipientId)
     .maybeSingle();
-  if (preferenceError) console.error('Could not read notification preferences:', preferenceError);
+  if (preferenceError) {
+    console.error('Could not read notification preferences:', preferenceError);
+    await releaseClaim(admin, events.map((item) => item.id));
+    return new Response('Could not read notification preferences.', { status: 500 });
+  }
   const settings = preferences || {
     enabled: true,
     categories: { messages: true, calls: true, polls: true, reactions: true, invitations: true, trip_updates: true },
@@ -73,9 +77,13 @@ Deno.serve(async (request) => {
     .eq('user_id', recipientId)
     .eq('trip_id', tripId)
     .maybeSingle();
-  if (activityError) console.error('Could not read focused-trip state:', activityError);
+  if (activityError) {
+    console.error('Could not read focused-trip state:', activityError);
+    await releaseClaim(admin, events.map((item) => item.id));
+    return new Response('Could not read focused-trip state.', { status: 500 });
+  }
   const focused = activity?.is_focused
-    && Date.now() - new Date(activity.updated_at).getTime() < 60_000;
+    && Date.now() - new Date(activity.updated_at).getTime() < 30_000;
   const allowedEvents = settings.enabled && !focused && !settings.muted_trip_ids?.includes(tripId)
     ? events.filter((item) => (
       item.actor_id !== recipientId

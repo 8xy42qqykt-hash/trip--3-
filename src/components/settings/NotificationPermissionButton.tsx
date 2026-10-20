@@ -26,50 +26,81 @@ export const NotificationPermissionButton: React.FC = () => {
   const { user } = useAuth();
   const [status, setStatus] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [preferences, setPreferences] = useState(defaultPreferences);
 
   React.useEffect(() => {
-    if (!user || !supabase) return;
+    if (!user || !supabase) {
+      setPreferences(defaultPreferences);
+      setIsLoading(false);
+      return;
+    }
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from('notification_preferences')
-        .select('enabled, categories, muted_trip_ids')
-        .eq('user_id', user.id)
-        .maybeSingle();
-        if (error) {
-          console.error('Could not load notification preferences:', error);
-          return;
-        }
+      setIsLoading(true);
+      setStatus('');
+      setPreferences(defaultPreferences);
+      try {
+        const client = supabase;
+        const [{ data, error }, registration] = await Promise.all([
+          client
+            .from('notification_preferences')
+            .select('enabled, categories, muted_trip_ids')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          'serviceWorker' in navigator ? navigator.serviceWorker.getRegistration() : Promise.resolve(undefined),
+        ]);
+        if (error) throw error;
         if (cancelled) return;
-        if (data) {
-          setPreferences({
-            enabled: data.enabled,
-            categories: { ...defaultPreferences.categories, ...(data.categories || {}) },
-            muted_trip_ids: data.muted_trip_ids || [],
-          });
-          return;
-        }
-        if ('serviceWorker' in navigator) {
-          const registration = 'serviceWorker' in navigator
-            ? await navigator.serviceWorker.getRegistration()
-            : undefined;
-          const subscription = await registration?.pushManager.getSubscription();
-          if (!subscription || cancelled) return;
-          const { data: storedSubscription, error: subscriptionError } = await supabase
+
+        const localSubscription = await registration?.pushManager.getSubscription();
+        let deviceEnabled = false;
+        if (localSubscription) {
+          const { data: savedSubscription, error: subscriptionError } = await client
             .from('push_subscriptions')
             .select('endpoint')
             .eq('user_id', user.id)
-            .eq('endpoint', subscription.endpoint)
+            .eq('endpoint', localSubscription.endpoint)
             .maybeSingle();
-          if (subscriptionError) {
-            console.error('Could not check this device notification subscription:', subscriptionError);
-            return;
-          }
-          if (storedSubscription && !cancelled) {
-            setPreferences((current) => ({ ...current, enabled: true }));
-          }
+          if (subscriptionError) throw subscriptionError;
+          deviceEnabled = Boolean(savedSubscription);
         }
+
+        if (deviceEnabled && data?.enabled === false) {
+          const { error: preferenceError } = await client.from('notification_preferences').upsert({
+            user_id: user.id,
+            enabled: true,
+            categories: data.categories || defaultPreferences.categories,
+            muted_trip_ids: data.muted_trip_ids || [],
+            updated_at: new Date().toISOString(),
+          });
+          if (preferenceError) throw preferenceError;
+        } else if (deviceEnabled && !data) {
+          const { error: preferenceError } = await client.from('notification_preferences').upsert({
+            user_id: user.id,
+            enabled: true,
+            categories: defaultPreferences.categories,
+            muted_trip_ids: [],
+            updated_at: new Date().toISOString(),
+          });
+          if (preferenceError) throw preferenceError;
+        }
+
+        if (!cancelled) {
+          setPreferences({
+            enabled: deviceEnabled,
+            categories: { ...defaultPreferences.categories, ...(data?.categories || {}) },
+            muted_trip_ids: data?.muted_trip_ids || [],
+          });
+        }
+      } catch (error) {
+        console.error('Could not load notification settings:', error);
+        if (!cancelled) {
+          setStatus(error instanceof Error ? `Could not load notification settings: ${error.message}` : 'Could not load notification settings.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [user]);
@@ -84,16 +115,6 @@ export const NotificationPermissionButton: React.FC = () => {
         return;
       }
       if (preferences.enabled) {
-        const next = { ...preferences, enabled: false };
-        const { error } = await supabase.from('notification_preferences').upsert({
-          user_id: user.id,
-          enabled: false,
-          categories: next.categories,
-          muted_trip_ids: next.muted_trip_ids,
-          updated_at: new Date().toISOString(),
-        });
-        if (error) throw error;
-        setPreferences(next);
         const registration = await navigator.serviceWorker.getRegistration();
         const subscription = await registration?.pushManager.getSubscription();
         if (subscription) {
@@ -104,6 +125,20 @@ export const NotificationPermissionButton: React.FC = () => {
           if (deleteError) throw deleteError;
           await subscription.unsubscribe();
         }
+        const { count, error: countError } = await supabase
+          .from('push_subscriptions')
+          .select('endpoint', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        if (countError) throw countError;
+        const { error: preferenceError } = await supabase.from('notification_preferences').upsert({
+          user_id: user.id,
+          enabled: (count || 0) > 0,
+          categories: preferences.categories,
+          muted_trip_ids: preferences.muted_trip_ids,
+          updated_at: new Date().toISOString(),
+        });
+        if (preferenceError) throw preferenceError;
+        setPreferences((current) => ({ ...current, enabled: false }));
         setStatus('Notifications are off on this device.');
         return;
       }
@@ -177,16 +212,18 @@ export const NotificationPermissionButton: React.FC = () => {
           aria-checked={preferences.enabled}
           aria-label="Turn notifications on or off"
           onClick={() => void toggleNotifications()}
-          disabled={isBusy}
+          disabled={isLoading || isBusy}
           className={`relative h-8 w-[54px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60 ${
             preferences.enabled ? 'bg-[#0A84FF]' : 'bg-white/20'
           }`}
         >
-          <span className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${
-            preferences.enabled ? 'translate-x-6' : 'translate-x-0'
-          }`} />
+          <span
+            className="absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-[left] duration-200"
+            style={{ left: preferences.enabled ? 26 : 4 }}
+          />
         </button>
       </div>
+      {isLoading && <p className="mt-2 text-xs text-slate-400">Loading notification settings…</p>}
       {isBusy && <p className="mt-2 text-xs text-slate-400">Updating notification settings…</p>}
       {status && <p role="status" className="mt-3 text-xs text-slate-300">{status}</p>}
     </section>

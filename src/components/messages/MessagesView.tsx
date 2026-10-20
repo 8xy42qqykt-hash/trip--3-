@@ -699,8 +699,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           className={`flex flex-col justify-start min-h-full px-4 ${hasOpenPolls ? 'pt-24' : 'pt-3'}`}
           style={{
             paddingBottom: isKeyboardOpen
-              ? `${Math.max(112, keyboardOffset + 102)}px`
-              : '150px',
+              ? `${Math.max(156, keyboardOffset + 146)}px`
+              : '194px',
           }}
         >
           {messageGroups.map(({ message, isFirstInGroup, isLastInGroup, showDaySeparator, dayLabel }) => {
@@ -779,29 +779,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         }}
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
-        {onlineMembers.length > 0 && composerMode !== 'meal' && composerMode !== 'plan' && (
-          <div
-            aria-label={`${onlineMembers.length} members currently active`}
-            title={`${onlineMembers.length} members currently active`}
-            className="absolute bottom-[calc(100%+8px)] right-0 flex max-w-full items-center justify-end -space-x-2"
-          >
-            {onlineMembers.slice(0, 7).map((member) => (
-              <div key={member.userId} className="relative rounded-full border-2 border-black">
-                <Avatar
-                  name={member.profile.display_name}
-                  avatarUrl={member.profile.avatar_url}
-                  color={member.profile.color}
-                  size={28}
-                />
-              </div>
-            ))}
-            {onlineMembers.length > 7 && (
-              <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
-                +{onlineMembers.length - 7}
-              </span>
-            )}
-          </div>
-        )}
         {composerError && (
           <div
             role="alert"
@@ -967,10 +944,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            {(composerMode === 'meal' || composerMode === 'plan') && (
-              <div className="mb-1.5 flex min-h-8 items-center gap-5 pl-1">
+            {((composerMode === 'meal' || composerMode === 'plan') || onlineMembers.length > 0) && (
+              <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
                 {composerMode === 'plan' && (
-                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
                     <span>{planDate ? formatTripDate(planDate) : 'Add date'}</span>
                     <input
                       ref={planDateInputRef}
@@ -982,8 +959,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     />
                   </label>
                 )}
-                {composerMode === 'meal' ? (
-                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                {composerMode === 'meal' && (
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
                     <span>{mealTime || 'Add time'}</span>
                     <input
                       ref={mealTimeInputRef}
@@ -994,8 +971,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </label>
-                ) : (
-                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                )}
+                {composerMode === 'plan' && (
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
                     <span>{planTime || 'Add time'}</span>
                     <input
                       ref={planTimeInputRef}

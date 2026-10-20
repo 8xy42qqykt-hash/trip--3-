@@ -38,6 +38,17 @@ The login screen supports email/password only. Groceries, Meals, and Schedule ar
 
 The notification on/off setting is stored per user and device subscriptions are removed when notifications are switched off. Push delivery is skipped for the actor and for users whose app is open and focused on that trip's Messages view.
 
+If push stops after changing the app or Edge Function, redeploy both: push the frontend changes so GitHub Pages rebuilds, and run `supabase functions deploy dispatch-push`. To trace delivery, run this in the Supabase SQL Editor after another user creates a message:
+
+```sql
+select id, category, created_at, claimed_at, sent_at
+from public.notification_events
+order by id desc
+limit 25;
+```
+
+No new row points to the database migration/trigger setup. An event that stays unsent points to the Database Webhook or Edge Function; inspect their Supabase logs and confirm the webhook's `x-webhook-secret` matches `PUSH_WEBHOOK_SECRET`. A sent event with no device notification points to the saved device subscription, permission, or mismatched VAPID keys.
+
 ## Email invitations
 
 Email invitations use Resend. Verify a sender/domain, then set:

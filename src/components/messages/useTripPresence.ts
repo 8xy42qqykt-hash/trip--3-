@@ -27,8 +27,9 @@ export function useTripPresence(
       config: { private: true, presence: { key: userId } },
     });
     let disposed = false;
-    const publishFocus = async () => {
-      const isFocused = isChatFocused
+    const publishFocus = async (forceInactive = false) => {
+      const isFocused = !forceInactive
+        && isChatFocused
         && document.visibilityState === 'visible'
         && document.hasFocus();
       const { error } = await client.from('trip_user_activity').upsert({
@@ -41,11 +42,13 @@ export function useTripPresence(
     };
 
     const onFocusChange = () => { void publishFocus(); };
+    const onPageHide = () => { void publishFocus(true); };
     window.addEventListener('focus', onFocusChange);
     window.addEventListener('blur', onFocusChange);
+    window.addEventListener('pagehide', onPageHide);
     document.addEventListener('visibilitychange', onFocusChange);
     void publishFocus();
-    const focusHeartbeat = window.setInterval(() => { void publishFocus(); }, 20000);
+    const focusHeartbeat = window.setInterval(() => { void publishFocus(); }, 15000);
 
     const syncMembers = () => {
       const members = Object.values(channel.presenceState()).flatMap((presences) =>
@@ -81,6 +84,7 @@ export function useTripPresence(
       window.clearInterval(focusHeartbeat);
       window.removeEventListener('focus', onFocusChange);
       window.removeEventListener('blur', onFocusChange);
+      window.removeEventListener('pagehide', onPageHide);
       document.removeEventListener('visibilitychange', onFocusChange);
       void client.from('trip_user_activity')
         .upsert({ user_id: userId, trip_id: tripId, is_focused: false, updated_at: new Date().toISOString() })
