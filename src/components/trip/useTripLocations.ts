@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
+let subscriptionSequence = 0;
+
 export interface SharedTripLocation {
   trip_id: string;
   user_id: string;
@@ -36,8 +38,10 @@ export function useTripLocations(tripId?: string) {
     };
 
     void loadLocations();
+    const subscriptionId = ++subscriptionSequence;
     const channel = client
-      .channel(`trip-locations:${tripId}`)
+      // Navigation transitions can temporarily keep two views subscribed to one trip.
+      .channel(`trip-locations:${tripId}:${subscriptionId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',

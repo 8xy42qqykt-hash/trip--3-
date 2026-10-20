@@ -25,6 +25,8 @@ type WhereaboutsEntry = {
   created_at: string;
 };
 
+let whereaboutsSubscriptionSequence = 0;
+
 const timeAgo = (timestamp: string) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
   if (minutes < 1) return 'Just now';
@@ -153,8 +155,9 @@ export const TripOverview: React.FC = () => {
   useEffect(() => {
     void loadWhereabouts();
     if (!currentTrip || !supabase) return;
+    const subscriptionId = ++whereaboutsSubscriptionSequence;
     const channel = supabase
-      .channel(`trip-whereabouts:${currentTrip.id}`)
+      .channel(`trip-whereabouts:${currentTrip.id}:${subscriptionId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',

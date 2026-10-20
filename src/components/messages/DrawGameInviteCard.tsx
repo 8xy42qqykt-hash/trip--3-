@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
+let gameCardSubscriptionSequence = 0;
+
 interface DrawGameInviteCardProps {
   gameId?: string;
   onOpen?: (gameId: string) => void;
@@ -26,8 +28,9 @@ export const DrawGameInviteCard: React.FC<DrawGameInviteCardProps> = ({ gameId, 
       if (!disposed) setGame(data);
     };
     void load();
+    const subscriptionId = ++gameCardSubscriptionSequence;
     const channel = client
-      .channel(`draw-game-card:${gameId}`)
+      .channel(`draw-game-card:${gameId}:${subscriptionId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
