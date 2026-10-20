@@ -5,13 +5,11 @@ import {
   Camera,
   SignOut,
   CalendarBlank,
-  ArrowsLeftRight,
   PaperPlaneTilt,
   Trash,
   ShieldCheck,
   User,
   X,
-  CaretDown,
 } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
@@ -37,7 +35,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
     tripMembers,
     isOwner,
     updateTrip,
-    exitTrip,
     removeMember,
     createTripInvitations,
   } = useTrip();
@@ -329,13 +326,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
           </div>
         </div>
 
-        <details className="group border-y border-white/[0.08]">
-          <summary className="flex cursor-pointer list-none items-center justify-between py-4 text-base font-bold text-white [&::-webkit-details-marker]:hidden">
-            <span>Notification settings</span>
-            <CaretDown size={18} className="text-slate-400 transition-transform group-open:rotate-180" />
-          </summary>
+        <section className="border-y border-white/[0.08] py-4">
+          <h3 className="mb-3 text-base font-bold text-white">Notifications</h3>
           <NotificationPermissionButton />
-        </details>
+        </section>
         {isOwner && <section className="space-y-3 border-y border-white/[0.08] py-4">
           <div>
             <h3 className="text-base font-bold text-white">Invite people</h3>
@@ -372,30 +366,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
             </div>
           )}
         </section>}
-        {/* Switch Trip Button - Clean unboxed row */}
-        <button
-          type="button"
-          onClick={exitTrip}
-          className="w-full flex items-center justify-between py-3 px-2 active:bg-white/5 cursor-pointer text-left transition-colors border-y border-white/[0.08]"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-9 h-9 rounded-full bg-[#0A84FF]/20 flex items-center justify-center text-[#0A84FF]">
-              <ArrowsLeftRight size={18} weight="bold" />
-            </div>
-            <div>
-              <div className="text-base font-bold text-white">
-                Switch Trip
-              </div>
-              <div className="text-xs text-slate-400">
-                Return to your trips list
-              </div>
-            </div>
-          </div>
-          <span className="text-xs font-bold text-[#0A84FF] px-2">
-            All Trips
-          </span>
-        </button>
-
         {/* Trip Info & Invite Code - Clean row */}
         <div className="space-y-1">
           <div className="text-xs font-bold text-slate-400 px-2">

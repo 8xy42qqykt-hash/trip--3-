@@ -371,11 +371,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                         {String(message.metadata.durationSeconds % 60).padStart(2, '0')}
                       </p>
                     )}
-                    <ProfileRow
-                      label="Participants"
-                      ids={message.metadata?.participantIds || []}
-                      members={members}
-                    />
                     {message.metadata?.status !== 'ended'
                       && callId
                       && !message.metadata?.activeParticipantIds?.includes(currentUserId)
@@ -439,7 +434,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         </div>
       </div>
 
-      {(isLastInGroup || message.type === 'meal' || message.type === 'plan') && (
+      {(isLastInGroup || message.type === 'meal' || message.type === 'plan' || message.type === 'call') && (
         <div className={`mt-1 flex flex-col gap-1 text-[11px] font-medium text-slate-500 ${
           isOwn ? 'mr-1 justify-end' : 'ml-10 justify-start'
         }`}>
@@ -455,6 +450,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           )}
           {message.type === 'plan' && (
             <ProfileRow label="Contributors:" ids={message.metadata?.contributors || []} members={members} />
+          )}
+          {message.type === 'call' && (
+            <ProfileRow label="Participants:" ids={message.metadata?.participantIds || []} members={members} />
           )}
         </div>
       )}

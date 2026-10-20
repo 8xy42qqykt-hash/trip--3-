@@ -63,6 +63,11 @@ const VideoTile: React.FC<{
       className={`relative min-w-0 overflow-hidden rounded-2xl bg-[#1c1c20] text-left transition-[flex-basis,transform] duration-300 ease-out ${
         audioOnly ? 'aspect-square' : 'aspect-video'
       }`}
+      style={{
+        aspectRatio: audioOnly
+          ? '1 / 1'
+          : stream?.getVideoTracks()[0]?.getSettings().aspectRatio || '16 / 9',
+      }}
     >
       {stream && !audioOnly ? (
         <video
@@ -70,7 +75,7 @@ const VideoTile: React.FC<{
           autoPlay
           playsInline
           muted={muted}
-          className={`absolute inset-0 h-full w-full object-cover ${local ? 'scale-x-[-1]' : ''}`}
+          className={`absolute inset-0 h-full w-full bg-black object-contain ${local ? 'scale-x-[-1]' : ''}`}
         />
       ) : stream ? (
         <audio

@@ -149,7 +149,7 @@ const MainAppContent: React.FC = () => {
 
   // Signed in: Main layout with seamless sliding between Trips and Tabs
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col bg-black text-white overflow-hidden select-none">
+    <div className="fixed inset-0 h-[100dvh] w-full flex flex-col bg-black text-white overflow-hidden select-none">
       <main className="flex-1 w-full overflow-hidden relative">
         <AnimatePresence initial={false} custom={slideDirection} mode="popLayout">
           <motion.div

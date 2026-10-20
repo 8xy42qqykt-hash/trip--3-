@@ -967,64 +967,44 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           )}
 
           {(composerMode === 'meal' || composerMode === 'plan') && (
-            <div className="mb-1.5 flex min-h-8 items-center gap-4 pl-1">
+            <div className="mb-1.5 flex min-h-8 items-center gap-5 pl-1">
               {composerMode === 'plan' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const picker = planDateInputRef.current;
-                      if (!picker) return;
-                      if (typeof picker.showPicker === 'function') picker.showPicker();
-                      else picker.click();
-                    }}
-                    className="min-h-8 text-sm font-medium text-slate-400 active:text-white"
-                  >
-                    {planDate ? formatTripDate(planDate) : 'Add date'}
-                  </button>
+                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                  <span>{planDate ? formatTripDate(planDate) : 'Add date'}</span>
                   <input
                     ref={planDateInputRef}
                     type="date"
                     aria-label="Plan date"
                     value={planDate}
                     onChange={(event) => setPlanDate(event.target.value)}
-                    className="pointer-events-none absolute h-px w-px opacity-0"
-                    tabIndex={-1}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                   />
-                </>
+                </label>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  const picker = composerMode === 'meal' ? mealTimeInputRef.current : planTimeInputRef.current;
-                  if (!picker) return;
-                  if (typeof picker.showPicker === 'function') picker.showPicker();
-                  else picker.click();
-                }}
-                className="min-h-8 text-sm font-medium text-slate-400 active:text-white"
-              >
-                {(composerMode === 'meal' ? mealTime : planTime) || 'Add time'}
-              </button>
               {composerMode === 'meal' ? (
-                <input
-                  ref={mealTimeInputRef}
-                  type="time"
-                  aria-label="Meal time"
-                  value={mealTime}
-                  onChange={(event) => setMealTime(event.target.value)}
-                  className="pointer-events-none absolute h-px w-px opacity-0"
-                  tabIndex={-1}
-                />
+                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                  <span>{mealTime || 'Add time'}</span>
+                  <input
+                    ref={mealTimeInputRef}
+                    type="time"
+                    aria-label="Meal time"
+                    value={mealTime}
+                    onChange={(event) => setMealTime(event.target.value)}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
               ) : (
-                <input
-                  ref={planTimeInputRef}
-                  type="time"
-                  aria-label="Plan time"
-                  value={planTime}
-                  onChange={(event) => setPlanTime(event.target.value)}
-                  className="pointer-events-none absolute h-px w-px opacity-0"
-                  tabIndex={-1}
-                />
+                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                  <span>{planTime || 'Add time'}</span>
+                  <input
+                    ref={planTimeInputRef}
+                    type="time"
+                    aria-label="Plan time"
+                    value={planTime}
+                    onChange={(event) => setPlanTime(event.target.value)}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
               )}
             </div>
           )}
