@@ -11,6 +11,7 @@ export function useTripPresence(
   tripId: string | undefined,
   userId: string | undefined,
   profile: Profile | null,
+  isChatFocused = true,
 ) {
   const [onlineMembers, setOnlineMembers] = useState<OnlineTripMember[]>([]);
 
@@ -26,6 +27,25 @@ export function useTripPresence(
       config: { private: true, presence: { key: userId } },
     });
     let disposed = false;
+    const publishFocus = async () => {
+      const isFocused = isChatFocused
+        && document.visibilityState === 'visible'
+        && document.hasFocus();
+      const { error } = await client.from('trip_user_activity').upsert({
+        user_id: userId,
+        trip_id: tripId,
+        is_focused: isFocused,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) console.error('Could not update focused-trip state:', error);
+    };
+
+    const onFocusChange = () => { void publishFocus(); };
+    window.addEventListener('focus', onFocusChange);
+    window.addEventListener('blur', onFocusChange);
+    document.addEventListener('visibilitychange', onFocusChange);
+    void publishFocus();
+    const focusHeartbeat = window.setInterval(() => { void publishFocus(); }, 20000);
 
     const syncMembers = () => {
       const members = Object.values(channel.presenceState()).flatMap((presences) =>
@@ -58,9 +78,18 @@ export function useTripPresence(
 
     return () => {
       disposed = true;
+      window.clearInterval(focusHeartbeat);
+      window.removeEventListener('focus', onFocusChange);
+      window.removeEventListener('blur', onFocusChange);
+      document.removeEventListener('visibilitychange', onFocusChange);
+      void client.from('trip_user_activity')
+        .upsert({ user_id: userId, trip_id: tripId, is_focused: false, updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) console.error('Could not clear focused-trip state:', error);
+        });
       void client.removeChannel(channel);
     };
-  }, [tripId, userId, profile]);
+  }, [tripId, userId, profile, isChatFocused]);
 
   return onlineMembers;
 }

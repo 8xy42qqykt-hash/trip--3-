@@ -13,6 +13,22 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     console.error('Unhandled promise rejection:', event.reason);
   });
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL}service-worker.js`, window.location.href);
+    navigator.serviceWorker.register(serviceWorkerUrl).catch((error: unknown) => {
+      console.error('Could not register the Trip service worker:', error);
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      const badgeNavigator = navigator as Navigator & {
+        clearAppBadge?: () => Promise<void>;
+      };
+      void badgeNavigator.clearAppBadge?.().catch((error: unknown) => {
+        console.error('Could not clear the app badge:', error);
+      });
+    }
+  });
 }
 
 if (rootElement) {

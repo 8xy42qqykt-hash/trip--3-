@@ -94,7 +94,7 @@
   padding-top: env(safe-area-inset-top, 0px);
 }
 .pb-safe {
-  padding-bottom: 0px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .reply-preview-content {
@@ -213,4 +213,13 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+@keyframes checkPop {
+  from { opacity: 0; transform: scale(0.55); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-check-pop {
+  animation: checkPop 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

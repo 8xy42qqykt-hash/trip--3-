@@ -26,6 +26,14 @@ export interface ActiveCall {
   startedAt: number;
 }
 
+export interface LastCallState {
+  callId: string;
+  startedAt: number;
+  participantIds: string[];
+  activeParticipantIds: string[];
+  ended: boolean;
+}
+
 interface SignalPayload {
   callId: string;
   from: string;
@@ -54,6 +62,48 @@ function mergeParticipants(...rosters: CallParticipant[][]) {
   );
 }
 
+async function persistCallRoster(callId: string, participants: string[]) {
+  if (!supabase) return;
+  const { data, error: readError } = await supabase
+    .from('call_sessions')
+    .select('participant_history')
+    .eq('call_id', callId)
+    .maybeSingle();
+  if (readError) throw readError;
+  const participantHistory = Array.from(new Set([
+    ...(data?.participant_history || []),
+    ...participants,
+  ]));
+  const { error } = await supabase.from('call_sessions')
+    .update({ participants, participant_history: participantHistory })
+    .eq('call_id', callId)
+    .is('ended_at', null);
+  if (error) throw error;
+}
+
+async function finishCallSession(callId: string, participantIds: string[]) {
+  if (!supabase) return;
+  const { data, error: readError } = await supabase
+    .from('call_sessions')
+    .select('participant_history')
+    .eq('call_id', callId)
+    .maybeSingle();
+  if (readError) throw readError;
+  const participantHistory = Array.from(new Set([
+    ...(data?.participant_history || []),
+    ...participantIds,
+  ]));
+  const { error } = await supabase.from('call_sessions')
+    .update({
+      participants: [],
+      participant_history: participantHistory,
+      ended_at: new Date().toISOString(),
+    })
+    .eq('call_id', callId)
+    .is('ended_at', null);
+  if (error) throw error;
+}
+
 export function useGroupCall(
   tripId: string | undefined,
   userId: string | undefined,
@@ -65,9 +115,11 @@ export function useGroupCall(
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [callError, setCallError] = useState('');
+  const [lastCallState, setLastCallState] = useState<LastCallState | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const channelReadyRef = useRef(false);
   const activeCallRef = useRef<ActiveCall | null>(null);
+  const lastKnownCallRef = useRef<{ callId: string; startedAt: number; participantIds: string[] } | null>(null);
   const incomingCallRef = useRef<CallInvite | null>(null);
   const participantsRef = useRef<CallParticipant[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -88,6 +140,18 @@ export function useGroupCall(
     const unique = Array.from(new Map(next.map((member) => [member.userId, member])).values());
     participantsRef.current = unique;
     setParticipants(unique);
+    const active = activeCallRef.current;
+    if (active) {
+      const previous = lastKnownCallRef.current;
+      lastKnownCallRef.current = {
+        callId: active.callId,
+        startedAt: active.startedAt,
+        participantIds: Array.from(new Set([
+          ...(previous?.callId === active.callId ? previous.participantIds : []),
+          ...unique.map((member) => member.userId),
+        ])),
+      };
+    }
   }, []);
 
   const updateActiveCall = useCallback((call: ActiveCall | null) => {
@@ -268,6 +332,8 @@ export function useGroupCall(
       }
       const updatedRoster = mergeParticipants(participantsRef.current, roster);
       updateParticipants(updatedRoster);
+      void persistCallRoster(call.callId, updatedRoster.map((member) => member.userId))
+        .catch((error: unknown) => console.error('Could not persist call participants:', error));
       void send('call-roster', { callId: call.callId, participants: updatedRoster }).catch(
         (error: unknown) => console.error('Could not update call participants:', error),
       );
@@ -302,12 +368,49 @@ export function useGroupCall(
     });
     channel.on('broadcast', { event: 'call-leave' }, ({ payload }) => {
       const data = payload as { callId: string; userId: string };
-      if (activeCallRef.current?.callId !== data.callId) return;
+      const call = activeCallRef.current;
+      if (call?.callId !== data.callId) return;
       closePeer(data.userId);
-      updateParticipants(participantsRef.current.filter((member) => member.userId !== data.userId));
+      const roster = participantsRef.current.filter((member) => member.userId !== data.userId);
+      updateParticipants(roster);
+      void persistCallRoster(call.callId, roster.map((member) => member.userId))
+        .catch((error: unknown) => console.error('Could not persist call participants:', error));
     });
     channel.on('broadcast', { event: 'call-end' }, ({ payload }) => {
       const data = payload as { callId: string };
+      const active = activeCallRef.current;
+      const incoming = incomingCallRef.current;
+      const known = lastKnownCallRef.current;
+      if (
+        active?.callId === data.callId
+        || incoming?.callId === data.callId
+        || known?.callId === data.callId
+      ) {
+        setLastCallState({
+          callId: data.callId,
+          startedAt: active?.startedAt
+            || incoming?.startedAt
+            || known?.startedAt
+            || Date.now(),
+          participantIds: Array.from(new Set([
+            ...(known?.callId === data.callId ? known.participantIds : []),
+            ...participantsRef.current.map((member) => member.userId),
+            ...(incoming?.callId === data.callId
+              ? incoming.participants.map((member) => member.userId)
+              : []),
+          ])),
+          activeParticipantIds: [],
+          ended: true,
+        });
+      }
+      if (incoming?.callId === data.callId) updateIncomingCall(null);
+      void client.from('call_sessions')
+        .update({ ended_at: new Date().toISOString(), participants: [] })
+        .eq('call_id', data.callId)
+        .is('ended_at', null)
+        .then(({ error }) => {
+          if (error) console.error('Could not persist call end:', error);
+        });
       if (activeCallRef.current?.callId === data.callId) clearCall();
     });
     channel.on('broadcast', { event: 'call-full' }, ({ payload }) => {
@@ -329,6 +432,43 @@ export function useGroupCall(
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         channelReadyRef.current = true;
+        void client.from('call_sessions')
+          .select('call_id, kind, host_id, started_at, participants')
+          .eq('trip_id', tripId)
+          .is('ended_at', null)
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(async ({ data, error }) => {
+            if (error) {
+              console.error('Could not check for an active call:', error);
+              return;
+            }
+            if (!data || activeCallRef.current || incomingCallRef.current) return;
+            const ids = Array.from(new Set([data.host_id, ...(data.participants || [])]));
+            const { data: profiles, error: profilesError } = await client
+              .from('profiles')
+              .select('id, display_name, avatar_url, color')
+              .in('id', ids);
+            if (profilesError) {
+              console.error('Could not load active call participants:', profilesError);
+              return;
+            }
+            const members = (profiles || []).map((member) => ({
+              userId: member.id,
+              profile: { ...member, display_name: member.display_name || 'Trip member' },
+            }));
+            const hostProfile = members.find((member) => member.userId === data.host_id)?.profile;
+            if (!hostProfile || !members.some((member) => member.userId === userId)) return;
+            updateIncomingCall({
+              callId: data.call_id,
+              kind: data.kind,
+              hostId: data.host_id,
+              hostProfile,
+              startedAt: new Date(data.started_at).getTime(),
+              participants: members,
+            });
+          });
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         channelReadyRef.current = false;
         console.error(`Call signaling channel failed: ${status}`);
@@ -388,7 +528,21 @@ export function useGroupCall(
         setLocalStream(stream);
         updateParticipants(roster);
         updateActiveCall({ callId, kind, hostId: userId || '', startedAt });
+        lastKnownCallRef.current = { callId, startedAt, participantIds: [userId || ''] };
+        setLastCallState(null);
         updateIncomingCall(null);
+        if (supabase && tripId) {
+          const { error } = await supabase.from('call_sessions').insert({
+            call_id: callId,
+            trip_id: tripId,
+            kind,
+            host_id: userId,
+            started_at: new Date(startedAt).toISOString(),
+            participants: [userId],
+            participant_history: [userId],
+          });
+          if (error) throw error;
+        }
         await send('call-invite', {
           callId,
           kind,
@@ -404,7 +558,7 @@ export function useGroupCall(
         clearCall();
       }
     },
-    [clearCall, getMedia, send, updateActiveCall, updateIncomingCall, updateParticipants, userId, userProfile],
+    [clearCall, getMedia, send, tripId, updateActiveCall, updateIncomingCall, updateParticipants, userId, userProfile],
   );
 
   const acceptCall = useCallback(async () => {
@@ -434,7 +588,16 @@ export function useGroupCall(
         hostId: invite.hostId,
         startedAt: invite.startedAt,
       });
+      lastKnownCallRef.current = {
+        callId: invite.callId,
+        startedAt: invite.startedAt,
+        participantIds: roster.map((member) => member.userId),
+      };
+      setLastCallState(null);
       updateIncomingCall(null);
+      if (supabase) {
+        await persistCallRoster(invite.callId, roster.map((member) => member.userId));
+      }
       await send('call-join', {
         callId: invite.callId,
         participant: me,
@@ -465,10 +628,28 @@ export function useGroupCall(
   const leaveCall = useCallback(async () => {
     const call = activeCallRef.current;
     if (!call) return;
+    const remaining = participantsRef.current.filter((member) => member.userId !== userId);
+    const known = lastKnownCallRef.current;
+    setLastCallState({
+      callId: call.callId,
+      startedAt: call.startedAt,
+      participantIds: Array.from(new Set([
+        ...(known?.callId === call.callId ? known.participantIds : []),
+        ...participantsRef.current.map((member) => member.userId),
+      ])),
+      activeParticipantIds: remaining.map((member) => member.userId),
+      ended: remaining.length === 0,
+    });
     try {
-      if (call.hostId === userId) {
+      if (remaining.length === 0) {
         await send('call-end', { callId: call.callId });
+        if (supabase) {
+          await finishCallSession(call.callId, participantsRef.current.map((member) => member.userId));
+        }
       } else {
+        if (supabase) {
+          await persistCallRoster(call.callId, remaining.map((member) => member.userId));
+        }
         await send('call-leave', { callId: call.callId, userId });
       }
     } catch (error) {
@@ -477,6 +658,70 @@ export function useGroupCall(
       clearCall();
     }
   }, [clearCall, send, userId]);
+
+  const joinCall = useCallback(async (callId: string) => {
+    if (!supabase || !tripId || !userId) {
+      setCallError('Call joining requires a connected trip.');
+      return;
+    }
+    const deadline = Date.now() + 5000;
+    while (!channelReadyRef.current && Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    if (!channelReadyRef.current) {
+      setCallError('Call service is still connecting. Try joining again.');
+      return;
+    }
+    const { data, error } = await supabase.from('call_sessions')
+      .select('call_id, kind, host_id, started_at, participants, participant_history, ended_at')
+      .eq('call_id', callId)
+      .eq('trip_id', tripId)
+      .maybeSingle();
+    if (error) {
+      setCallError(`Could not join the call: ${error.message}`);
+      return;
+    }
+    if (!data) {
+      setCallError('This call has ended.');
+      return;
+    }
+    if (data.ended_at) {
+      setLastCallState({
+        callId,
+        startedAt: new Date(data.started_at).getTime(),
+        participantIds: data.participant_history || [],
+        activeParticipantIds: [],
+        ended: true,
+      });
+      return;
+    }
+    const ids = Array.from(new Set([data.host_id, ...(data.participants || [])]));
+    const { data: profiles, error: profilesError } = await supabase.from('profiles')
+      .select('id, display_name, avatar_url, color')
+      .in('id', ids);
+    if (profilesError) {
+      setCallError(`Could not load call participants: ${profilesError.message}`);
+      return;
+    }
+    const roster = (profiles || []).map((member) => ({
+      userId: member.id,
+      profile: { ...member, display_name: member.display_name || 'Trip member' },
+    }));
+    const hostProfile = roster.find((member) => member.userId === data.host_id)?.profile;
+    if (!hostProfile) {
+      setCallError('The call host profile could not be loaded.');
+      return;
+    }
+    updateIncomingCall({
+      callId: data.call_id,
+      kind: data.kind,
+      hostId: data.host_id,
+      hostProfile,
+      startedAt: new Date(data.started_at).getTime(),
+      participants: roster,
+    });
+    await acceptCall();
+  }, [acceptCall, tripId, updateIncomingCall, userId]);
 
   const toggleMicrophone = useCallback(() => {
     localStreamRef.current?.getAudioTracks().forEach((track) => {
@@ -499,10 +744,12 @@ export function useGroupCall(
     localStream,
     remoteStreams,
     callError,
+    lastCallState,
     clearCallError: () => setCallError(''),
     startCall,
     acceptCall,
     declineCall,
+    joinCall,
     leaveCall,
     toggleMicrophone,
     toggleCamera,

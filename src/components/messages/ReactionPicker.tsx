@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Heart,
+  Check,
   ThumbsUp,
   ThumbsDown,
   Smiley,
@@ -10,6 +11,9 @@ import {
   ArrowBendUpLeft,
   Copy,
   Trash,
+  PencilSimple,
+  CookingPot,
+  HandHeart,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { PollResultMessage } from './PollResultMessage';
@@ -24,6 +28,8 @@ interface ReactionPickerProps {
   onReply: () => void;
   onCopy: () => void;
   onDelete?: () => void;
+  onEdit?: () => void;
+  onAction?: (action: 'Cook' | 'Contribute') => void;
   onClose: () => void;
 }
 
@@ -46,6 +52,8 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   onReply,
   onCopy,
   onDelete,
+  onEdit,
+  onAction,
   onClose,
 }) => {
   const isPollResult = message.type === 'poll_result' && message.metadata;
@@ -57,7 +65,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const reactionBarHeight = 52;
   const reactionBarWidth = 276;
   const gap = 12;
-  const menuHeight = isOwnMessage && onDelete ? 148 : 100;
+  const menuHeight = 104 + (onEdit ? 44 : 0) + (onAction ? 44 : 0) + (isOwnMessage && onDelete ? 44 : 0);
   const menuWidth = 216;
 
   // Top and bottom clearance from header and input/nav bars
@@ -204,6 +212,55 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             >
               <PollResultMessage metadata={message.metadata} isOwn={isOwnMessage} />
             </div>
+          ) : message.type === 'grocery_list' ? (
+            <div
+              className={`min-w-[190px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl text-white ${defaultRadius} ${
+                isOwnMessage ? 'bg-[#0A84FF]' : 'bg-[#262629]'
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="text-xs font-semibold tracking-wide text-white/70">Grocery list</div>
+                <div className="space-y-1.5">
+                  {(message.metadata?.items || message.content.split(/\r?\n/).map((text: string) => ({ text, checked: false }))).map((item: { text: string; checked?: boolean }, index: number) => (
+                    <div key={`${item.text}-${index}`} className="flex min-h-8 items-center gap-2 text-sm">
+                      <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border ${
+                        item.checked ? 'border-white bg-white text-[#0A84FF]' : 'border-white/75'
+                      }`}>
+                        {item.checked && <Check size={12} weight="bold" />}
+                      </span>
+                      <span className={item.checked ? 'text-white/50 line-through' : ''}>{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : message.type === 'meal' || message.type === 'plan' ? (
+            <div
+              className={`min-w-[170px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl whitespace-pre-wrap break-words ${defaultRadius} ${
+                isOwnMessage ? 'bg-[#0A84FF] text-white' : 'bg-[#262629] text-white'
+              }`}
+              style={{
+                width: 'max-content',
+                minWidth: `${bubbleWidth}px`,
+                maxWidth: `${bubbleWidth}px`,
+                boxSizing: 'border-box',
+              }}
+            >
+              {message.content}
+            </div>
+          ) : message.type === 'call' ? (
+            <div
+              className={`min-w-[200px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl ${defaultRadius} ${
+                isOwnMessage ? 'bg-[#0A84FF] text-white' : 'bg-[#262629] text-white'
+              }`}
+            >
+              <div className="mb-1 text-xs font-semibold tracking-wide text-white/70">
+                {message.metadata?.kind === 'video' ? 'Video call' : 'Voice call'}
+              </div>
+              <p className="font-semibold">
+                {message.metadata?.status === 'ended' ? 'Call ended' : 'Call in progress'}
+              </p>
+            </div>
           ) : (
             <div
               className={`px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl whitespace-pre-wrap break-words ${defaultRadius} ${
@@ -258,6 +315,40 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             <span>Copy</span>
             <Copy size={18} weight="bold" className="text-slate-400" />
           </button>
+          {onEdit && (
+            <>
+              <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
+              <button
+                type="button"
+                onClick={() => {
+                  onEdit();
+                  onClose();
+                }}
+                className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
+              >
+                <span>Edit</span>
+                <PencilSimple size={18} weight="bold" className="text-slate-400" />
+              </button>
+            </>
+          )}
+          {onAction && (
+            <>
+              <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
+              <button
+                type="button"
+                onClick={() => {
+                  onAction(message.type === 'meal' ? 'Cook' : 'Contribute');
+                  onClose();
+                }}
+                className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
+              >
+                <span>{message.type === 'meal' ? 'Cook' : 'Contribute'}</span>
+                {message.type === 'meal'
+                  ? <CookingPot size={18} weight="bold" className="text-slate-400" />
+                  : <HandHeart size={18} weight="bold" className="text-slate-400" />}
+              </button>
+            </>
+          )}
           {isOwnMessage && onDelete && (
             <>
               <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />

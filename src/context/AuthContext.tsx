@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isCloudActive } from '../lib/supabase';
 import { Profile } from '../types';
 import { getRandomProfileColor } from '../utils/colors';
+import { safeDisplayName } from '../utils/displayName';
 
 interface AuthContextType {
   user: { id: string; email?: string } | null;
@@ -38,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       list = list.filter((a) => a.email.toLowerCase() !== email.toLowerCase());
       list.unshift({
         email,
-        displayName: displayName || email.split('@')[0],
+        displayName: displayName || 'Member',
         color: color || '#007AFF',
         avatarUrl: avatarUrl || null,
       });
@@ -79,11 +80,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .maybeSingle();
 
       if (data) {
-        setProfile(data as Profile);
-        recordSavedAccount(email || '', data.display_name, data.color, data.avatar_url);
+        const storedName = email && data.display_name.toLowerCase() === email.split('@')[0].toLowerCase()
+          ? ''
+          : data.display_name;
+        const safeProfile = { ...(data as Profile), display_name: safeDisplayName(storedName) };
+        setProfile(safeProfile);
+        if (email) recordSavedAccount(email, safeProfile.display_name, data.color, data.avatar_url);
       } else if (!error) {
         const fallbackColor = getRandomProfileColor();
-        const fallbackName = email?.split('@')[0] || 'User';
+        const fallbackName = 'Member';
         const newProf = {
           id: userId,
           display_name: fallbackName,
@@ -93,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error: upsertErr } = await supabase.from('profiles').upsert(newProf);
         if (!upsertErr) {
           setProfile(newProf);
-          recordSavedAccount(email || '', fallbackName, fallbackColor, null);
+          if (email) recordSavedAccount(email, fallbackName, fallbackColor, null);
         }
       }
     } catch (err) {
@@ -200,9 +205,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ error?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
-    const cleanName = displayName.trim() || cleanEmail.split('@')[0];
+    const cleanName = displayName.trim();
 
     if (!cleanEmail) return { error: 'Please enter an email' };
+    if (!cleanName) return { error: 'Please enter a display name' };
+    if (cleanName.toLowerCase() === cleanEmail.split('@')[0].toLowerCase()) {
+      return { error: 'Choose a display name, not your email username.' };
+    }
+    if (safeDisplayName(cleanName) !== cleanName) return { error: 'Choose a display name, not an email address or phone number.' };
     if (!cleanPassword || cleanPassword.length < 6) {
       return { error: 'Password must be at least 6 characters' };
     }
@@ -267,11 +277,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user || !profile || !supabase) return;
-    const updated = { ...profile, ...updates };
+    const safeUpdates = { ...updates };
+    if (safeUpdates.display_name) {
+      const isEmailUsername = user.email
+        && safeUpdates.display_name.toLowerCase() === user.email.split('@')[0].toLowerCase();
+      safeUpdates.display_name = isEmailUsername ? 'Trip member' : safeDisplayName(safeUpdates.display_name);
+    }
+    const updated = { ...profile, ...safeUpdates };
     setProfile(updated);
 
     try {
-      await supabase.from('profiles').update(updates).eq('id', user.id);
+      const { error } = await supabase.from('profiles').update(safeUpdates).eq('id', user.id);
+      if (error) throw error;
       recordSavedAccount(user.email || '', updated.display_name, updated.color, updated.avatar_url);
     } catch (err) {
       console.warn('Failed to update profile:', err);

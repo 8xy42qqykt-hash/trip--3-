@@ -24,6 +24,19 @@ export interface TripMember {
   profile?: Profile;
 }
 
+export interface TripInvitation {
+  id: string;
+  trip_id: string;
+  inviter_id: string;
+  invitee_user_id: string | null;
+  email: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
+  created_at: string;
+  expires_at: string;
+  trip?: Trip;
+  inviter?: Profile;
+}
+
 export interface Reaction {
   id: string;
   message_id: string;
@@ -36,11 +49,11 @@ export interface Message {
   id: string;
   trip_id: string;
   user_id: string;
-  type: 'text' | 'image' | 'poll_result';
+  type: 'text' | 'image' | 'poll_result' | 'grocery_list' | 'meal' | 'plan' | 'call';
   content: string;
   image_url?: string | null;
   reply_to?: string | null;
-  metadata?: any;
+  metadata?: Record<string, any> | null;
   created_at: string;
   reactions?: Reaction[];
   sender?: Profile;

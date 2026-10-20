@@ -26,7 +26,10 @@ const VideoTile: React.FC<{
   stream: MediaStream | null;
   muted?: boolean;
   audioOnly: boolean;
-}> = ({ profile, stream, muted = false, audioOnly }) => {
+  local?: boolean;
+  spotlight?: boolean;
+  onClick?: () => void;
+}> = ({ profile, stream, muted = false, audioOnly, local = false, spotlight = false, onClick }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [needsPlaybackTap, setNeedsPlaybackTap] = useState(false);
@@ -45,14 +48,28 @@ const VideoTile: React.FC<{
   }, [audioOnly, stream]);
 
   return (
-    <div className="relative min-h-0 overflow-hidden rounded-3xl bg-[#1c1c20]">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      aria-label={`${spotlight ? 'Return to call grid from' : 'Spotlight'} ${profile.display_name}`}
+      className={`relative min-w-0 overflow-hidden rounded-2xl bg-[#1c1c20] text-left transition-[flex-basis,transform] duration-300 ease-out ${
+        audioOnly ? 'aspect-square' : 'aspect-video'
+      }`}
+    >
       {stream && !audioOnly ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={muted}
-          className="h-full min-h-40 w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover ${local ? 'scale-x-[-1]' : ''}`}
         />
       ) : stream ? (
         <audio
@@ -64,7 +81,8 @@ const VideoTile: React.FC<{
       {needsPlaybackTap && (
         <button
           type="button"
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             const element = audioOnly ? audioRef.current : videoRef.current;
             if (element) {
               void element.play().then(
@@ -83,7 +101,7 @@ const VideoTile: React.FC<{
           name={profile.display_name}
           avatarUrl={profile.avatar_url}
           color={profile.color}
-          size={88}
+          size={spotlight ? 88 : 64}
         />
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 pb-3 pt-8">
@@ -98,6 +116,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
   const [isMicrophoneOn, setIsMicrophoneOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [spotlightId, setSpotlightId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!call.activeCall) {
@@ -127,24 +146,20 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
         muted: false,
       })),
     ];
+    const spotlight = tiles.find(({ participant }) => participant.userId === spotlightId);
+    const columns = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(tiles.length))));
 
     return (
-      <div
-        className="fixed inset-0 z-[100] flex flex-col bg-[#08090c] px-4 pt-safe text-white"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
-      >
-        <header className="flex shrink-0 items-center justify-between py-4">
+      <section className="mx-3 mt-3 shrink-0 rounded-3xl border border-white/10 bg-[#17171b] p-3 text-white shadow-lg">
+        <header className="flex items-center justify-between gap-2 pb-3">
           <div>
-            <div className="text-lg font-bold">
+            <div className="text-base font-bold">
               {call.activeCall.kind === 'video' ? 'Video call' : 'Voice call'}
             </div>
-            <div className="text-sm text-slate-400">
-              {formatDuration(elapsedSeconds)} · {call.participants.length}/6 people
+            <div className="text-xs text-slate-400">
+              {formatDuration(elapsedSeconds)} · {call.participants.map((member) => member.profile.display_name).join(', ')}
             </div>
           </div>
-          <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
-            Peer-to-peer
-          </span>
         </header>
 
         {call.callError && (
@@ -154,36 +169,64 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           </div>
         )}
 
-        <main
-          className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
-          style={{
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(42vw, 220px), 1fr))',
-            alignContent: 'center',
-            gridAutoRows: 'minmax(160px, 1fr)',
-          }}
-        >
-          {tiles.map(({ participant, stream, muted }) => (
-            <VideoTile
-              key={participant.userId}
-              profile={participant.profile}
-              stream={stream}
-              muted={muted}
-              audioOnly={call.activeCall!.kind === 'audio'}
-            />
-          ))}
-          {others.length === 0 && (
-            <div className="col-span-full py-5 text-center text-sm text-slate-400">
-              Waiting for others to join…
+        <main className="min-h-0">
+          {spotlight ? (
+            <div className="space-y-2">
+              <VideoTile
+                profile={spotlight.participant.profile}
+                stream={spotlight.stream}
+                muted={spotlight.muted}
+                local={spotlight.participant.userId === userId}
+                audioOnly={call.activeCall.kind === 'audio'}
+                spotlight
+                onClick={() => setSpotlightId(null)}
+              />
+              <div className="flex gap-2 overflow-x-auto">
+                {tiles.filter(({ participant }) => participant.userId !== spotlightId).map(({ participant, stream, muted }) => (
+                  <div key={participant.userId} className="w-28 shrink-0">
+                    <VideoTile
+                      profile={participant.profile}
+                      stream={stream}
+                      muted={muted}
+                      local={participant.userId === userId}
+                      audioOnly={call.activeCall!.kind === 'audio'}
+                      onClick={() => setSpotlightId(participant.userId)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-2">
+              {tiles.map(({ participant, stream, muted }) => (
+                <div
+                  key={participant.userId}
+                  className="min-w-0 transition-[flex-basis] duration-300 ease-out"
+                  style={{ flex: `0 1 calc((100% - ${(columns - 1) * 8}px) / ${columns})` }}
+                >
+                  <VideoTile
+                    profile={participant.profile}
+                    stream={stream}
+                    muted={muted}
+                    local={participant.userId === userId}
+                    audioOnly={call.activeCall!.kind === 'audio'}
+                    onClick={() => setSpotlightId((current) => current === participant.userId ? null : participant.userId)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {others.length === 0 && (
+            <div className="py-2 text-center text-xs text-slate-400">Waiting for others to join…</div>
           )}
         </main>
 
-        <footer className="flex shrink-0 items-center justify-center gap-4 py-6">
+        <footer className="flex shrink-0 items-center justify-center gap-3 pt-3">
           <button
             type="button"
             onClick={() => setIsMicrophoneOn(call.toggleMicrophone())}
             aria-label={isMicrophoneOn ? 'Mute microphone' : 'Unmute microphone'}
-            className={`flex h-14 w-14 items-center justify-center rounded-full ${
+            className={`flex h-11 w-11 items-center justify-center rounded-full ${
               isMicrophoneOn ? 'bg-white/15' : 'bg-red-500'
             }`}
           >
@@ -194,7 +237,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
               type="button"
               onClick={() => setIsCameraOn(call.toggleCamera())}
               aria-label={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
-              className={`flex h-14 w-14 items-center justify-center rounded-full ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 isCameraOn ? 'bg-white/15' : 'bg-red-500'
               }`}
             >
@@ -205,19 +248,18 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             type="button"
             onClick={() => void call.leaveCall()}
             aria-label="Leave call"
-            className="flex h-14 w-16 items-center justify-center rounded-full bg-red-600 text-white"
+            className="flex h-11 w-14 items-center justify-center rounded-full bg-red-600 text-white"
           >
             <PhoneDisconnect size={26} weight="fill" />
           </button>
         </footer>
-      </div>
+      </section>
     );
   }
 
   if (call.incomingCall) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-5 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#1c1c20] p-6 text-center shadow-2xl">
+      <section className="mx-3 mt-3 shrink-0 rounded-3xl border border-white/10 bg-[#17171b] p-5 text-center text-white shadow-lg">
           <Avatar
             name={call.incomingCall.hostProfile.display_name}
             avatarUrl={call.incomingCall.hostProfile.avatar_url}
@@ -232,7 +274,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             {call.incomingCall.kind === 'video' ? 'Video call' : 'Voice call'} · up to 6 people
           </p>
           {call.callError && <p className="mt-3 text-sm text-red-300">{call.callError}</p>}
-          <div className="mt-6 flex justify-center gap-5">
+          <div className="mt-4 flex justify-center gap-5">
             <button
               type="button"
               onClick={call.declineCall}
@@ -250,14 +292,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
               <Phone size={24} weight="fill" />
             </button>
           </div>
-        </div>
-      </div>
+      </section>
     );
   }
 
   if (call.callError) {
     return (
-      <div className="fixed bottom-5 left-4 right-4 z-[100] mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-[#202024]/95 px-4 py-3 text-sm text-red-200 shadow-xl backdrop-blur-xl">
+      <div className="mx-3 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-[#202024]/95 px-4 py-3 text-sm text-red-200 shadow-xl backdrop-blur-xl">
         <span>{call.callError}</span>
         <button
           type="button"

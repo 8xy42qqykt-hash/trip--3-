@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   Heart,
+  Check,
   ThumbsUp,
   ThumbsDown,
   Smiley,
@@ -12,6 +13,7 @@ import { Avatar } from '../common/Avatar';
 import { ReactionPicker } from './ReactionPicker';
 import { PollResultMessage } from './PollResultMessage';
 import { formatMessageTime } from '../../utils/date';
+import { TripMember } from '../../types';
 
 interface ChatBubbleProps {
   message: Message;
@@ -24,6 +26,11 @@ interface ChatBubbleProps {
   onReply: (message: Message) => void;
   onDelete?: (messageId: string) => void;
   replyMessage?: Message | null;
+  members?: TripMember[];
+  onEdit?: (message: Message) => void;
+  onToggleListItem?: (message: Message, itemIndex: number) => void;
+  onToggleAction?: (message: Message, action: 'Cook' | 'Contribute') => void;
+  onJoinCall?: (callId: string) => void;
 }
 
 const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
@@ -68,6 +75,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onReply,
   onDelete,
   replyMessage,
+  members = [],
+  onEdit,
+  onToggleListItem,
+  onToggleAction,
+  onJoinCall,
 }) => {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
@@ -165,6 +177,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   const isPollResult = message.type === 'poll_result' && message.metadata;
   const isImageOnly = message.type === 'image' && Boolean(message.image_url);
+  const callId = message.metadata?.callId;
 
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
   const getBubbleRadiusClasses = () => {
@@ -227,7 +240,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onReact={(kind) => onReact(message.id, kind)}
               onReply={() => onReply(message)}
               onCopy={copyContent}
-              onDelete={isOwn && onDelete ? () => onDelete(message.id) : undefined}
+              onDelete={isOwn && onDelete && message.type !== 'call' ? () => onDelete(message.id) : undefined}
+              onEdit={['grocery_list', 'meal', 'plan'].includes(message.type) ? () => onEdit?.(message) : undefined}
+              onAction={['meal', 'plan'].includes(message.type) ? (action) => onToggleAction?.(message, action) : undefined}
               onClose={() => setShowReactionPicker(false)}
             />
           )}
@@ -305,6 +320,79 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 {/* Poll Result Message in Chat Log */}
                 {isPollResult ? (
                   <PollResultMessage metadata={message.metadata} isOwn={isOwn} />
+                ) : message.type === 'grocery_list' ? (
+                  <div className="min-w-[190px] space-y-2">
+                    <div className="text-xs font-semibold tracking-wide text-white/70">Grocery list</div>
+                    <div className="space-y-1.5">
+                      {(message.metadata?.items || message.content.split(/\r?\n/).map((text: string) => ({ text, checked: false }))).map((item: { text: string; checked: boolean }, index: number) => (
+                        <button
+                          key={`${item.text}-${index}`}
+                          type="button"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onPointerUp={(event) => event.stopPropagation()}
+                          onPointerCancel={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleListItem?.(message, index);
+                          }}
+                          aria-checked={Boolean(item.checked)}
+                          role="checkbox"
+                          className="flex min-h-8 w-full items-center gap-2 text-left text-sm [touch-action:manipulation]"
+                        >
+                          <span
+                            className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,transform] duration-200 ease-out ${
+                              item.checked
+                                ? 'scale-100 border-white bg-white text-[#0A84FF]'
+                                : 'scale-90 border-white/75 bg-transparent text-transparent'
+                            }`}
+                          >
+                            {item.checked && <Check size={12} weight="bold" className="animate-check-pop" />}
+                          </span>
+                          <span className={`transition-colors duration-200 ${item.checked ? 'text-white/50 line-through' : ''}`}>{item.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : message.type === 'meal' || message.type === 'plan' ? (
+                  <div className="min-w-[170px]">
+                    <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn)}</p>
+                  </div>
+                ) : message.type === 'call' ? (
+                  <div className="min-w-[200px]">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/70">
+                      {message.metadata?.kind === 'video' ? 'Video call' : 'Voice call'}
+                    </div>
+                    <p className="font-semibold">
+                      {message.metadata?.status === 'ended' ? 'Call ended' : 'Call in progress'}
+                    </p>
+                    {message.metadata?.status === 'ended' && Number.isFinite(message.metadata?.durationSeconds) && (
+                      <p className="mt-0.5 text-xs text-white/70">
+                        Duration {Math.floor(message.metadata.durationSeconds / 60)}:
+                        {String(message.metadata.durationSeconds % 60).padStart(2, '0')}
+                      </p>
+                    )}
+                    <ProfileRow
+                      label="Participants"
+                      ids={message.metadata?.participantIds || []}
+                      members={members}
+                    />
+                    {message.metadata?.status !== 'ended'
+                      && callId
+                      && !message.metadata?.activeParticipantIds?.includes(currentUserId)
+                      && onJoinCall && (
+                        <button
+                          type="button"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onJoinCall(callId);
+                          }}
+                          className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]"
+                        >
+                          Join call
+                        </button>
+                      )}
+                  </div>
                 ) : (
                   <p className="whitespace-pre-wrap break-words">
                     {renderContentWithMentions(message.content, isOwn)}
@@ -351,16 +439,43 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         </div>
       </div>
 
-      {/* Sent time outside bubble */}
-      {isLastInGroup && (
-        <span
-          className={`text-[11px] text-slate-500 mt-1 font-medium ${
-            isOwn ? 'mr-1' : 'ml-10'
-          }`}
-        >
-          {formatMessageTime(message.created_at)}
-        </span>
+      {(isLastInGroup || message.type === 'meal' || message.type === 'plan') && (
+        <div className={`mt-1 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500 ${
+          isOwn ? 'mr-1 justify-end' : 'ml-10 justify-start'
+        }`}>
+          {message.type === 'meal' && message.metadata?.time && <span>{message.metadata.time}</span>}
+          {message.type === 'plan' && message.metadata?.date && <span>{message.metadata.date}</span>}
+          {message.type === 'plan' && message.metadata?.time && <span>{message.metadata.time}</span>}
+          {isLastInGroup && <span>{formatMessageTime(message.created_at)}</span>}
+          {message.type === 'meal' && (
+            <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} />
+          )}
+          {message.type === 'plan' && (
+            <ProfileRow label="Contributors:" ids={message.metadata?.contributors || []} members={members} />
+          )}
+        </div>
       )}
+    </div>
+  );
+};
+
+const ProfileRow: React.FC<{ label: string; ids: string[]; members: TripMember[] }> = ({ label, ids, members }) => {
+  const profiles = ids
+    .map((id) => members.find((member) => member.user_id === id)?.profile)
+    .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
+  if (profiles.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      {profiles.map((profile) => (
+        <Avatar
+          key={profile.id}
+          name={profile.display_name}
+          avatarUrl={profile.avatar_url}
+          color={profile.color}
+          size={22}
+        />
+      ))}
     </div>
   );
 };

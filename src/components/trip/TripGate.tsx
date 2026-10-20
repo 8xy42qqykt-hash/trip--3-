@@ -5,10 +5,19 @@ import { DatePickerModal } from '../common/DatePickerModal';
 import { formatTripDate, getTodayDateString } from '../../utils/date';
 import { Avatar } from '../common/Avatar';
 import { BottomSheet } from '../common/BottomSheet';
-import { Plus, Hash, CalendarBlank, SignOut, CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { Plus, Hash, CalendarBlank, SignOut, CaretLeft, CaretRight, Check, X } from '@phosphor-icons/react';
 
-export const TripGate: React.FC = () => {
-  const { createTrip, joinTrip, userTrips, selectTrip, loadUserTrips, isLoadingTrips } = useTrip();
+export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSelected }) => {
+  const {
+    createTrip,
+    joinTrip,
+    userTrips,
+    selectTrip,
+    loadUserTrips,
+    isLoadingTrips,
+    pendingInvitations,
+    respondToInvitation,
+  } = useTrip();
   const { user, profile, signOut } = useAuth();
 
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
@@ -24,6 +33,7 @@ export const TripGate: React.FC = () => {
   const [inviteCode, setInviteCode] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [invitationError, setInvitationError] = useState('');
 
   useEffect(() => {
     loadUserTrips();
@@ -41,6 +51,7 @@ export const TripGate: React.FC = () => {
       setActiveForm(null);
       setIsPlusMenuOpen(false);
       setName('');
+      onTripSelected?.();
     }
   };
 
@@ -57,6 +68,7 @@ export const TripGate: React.FC = () => {
       setActiveForm(null);
       setIsPlusMenuOpen(false);
       setInviteCode('');
+      onTripSelected?.();
     }
   };
 
@@ -64,6 +76,15 @@ export const TripGate: React.FC = () => {
     setActiveForm(null);
     setJoinError(null);
     setIsPlusMenuOpen(true);
+  };
+
+  const handleInvitationResponse = async (invitationId: string, accept: boolean) => {
+    setInvitationError('');
+    setLoading(true);
+    const result = await respondToInvitation(invitationId, accept);
+    setLoading(false);
+    if (result.error) setInvitationError(result.error);
+    else if (accept) onTripSelected?.();
   };
 
   return (
@@ -106,6 +127,54 @@ export const TripGate: React.FC = () => {
         </div>
       </div>
 
+      {pendingInvitations.length > 0 && (
+        <section className="mb-6 rounded-3xl border border-[#0A84FF]/25 bg-[#0A84FF]/[0.08] p-4">
+          <h2 className="mb-3 text-base font-bold text-white">Invitations</h2>
+          {pendingInvitations.map((invitation) => (
+            <div key={invitation.id} className="border-t border-white/10 py-3 first:border-0 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-3">
+                <Avatar
+                  name={invitation.inviter?.display_name}
+                  avatarUrl={invitation.inviter?.avatar_url}
+                  color={invitation.inviter?.color}
+                  size={38}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-white">{invitation.trip?.name || 'Trip invitation'}</div>
+                  <div className="text-xs text-slate-300">
+                    Invited by {invitation.inviter?.display_name || 'Trip member'}
+                  </div>
+                  {invitation.trip?.start_date && invitation.trip?.end_date && (
+                    <div className="mt-0.5 text-[11px] text-slate-400">
+                      {formatTripDate(invitation.trip.start_date)} – {formatTripDate(invitation.trip.end_date)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleInvitationResponse(invitation.id, true)}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
+                >
+                  <Check size={17} weight="bold" /> Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleInvitationResponse(invitation.id, false)}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white/10 text-sm font-semibold text-slate-200 disabled:opacity-50"
+                >
+                  <X size={16} weight="bold" /> Reject
+                </button>
+              </div>
+            </div>
+          ))}
+          {invitationError && <p role="alert" className="mt-3 text-xs text-red-300">{invitationError}</p>}
+        </section>
+      )}
+
       {/* Trips List */}
       <div className="flex flex-col gap-3 flex-1">
         {isLoadingTrips && userTrips.length === 0 ? (
@@ -120,7 +189,10 @@ export const TripGate: React.FC = () => {
                 <button
                   key={trip.id}
                   type="button"
-                  onClick={() => selectTrip(trip)}
+                  onClick={() => {
+                    selectTrip(trip);
+                    onTripSelected?.();
+                  }}
                   className="w-full text-left py-4 px-1 hover:bg-white/[0.04] active:bg-white/[0.07] cursor-pointer transition-colors flex items-center justify-between group"
                 >
                   <div className="flex flex-col gap-1 truncate pr-3">

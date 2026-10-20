@@ -7,14 +7,10 @@ import { AuthScreen } from './components/auth/AuthScreen';
 import { TripGate } from './components/trip/TripGate';
 import { BottomTabBar, TabKey } from './components/navigation/BottomTabBar';
 import { MessagesView } from './components/messages/MessagesView';
-import { GroceriesView } from './components/groceries/GroceriesView';
-import { MealsView } from './components/meals/MealsView';
-import { ScheduleView } from './components/schedule/ScheduleView';
 import { SettingsView } from './components/settings/SettingsView';
 import tripLogo from '../trip-logo.png';
 import { useTripPresence } from './components/messages/useTripPresence';
 import { useGroupCall } from './components/messages/useGroupCall';
-import { CallOverlay } from './components/messages/CallOverlay';
 
 type AppViewKey = 'trips' | TabKey;
 
@@ -29,17 +25,52 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
 
 const MainAppContent: React.FC = () => {
   const { user, profile, isLoading } = useAuth();
-  const { currentTrip } = useTrip();
-  const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile);
-  const call = useGroupCall(currentTrip?.id, user?.id, profile);
+  const { currentTrip, userTrips, selectTrip } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
+  const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
+  const call = useGroupCall(currentTrip?.id, user?.id, profile);
 
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
+  const deepLinkHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (deepLinkHandledRef.current || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const invitationId = params.get('invitation');
+    const tripId = params.get('trip');
+    const callId = params.get('joinCall');
+    const view = params.get('view');
+    if (invitationId) {
+      setActiveTab('trips');
+      deepLinkHandledRef.current = true;
+      return;
+    }
+    if (!tripId) return;
+    const targetTrip = userTrips.find((trip) => trip.id === tripId);
+    if (!targetTrip) {
+      if (userTrips.length > 0) {
+        setActiveTab('trips');
+        deepLinkHandledRef.current = true;
+      }
+      return;
+    }
+    if (currentTrip?.id !== targetTrip.id) selectTrip(targetTrip);
+    const targetTab: TabKey = view === 'groceries' ? 'groceries'
+      : view === 'meals' ? 'meals'
+        : view === 'schedule' ? 'schedule'
+          : view === 'settings' ? 'settings'
+            : 'messages';
+    setActiveTab(targetTab);
+    deepLinkHandledRef.current = true;
+    if (callId) {
+      window.setTimeout(() => { void call.joinCall(callId); }, 700);
+    }
+  }, [call, currentTrip?.id, selectTrip, user, userTrips]);
 
   // Splash timeout of 1.2s to guarantee first-time visitor never hangs
   useEffect(() => {
@@ -68,7 +99,7 @@ const MainAppContent: React.FC = () => {
     if (prevTripIdRef.current === null && currentTripId !== null) {
       // Selected a trip -> slide in opposite direction (-1: enters from left, trips slides right)
       setSlideDirection(-1);
-      setActiveTab('messages');
+      if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
       // Exited a trip -> slide in opposite direction (1: enters from right, messages slides left)
@@ -146,7 +177,9 @@ const MainAppContent: React.FC = () => {
             }}
             className="absolute inset-0 w-full h-full overflow-hidden flex flex-col"
           >
-            {activeView === 'trips' && <TripGate />}
+            {activeView === 'trips' && (
+              <TripGate onTripSelected={() => setActiveTab('messages')} />
+            )}
             {activeView === 'messages' && (
               <MessagesView
                 onKeyboardStateChange={setIsKeyboardOpen}
@@ -156,9 +189,15 @@ const MainAppContent: React.FC = () => {
                 call={call}
               />
             )}
-            {activeView === 'groceries' && <GroceriesView />}
-            {activeView === 'meals' && <MealsView />}
-            {activeView === 'schedule' && <ScheduleView />}
+            {activeView === 'groceries' && (
+              <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />
+            )}
+            {activeView === 'meals' && (
+              <MessagesView viewMode="meal" onlineMembers={onlineMembers} call={call} />
+            )}
+            {activeView === 'schedule' && (
+              <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
+            )}
             {activeView === 'settings' && (
               <SettingsView onNavigateToMessages={handleNavigateToMessages} />
             )}
@@ -173,7 +212,6 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
       />
-      <CallOverlay call={call} userId={user.id} />
     </div>
   );
 };

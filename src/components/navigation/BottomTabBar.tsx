@@ -7,7 +7,7 @@ import {
   Gear,
 } from '@phosphor-icons/react';
 
-export type TabKey = 'messages' | 'groceries' | 'meals' | 'schedule' | 'settings';
+export type TabKey = 'trips' | 'messages' | 'groceries' | 'meals' | 'schedule' | 'settings';
 
 interface BottomTabBarProps {
   activeTab: TabKey;
@@ -55,6 +55,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
       aria-label="Bottom Navigation"
       style={{
         backgroundColor: '#000000',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
       className="fixed bottom-0 left-0 right-0 z-40 bg-black select-none pointer-events-auto"
     >
@@ -69,13 +70,15 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
               onClick={() => onChangeTab(key)}
               className="flex flex-col items-center justify-center py-1 min-h-[44px] w-full cursor-pointer active-press group"
             >
-              <Icon
-                size={25}
-                weight={isActive ? 'fill' : 'regular'}
-                className={`transition-colors duration-150 ${
-                  isActive ? 'text-[#0A84FF]' : 'text-slate-400'
-                }`}
-              />
+              <span className="relative">
+                <Icon
+                  size={23}
+                  weight={isActive ? 'fill' : 'regular'}
+                  className={`transition-colors duration-150 ${
+                    isActive ? 'text-[#0A84FF]' : 'text-slate-400'
+                  }`}
+                />
+              </span>
               <span
                 className={`text-[11px] tracking-tight mt-0.5 transition-colors duration-150 ${
                   isActive ? 'text-[#0A84FF] font-bold' : 'text-slate-400 font-medium'

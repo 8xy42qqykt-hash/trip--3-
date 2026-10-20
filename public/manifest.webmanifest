@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "Trip",
+  "short_name": "Trip",
+  "description": "Plan and share your trips together.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "./trip-logo-black.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

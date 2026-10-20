@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, isCloudActive } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-import { Trip, TripMember, Message, Reaction, Poll, GroceryItem, Meal, EventItem, Profile } from '../types';
+import { Trip, TripInvitation, TripMember, Message, Reaction, Poll, GroceryItem, Meal, EventItem, Profile } from '../types';
 import { parseGroceryInput } from '../utils/groceryParser';
 import { parseScheduleInput } from '../utils/scheduleParser';
+import { safeDisplayName } from '../utils/displayName';
 
 interface TripContextType {
   currentTrip: Trip | null;
@@ -11,6 +12,10 @@ interface TripContextType {
   tripMembers: TripMember[];
   isOwner: boolean;
   isLoadingTrips: boolean;
+  pendingInvitations: TripInvitation[];
+  loadInvitations: () => Promise<void>;
+  createTripInvitations: (emails: string[]) => Promise<{ error?: string; warning?: string }>;
+  respondToInvitation: (invitationId: string, accept: boolean) => Promise<{ error?: string }>;
   createTrip: (name: string, startDate: string, endDate: string) => Promise<{ id?: string; error?: string }>;
   joinTrip: (code: string) => Promise<{ id?: string; error?: string }>;
   updateTrip: (updates: { name?: string; start_date?: string; end_date?: string }) => Promise<{ error?: string }>;
@@ -20,7 +25,17 @@ interface TripContextType {
   loadUserTrips: () => Promise<Trip[]>;
   // Messages & Reactions
   messages: Message[];
-  sendMessage: (content: string, imageUrl?: string, replyToId?: string) => Promise<void>;
+  sendMessage: (
+    content: string,
+    imageUrl?: string,
+    replyToId?: string,
+    type?: Message['type'],
+    metadata?: Message['metadata'],
+  ) => Promise<void>;
+  updateMessage: (
+    messageId: string,
+    updates: Pick<Message, 'content' | 'type' | 'metadata'>,
+  ) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   toggleReaction: (messageId: string, kind: Reaction['kind']) => Promise<void>;
   // Polls
@@ -52,6 +67,59 @@ interface TripContextType {
 
 const TripContext = createContext<TripContextType | undefined>(undefined);
 
+type PendingMessageSync = {
+  userId: string;
+  mode: 'insert' | 'update';
+  message: Message;
+};
+
+const PENDING_MESSAGE_SYNC_KEY = 'trip_pending_message_sync';
+
+const readPendingMessageSync = (): PendingMessageSync[] => {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_MESSAGE_SYNC_KEY) || '[]') as PendingMessageSync[];
+  } catch (error) {
+    console.error('Could not read pending message updates:', error);
+    return [];
+  }
+};
+
+const writePendingMessageSync = (pending: PendingMessageSync[]) => {
+  try {
+    localStorage.setItem(PENDING_MESSAGE_SYNC_KEY, JSON.stringify(pending));
+  } catch (error) {
+    console.error('Could not save pending message updates on this device:', error);
+  }
+};
+
+const savePendingMessage = (userId: string, message: Message, mode: PendingMessageSync['mode']) => {
+  const pending = readPendingMessageSync();
+  const existing = pending.find((item) => item.userId === userId && item.message.id === message.id);
+  const nextMode = existing?.mode === 'insert' ? 'insert' : mode;
+  writePendingMessageSync([
+    ...pending.filter((item) => item.userId !== userId || item.message.id !== message.id),
+    { userId, mode: nextMode, message },
+  ]);
+};
+
+const removePendingMessage = (userId: string, messageId: string) => {
+  writePendingMessageSync(readPendingMessageSync().filter(
+    (item) => item.userId !== userId || item.message.id !== messageId,
+  ));
+};
+
+const toSupabaseMessageRow = (message: Message) => ({
+  id: message.id,
+  trip_id: message.trip_id,
+  user_id: message.user_id,
+  type: message.type,
+  content: message.content,
+  image_url: message.image_url || null,
+  reply_to: message.reply_to || null,
+  metadata: message.metadata || null,
+  created_at: message.created_at,
+});
+
 // Cross-tab Realtime channel for local preview
 const realtimeChannel = (() => {
   try {
@@ -75,8 +143,137 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [groceries, setGroceries] = useState<GroceryItem[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<TripInvitation[]>([]);
 
   const isOwner = Boolean(currentTrip && user && currentTrip.owner_id === user.id);
+
+  const flushPendingMessageSync = useCallback(async () => {
+    if (!user || !supabase || !isCloudActive || !navigator.onLine) return;
+    const pending = readPendingMessageSync();
+    const userPending = pending.filter((item) => item.userId === user.id);
+    if (userPending.length === 0) return;
+
+    const completedIds = new Set<string>();
+    for (const item of userPending) {
+      const { message } = item;
+      const row = toSupabaseMessageRow(message);
+
+      if (item.mode === 'insert') {
+        const { error } = await supabase.from('messages').upsert(row, { onConflict: 'id' });
+        if (error) {
+          console.warn('Message is saved locally and will be retried:', error.message);
+          continue;
+        }
+        completedIds.add(message.id);
+        continue;
+      }
+
+      const { data, error } = await supabase
+        .from('messages')
+        .update({
+          content: message.content,
+          type: message.type,
+          metadata: message.metadata || null,
+        })
+        .eq('id', message.id)
+        .select('id')
+        .maybeSingle();
+      if (!error && data) {
+        completedIds.add(message.id);
+        continue;
+      }
+
+      if (error) {
+        console.warn('Message update is saved locally and will be retried:', error.message);
+      } else if (message.user_id === user.id) {
+        const { error: insertError } = await supabase.from('messages').upsert(row, { onConflict: 'id' });
+        if (!insertError) {
+          completedIds.add(message.id);
+          continue;
+        }
+        console.warn('Message is saved locally and will be retried:', insertError.message);
+      } else {
+        console.warn('Could not sync this message update because the message is not available in Supabase.');
+      }
+    }
+
+    if (completedIds.size > 0) {
+      writePendingMessageSync(readPendingMessageSync().filter((item) => !completedIds.has(item.message.id)));
+    }
+  }, [user]);
+
+  const loadInvitations = useCallback(async () => {
+    if (!user || !supabase || !isCloudActive) {
+      setPendingInvitations([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('trip_invitations')
+      .select('id, trip_id, inviter_id, invitee_user_id, email, status, created_at, expires_at, trips(*), inviter:profiles!trip_invitations_inviter_id_fkey(*)')
+      .eq('invitee_user_id', user.id)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Could not load trip invitations:', error);
+      return;
+    }
+    setPendingInvitations((data || []).map((row: any) => ({
+      ...row,
+      trip: row.trips || undefined,
+      inviter: row.inviter
+        ? { ...row.inviter, display_name: safeDisplayName(row.inviter.display_name) }
+        : undefined,
+    })));
+  }, [user]);
+
+  useEffect(() => {
+    void loadInvitations();
+  }, [loadInvitations]);
+
+  useEffect(() => {
+    if (!user || !supabase || !isCloudActive) return;
+    const client = supabase;
+    const channel = client
+      .channel(`trip-invitations:${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'trip_invitations',
+        filter: `invitee_user_id=eq.${user.id}`,
+      }, () => { void loadInvitations(); })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [loadInvitations, user]);
+
+  const createTripInvitations = useCallback(async (emails: string[]) => {
+    if (!user || !currentTrip || !supabase || !isCloudActive) {
+      return { error: 'Invitations require a connected Supabase project and an active trip.' };
+    }
+    const normalizedEmails = Array.from(new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean)));
+    if (normalizedEmails.length === 0) return { error: 'Enter at least one email address.' };
+    if (normalizedEmails.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return { error: 'Check the email addresses and try again.' };
+    }
+
+    for (const email of normalizedEmails) {
+      const { data: invitationId, error } = await supabase.rpc('create_trip_invitation', {
+        p_trip_id: currentTrip.id,
+        p_email: email,
+      });
+      if (error) return { error: error.message };
+      const { error: deliveryError } = await supabase.functions.invoke('send-trip-invite', {
+        body: { invitationId },
+      });
+      if (deliveryError) {
+        console.error('Invitation was saved, but email delivery failed:', deliveryError);
+        await loadInvitations();
+        return { warning: `The invitation to ${email} is saved, but email delivery failed. Configure the invitation email function and provider.` };
+      }
+    }
+    await loadInvitations();
+    return {};
+  }, [currentTrip, loadInvitations, user]);
 
   const broadcastSync = useCallback((action: string, payload?: any) => {
     if (realtimeChannel) {
@@ -124,6 +321,24 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoadingTrips(false);
     }
   }, [user]);
+
+  const respondToInvitation = useCallback(async (invitationId: string, accept: boolean) => {
+    if (!supabase || !isCloudActive) return { error: 'Invitations require a connected Supabase project.' };
+    const { data: tripId, error } = await supabase.rpc('respond_to_trip_invitation', {
+      p_invitation_id: invitationId,
+      p_accept: accept,
+    });
+    if (error) return { error: error.message };
+    if (accept && tripId) {
+      const { data: trip, error: tripError } = await supabase.from('trips').select('*').eq('id', tripId).single();
+      if (tripError) return { error: tripError.message };
+      setCurrentTrip(trip as Trip);
+      localStorage.setItem('active_trip_id', trip.id);
+    }
+    await loadInvitations();
+    await loadUserTrips();
+    return {};
+  }, [loadInvitations, loadUserTrips]);
 
   const loadActiveTrip = useCallback(async () => {
     if (!user) {
@@ -173,7 +388,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
               user_id: m.user_id,
               role: m.role,
               joined_at: m.joined_at,
-              profile: m.profiles,
+              profile: m.profiles ? { ...m.profiles, display_name: safeDisplayName(m.profiles.display_name) } : undefined,
             }))
           );
         }
@@ -184,13 +399,24 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('trip_id', currentTrip.id)
           .order('created_at', { ascending: true });
         if (messagesData) {
-          setMessages(
-            messagesData.map((m: any) => ({
+          const cloudMessages: Message[] = messagesData.map((m: any) => ({
               ...m,
               reactions: m.reactions || [],
-              sender: m.profiles,
-            }))
-          );
+              sender: m.profiles ? { ...m.profiles, display_name: safeDisplayName(m.profiles.display_name) } : undefined,
+            }));
+          const pendingMessages = readPendingMessageSync()
+            .filter((item) => item.userId === user.id && item.message.trip_id === currentTrip.id)
+            .map(({ message }) => message);
+          const mergedMessages = new Map(cloudMessages.map((message) => [message.id, message]));
+          for (const message of pendingMessages) {
+            mergedMessages.set(message.id, {
+              ...message,
+              sender: message.sender || (message.user_id === user.id ? profile || undefined : undefined),
+            });
+          }
+          setMessages(Array.from(mergedMessages.values()).sort(
+            (first, second) => first.created_at.localeCompare(second.created_at),
+          ));
         }
 
         const { data: pollsData } = await supabase
@@ -203,7 +429,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const options = (p.poll_options || []).map((opt: any) => {
               const votes = opt.poll_votes || [];
               const hasVoted = votes.some((v: any) => v.user_id === user.id);
-              const voters = votes.map((v: any) => v.profiles).filter(Boolean);
+              const voters = votes
+                .map((v: any) => v.profiles ? { ...v.profiles, display_name: safeDisplayName(v.profiles.display_name) } : null)
+                .filter(Boolean);
               return {
                 id: opt.id,
                 poll_id: opt.poll_id,
@@ -239,7 +467,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setGroceries(
             grocData.map((g: any) => ({
               ...g,
-              creator: g.profiles,
+              creator: g.profiles ? { ...g.profiles, display_name: safeDisplayName(g.profiles.display_name) } : undefined,
             }))
           );
         }
@@ -254,7 +482,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
             mealsData.map((m: any) => ({
               ...m,
               votes: (m.meal_votes || []).map((v: any) => v.user_id),
-              cook: m.profiles,
+              cook: m.profiles ? { ...m.profiles, display_name: safeDisplayName(m.profiles.display_name) } : undefined,
             }))
           );
         }
@@ -269,7 +497,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
             eventsData.map((e: any) => ({
               ...e,
               attendees: (e.event_attendees || []).map((a: any) => a.user_id),
-              attendee_profiles: (e.event_attendees || []).map((a: any) => a.profiles).filter(Boolean),
+              attendee_profiles: (e.event_attendees || [])
+                .map((a: any) => a.profiles ? { ...a.profiles, display_name: safeDisplayName(a.profiles.display_name) } : null)
+                .filter(Boolean),
             }))
           );
         }
@@ -367,6 +597,20 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [refreshData]);
 
   useEffect(() => {
+    if (!user || !isCloudActive || !supabase) return;
+    void flushPendingMessageSync();
+    const intervalId = window.setInterval(() => { void flushPendingMessageSync(); }, 15_000);
+    const retryWhenAvailable = () => { void flushPendingMessageSync(); };
+    window.addEventListener('online', retryWhenAvailable);
+    document.addEventListener('visibilitychange', retryWhenAvailable);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('online', retryWhenAvailable);
+      document.removeEventListener('visibilitychange', retryWhenAvailable);
+    };
+  }, [flushPendingMessageSync, user]);
+
+  useEffect(() => {
     if (!currentTrip) return;
     if (isCloudActive && supabase) {
       const channel = supabase
@@ -376,6 +620,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           { event: '*', schema: 'public', filter: `trip_id=eq.${currentTrip.id}` },
           () => {
             refreshData();
+            void loadInvitations();
           }
         )
         .on(
@@ -421,7 +666,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         realtimeChannel.removeEventListener('message', handleBroadcast);
       };
     }
-  }, [currentTrip, refreshData]);
+  }, [currentTrip, loadInvitations, refreshData]);
 
   // --- TRIPS ---
   const createTrip = async (name: string, startDate: string, endDate: string) => {
@@ -577,19 +822,28 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // --- MESSAGES ---
-  const sendMessage = async (content: string, imageUrl?: string, replyToId?: string) => {
+  const sendMessage = async (
+    content: string,
+    imageUrl?: string,
+    replyToId?: string,
+    type?: Message['type'],
+    metadata?: Message['metadata'],
+  ) => {
     if (!currentTrip || !user) return;
     const cleanContent = content.trim();
     if (!cleanContent && !imageUrl) return;
 
     const newMsg: Message = {
-      id: 'msg_' + Math.random().toString(36).substring(2, 9),
+      id: isCloudActive && supabase
+        ? crypto.randomUUID()
+        : 'msg_' + Math.random().toString(36).substring(2, 9),
       trip_id: currentTrip.id,
       user_id: user.id,
-      type: imageUrl ? 'image' : 'text',
+      type: imageUrl ? 'image' : type || 'text',
       content: cleanContent,
       image_url: imageUrl || null,
       reply_to: replyToId || null,
+      metadata: metadata || null,
       created_at: new Date().toISOString(),
       reactions: [],
       sender: profile || { id: user.id, display_name: 'Me', color: '#007AFF' },
@@ -598,19 +852,72 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMessages((prev) => [...prev, newMsg]);
 
     if (isCloudActive && supabase) {
-      await supabase.from('messages').insert({
-        trip_id: currentTrip.id,
-        user_id: user.id,
-        type: newMsg.type,
-        content: newMsg.content,
-        image_url: newMsg.image_url,
-        reply_to: newMsg.reply_to,
-      });
+      savePendingMessage(user.id, newMsg, 'insert');
+      const { error } = await supabase.from('messages').insert(toSupabaseMessageRow(newMsg));
+      if (error) {
+        console.warn('Message is saved locally and will be retried:', error.message);
+      } else {
+        const latestQueuedMessage = readPendingMessageSync().find(
+          (item) => item.userId === user.id && item.message.id === newMsg.id,
+        )?.message;
+        removePendingMessage(user.id, newMsg.id);
+        if (latestQueuedMessage && JSON.stringify(toSupabaseMessageRow(latestQueuedMessage)) !== JSON.stringify(toSupabaseMessageRow(newMsg))) {
+          savePendingMessage(user.id, latestQueuedMessage, 'update');
+          void flushPendingMessageSync();
+        }
+      }
     } else {
       const all: Message[] = JSON.parse(localStorage.getItem('trip_local_messages') || '[]');
       all.push(newMsg);
       localStorage.setItem('trip_local_messages', JSON.stringify(all));
       broadcastSync('message_sent', newMsg);
+    }
+  };
+
+  const updateMessage = async (
+    messageId: string,
+    updates: Pick<Message, 'content' | 'type' | 'metadata'>,
+  ) => {
+    const currentMessage = messages.find((message) => message.id === messageId);
+    setMessages((prev) => prev.map((message) => (
+      message.id === messageId ? { ...message, ...updates } : message
+    )));
+    if (isCloudActive && supabase) {
+      if (!currentMessage || !user) return;
+      const updatedMessage = { ...currentMessage, ...updates };
+      const pendingInsert = readPendingMessageSync().some((item) => (
+        item.userId === user.id && item.message.id === messageId && item.mode === 'insert'
+      ));
+      savePendingMessage(user.id, updatedMessage, pendingInsert ? 'insert' : 'update');
+      if (pendingInsert) {
+        return;
+      }
+      const { data, error } = await supabase
+        .from('messages')
+        .update(updates)
+        .eq('id', messageId)
+        .select('id')
+        .maybeSingle();
+      if (error || !data) {
+        const mode = currentMessage.user_id === user.id ? 'insert' : 'update';
+        savePendingMessage(user.id, updatedMessage, mode);
+        console.warn(
+          error
+            ? `Message update is saved locally and will be retried: ${error.message}`
+            : 'Message update is saved locally and will be retried when the message is available.',
+        );
+      } else {
+        removePendingMessage(user.id, messageId);
+      }
+      void flushPendingMessageSync();
+    } else {
+      const all: Message[] = JSON.parse(localStorage.getItem('trip_local_messages') || '[]');
+      const index = all.findIndex((message) => message.id === messageId);
+      if (index !== -1) {
+        all[index] = { ...all[index], ...updates };
+        localStorage.setItem('trip_local_messages', JSON.stringify(all));
+        broadcastSync('message_updated', { messageId, updates });
+      }
     }
   };
 
@@ -1274,6 +1581,10 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tripMembers,
         isOwner,
         isLoadingTrips,
+        pendingInvitations,
+        loadInvitations,
+        createTripInvitations,
+        respondToInvitation,
         createTrip,
         joinTrip,
         updateTrip,
@@ -1283,6 +1594,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loadUserTrips,
         messages,
         sendMessage,
+        updateMessage,
         deleteMessage,
         toggleReaction,
         polls,

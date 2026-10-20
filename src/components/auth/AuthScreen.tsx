@@ -14,7 +14,6 @@ export const AuthScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || (isSignUp && !displayName)) return;
@@ -107,12 +106,12 @@ export const AuthScreen: React.FC = () => {
           )}
           <div className="px-4.5 py-3">
             <input
-              type="text"
+              type="email"
               inputMode="email"
-              autoComplete="username"
+              autoComplete="email"
               enterKeyHint="next"
               autoCapitalize="none"
-              placeholder="Email or Name"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => handleEnterKeyNavigation(e)}
