@@ -379,7 +379,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshData = useCallback(async () => {
     if (!currentTrip || !user) return;
     const isInitialMessageLoad = !loadedMessagesTripIdsRef.current.has(currentTrip.id);
-    if (isInitialMessageLoad) setIsLoadingMessages(true);
+    if (isInitialMessageLoad && isCloudActive && supabase) setIsLoadingMessages(true);
     if (isCloudActive && supabase) {
       try {
         const { data: membersData } = await supabase

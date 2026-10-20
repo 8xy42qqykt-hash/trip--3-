@@ -224,16 +224,16 @@ export const TripOverview: React.FC = () => {
           }}
         />
         <div className="relative z-10 flex h-14 w-full items-center justify-between px-3.5">
-          <button type="button" onClick={exitTrip} className="-ml-1 flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0A84FF] active:opacity-70">
-            <CaretLeft size={20} weight="bold" /> <span>{t('Trips')}</span>
-          </button>
-          <div className="flex max-w-[200px] flex-col truncate text-center">
+          <div aria-hidden="true" className="w-14" />
+          <div className="absolute left-1/2 flex max-w-[calc(100%-8rem)] -translate-x-1/2 flex-col truncate text-center">
             <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
             }`}>{currentTrip.name}</span>
             <span className="-mt-0.5 text-[11px] font-medium text-slate-400">{tripMembers.length} {tripMembers.length === 1 ? 'member' : 'members'}</span>
           </div>
-          <div className="w-14" />
+          <button type="button" onClick={exitTrip} className="-mr-1 flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0A84FF] active:opacity-70">
+            <span>{t('Trips')}</span> <CaretLeft size={20} weight="bold" className="rotate-180" />
+          </button>
         </div>
       </header>
 

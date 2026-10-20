@@ -31,7 +31,7 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
 const MainAppContent: React.FC = () => {
   const { setLanguage } = useLanguage();
   const { user, profile, isLoading } = useAuth();
-  const { currentTrip, userTrips, selectTrip } = useTrip();
+  const { currentTrip, userTrips, selectTrip, exitTrip } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
@@ -44,6 +44,7 @@ const MainAppContent: React.FC = () => {
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
   const deepLinkHandledRef = useRef(false);
+  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -129,12 +130,11 @@ const MainAppContent: React.FC = () => {
       if (!deepLinkHandledRef.current) setActiveTab('messages');
       setIsKeyboardOpen(false);
     } else if (prevTripIdRef.current !== null && currentTripId === null) {
-      // Return to Trips with content exiting left and Trips entering from the right.
-      setSlideDirection(1);
+      setSlideDirection(activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1);
       setIsKeyboardOpen(false);
     }
     prevTripIdRef.current = currentTripId;
-  }, [currentTrip?.id]);
+  }, [activeTab, currentTrip?.id]);
 
   const activeView: AppViewKey = !currentTrip ? 'trips' : activeTab;
 
@@ -162,6 +162,65 @@ const MainAppContent: React.FC = () => {
     setTargetMention(mentionName);
   };
 
+  const handleEdgePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse') return;
+    const side = event.clientX <= 24 ? 'left'
+      : event.clientX >= window.innerWidth - 24 ? 'right'
+        : null;
+    const target = event.target;
+    if (!side || !(target instanceof Element)) return;
+    if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .leaflet-container, [role="dialog"]')) return;
+    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side };
+  };
+
+  useEffect(() => {
+    const handlePointerUp = (event: PointerEvent) => {
+      const start = edgeSwipeRef.current;
+      edgeSwipeRef.current = null;
+      if (!start) return;
+
+      const deltaX = event.clientX - start.x;
+      const deltaY = event.clientY - start.y;
+      const threshold = window.innerWidth / 4;
+      if (Math.abs(deltaX) < threshold || Math.abs(deltaY) > Math.min(100, threshold * 0.4)) return;
+      if (!currentTrip || activeTab === 'trips') return;
+      const tabs = ['messages', 'groceries', 'schedule', 'my_trip', 'settings'] as const;
+
+      if (start.side === 'left' && deltaX > 0) {
+        if (activeView === 'messages' || activeTab === 'my_trip' || activeTab === 'settings') {
+          setSlideDirection(activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1);
+          setIsKeyboardOpen(false);
+          exitTrip();
+          return;
+        }
+        const previousTab = tabs.indexOf(activeTab) - 1;
+        if (previousTab >= 0) {
+          setSlideDirection(-1);
+          setActiveTab(tabs[previousTab]);
+          setIsKeyboardOpen(false);
+        }
+      } else if (start.side === 'right' && deltaX < 0) {
+        const nextTab = tabs.indexOf(activeTab) + 1;
+        if (nextTab < tabs.length) {
+          setSlideDirection(1);
+          setActiveTab(tabs[nextTab]);
+          setIsKeyboardOpen(false);
+        }
+      }
+    };
+
+    const handlePointerCancel = () => {
+      edgeSwipeRef.current = null;
+    };
+
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [activeTab, activeView, currentTrip, exitTrip]);
+
   // Splash screen until session resolves
   if (isLoading && !isForcedReady) {
     return (
@@ -179,7 +238,10 @@ const MainAppContent: React.FC = () => {
   // Signed in: Main layout with seamless sliding between Trips and Tabs
   return (
     <div className="fixed inset-0 h-[100dvh] w-full flex flex-col bg-black text-white overflow-hidden select-none">
-      <main className="flex-1 w-full overflow-hidden relative">
+      <main
+        className="flex-1 w-full overflow-hidden relative"
+        onPointerDown={handleEdgePointerDown}
+      >
         <AnimatePresence initial={false} custom={slideDirection} mode="popLayout">
           <motion.div
             key={activeView}

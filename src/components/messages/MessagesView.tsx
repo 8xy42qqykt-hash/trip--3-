@@ -96,9 +96,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
-  const [messageRevealPhase, setMessageRevealPhase] = useState<'loading' | 'revealing' | 'shown'>(
-    isLoadingMessages ? 'loading' : 'shown',
-  );
+  const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
+  const [showMessageLoader, setShowMessageLoader] = useState(false);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -358,14 +357,24 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   useEffect(() => {
     if (isLoadingMessages) {
-      setMessageRevealPhase('loading');
-      return;
+      const loaderDelay = window.setTimeout(() => {
+        setShowMessageLoader(true);
+        setMessageRevealPhase('loading');
+      }, 250);
+      return () => window.clearTimeout(loaderDelay);
     }
-    if (messageRevealPhase !== 'loading') return;
     setMessageRevealPhase('revealing');
-    const timer = window.setTimeout(() => setMessageRevealPhase('shown'), 1100);
+  }, [isLoadingMessages]);
+
+  useEffect(() => {
+    if (messageRevealPhase !== 'revealing') return;
+    const revealDuration = Math.min(messages.length, 10) * 140 + 1000;
+    const timer = window.setTimeout(() => {
+      setMessageRevealPhase('shown');
+      setShowMessageLoader(false);
+    }, revealDuration);
     return () => window.clearTimeout(timer);
-  }, [isLoadingMessages, messageRevealPhase]);
+  }, [messageRevealPhase, messages.length]);
 
   useEffect(() => {
     if (!isKeyboardOpen || !isInputFocusedRef.current) return;
@@ -908,7 +917,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               : null;
             const firstAnimatedIndex = Math.max(0, messageGroups.length - 10);
             const isRecentMessage = index >= firstAnimatedIndex;
-            const revealDelay = isRecentMessage ? (index - firstAnimatedIndex) * 0.065 : 0;
+            const revealDelay = isRecentMessage ? (index - firstAnimatedIndex) * 0.14 : 0.15;
 
             return (
               <motion.div
@@ -918,8 +927,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   ? { opacity: 0, y: 5 }
                   : { opacity: 1, y: 0 }}
                 transition={{
-                  duration: 0.28,
-                  delay: isRecentMessage ? revealDelay : 0.12,
+                  duration: 0.55,
+                  delay: revealDelay,
                   ease: 'easeOut',
                 }}
               >
@@ -955,11 +964,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         </div>
       </CustomScrollArea>
 
-      {messageRevealPhase !== 'shown' && (
+      {showMessageLoader && messageRevealPhase !== 'shown' && (
         <motion.div
-          initial={{ opacity: 1 }}
+          initial={{ opacity: 0 }}
           animate={{ opacity: messageRevealPhase === 'loading' ? 1 : 0 }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
           className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center bg-black"
         >
           <motion.img
