@@ -19,7 +19,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
   topBarRight,
   headerSubContent,
   children,
-  showBackButton = true,
+  showBackButton = false,
   showScrolledBorder = true,
 }) => {
   const { t } = useLanguage();

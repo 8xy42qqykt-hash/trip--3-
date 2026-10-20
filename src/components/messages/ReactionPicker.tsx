@@ -133,7 +133,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const defaultRadius = bubbleRadiusClasses || (isOwnMessage ? 'rounded-[22px] rounded-br-[6px]' : 'rounded-[22px] rounded-bl-[6px]');
 
   const content = (
-    <div className="fixed inset-0 z-[15] select-none">
+    <div className="fixed inset-0 z-[12010] select-none">
       {/* Blurred & dimmed backdrop */}
       <div
         onClick={onClose}
@@ -384,6 +384,5 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     </div>
   );
 
-  const appView = document.querySelector('[data-app-view="active"]');
-  return createPortal(content, appView || document.body);
+  return createPortal(content, document.body);
 };

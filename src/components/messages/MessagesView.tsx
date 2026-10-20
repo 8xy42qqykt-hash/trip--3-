@@ -368,7 +368,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   useEffect(() => {
     if (messageRevealPhase !== 'revealing') return;
-    const revealDuration = Math.min(messages.length, 10) * 140 + 1000;
+    const revealDuration = Math.min(messages.length, 5) * 140 + 1000;
     const timer = window.setTimeout(() => {
       setMessageRevealPhase('shown');
       setShowMessageLoader(false);
@@ -823,15 +823,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           }}
         />
         <div className="relative z-10 h-14 w-full flex items-center justify-between px-3.5">
-          <button
-            type="button"
-            onClick={exitTrip}
-            className="flex items-center gap-1 text-[#0A84FF] text-sm font-semibold active:opacity-70 cursor-pointer -ml-1 py-1 px-2 rounded-lg"
-            title={t('Return to Trips')}
-          >
-            <CaretLeft size={20} weight="bold" />
-            <span>{t('Trips')}</span>
-          </button>
+          {!isFilteredView ? (
+            <button
+              type="button"
+              onClick={exitTrip}
+              className="flex items-center gap-1 text-[#0A84FF] text-sm font-semibold active:opacity-70 cursor-pointer -ml-1 py-1 px-2 rounded-lg"
+              title={t('Return to Trips')}
+            >
+              <CaretLeft size={20} weight="bold" />
+              <span>{t('Trips')}</span>
+            </button>
+          ) : <div className="w-14" />}
 
           <div className="flex max-w-[200px] flex-col items-center truncate text-center">
             <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
@@ -915,7 +917,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             const replyMsg = message.reply_to
               ? visibleMessages.find((m) => m.id === message.reply_to)
               : null;
-            const firstAnimatedIndex = Math.max(0, messageGroups.length - 10);
+            const firstAnimatedIndex = Math.max(0, messageGroups.length - 5);
             const isRecentMessage = index >= firstAnimatedIndex;
             const revealDelay = isRecentMessage ? (index - firstAnimatedIndex) * 0.14 : 0.15;
 

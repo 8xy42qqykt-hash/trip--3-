@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, animate, useMotionValue } from 'motion/react';
+import { ArrowLeft, ArrowRight } from '@phosphor-icons/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -44,7 +45,11 @@ const MainAppContent: React.FC = () => {
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
   const deepLinkHandledRef = useRef(false);
-  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
+  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right'; pointerId: number } | null>(null);
+  const edgeSwipeOffset = useMotionValue(0);
+  const [edgeSwipeSide, setEdgeSwipeSide] = useState<'left' | 'right' | null>(null);
+  const [isGestureTransitioning, setIsGestureTransitioning] = useState(false);
+  const gestureTransitionTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -163,55 +168,116 @@ const MainAppContent: React.FC = () => {
   };
 
   const handleEdgePointerDown = (event: React.PointerEvent<HTMLElement>) => {
-    if (event.pointerType === 'mouse') return;
+    if (event.pointerType === 'mouse' || !currentTrip || activeTab === 'trips') return;
     const side = event.clientX <= 24 ? 'left'
       : event.clientX >= window.innerWidth - 24 ? 'right'
         : null;
     const target = event.target;
     if (!side || !(target instanceof Element)) return;
     if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .leaflet-container, [role="dialog"]')) return;
-    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side };
+    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side, pointerId: event.pointerId };
+    edgeSwipeOffset.set(0);
+  };
+
+  const handleEdgePointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    const start = edgeSwipeRef.current;
+    if (!start || event.pointerId !== start.pointerId) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaY) > 20 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      edgeSwipeRef.current = null;
+      setEdgeSwipeSide(null);
+      edgeSwipeOffset.set(0);
+      return;
+    }
+    if (Math.abs(deltaX) < Math.abs(deltaY) || Math.abs(deltaX) < 6) return;
+
+    event.preventDefault();
+    setEdgeSwipeSide(start.side);
+    const maxOffset = window.innerWidth * 0.45;
+    const offset = start.side === 'left'
+      ? Math.max(0, Math.min(maxOffset, deltaX))
+      : Math.min(0, Math.max(-maxOffset, deltaX));
+    edgeSwipeOffset.set(offset);
   };
 
   useEffect(() => {
-    const handlePointerUp = (event: PointerEvent) => {
+    const finishEdgeSwipe = (event: PointerEvent | null) => {
       const start = edgeSwipeRef.current;
       edgeSwipeRef.current = null;
-      if (!start) return;
+      if (!start || (event && event.pointerId !== start.pointerId)) return;
 
-      const deltaX = event.clientX - start.x;
-      const deltaY = event.clientY - start.y;
+      const deltaX = event ? event.clientX - start.x : 0;
+      const deltaY = event ? event.clientY - start.y : 0;
       const threshold = window.innerWidth / 4;
-      if (Math.abs(deltaX) < threshold || Math.abs(deltaY) > Math.min(100, threshold * 0.4)) return;
-      if (!currentTrip || activeTab === 'trips') return;
+      const isCommitGesture = Math.abs(deltaX) >= threshold
+        && Math.abs(deltaY) <= Math.min(100, threshold * 0.4)
+        && currentTrip
+        && activeTab !== 'trips';
       const tabs = ['messages', 'groceries', 'schedule', 'my_trip', 'settings'] as const;
+      let transitionDirection = 0;
+      let commitTransition: (() => void) | null = null;
 
-      if (start.side === 'left' && deltaX > 0) {
-        if (activeView === 'messages' || activeTab === 'my_trip' || activeTab === 'settings') {
-          setSlideDirection(activeTab === 'my_trip' || activeTab === 'settings' ? -1 : 1);
-          setIsKeyboardOpen(false);
-          exitTrip();
-          return;
+      if (isCommitGesture && start.side === 'left' && deltaX > 0) {
+        if (activeTab === 'messages') {
+          transitionDirection = 1;
+          commitTransition = () => {
+            setSlideDirection(transitionDirection);
+            setIsKeyboardOpen(false);
+            exitTrip();
+          };
+        } else {
+          const previousTab = tabs.indexOf(activeTab) - 1;
+          if (previousTab >= 0) {
+            transitionDirection = -1;
+            commitTransition = () => {
+              setSlideDirection(transitionDirection);
+              setActiveTab(tabs[previousTab]);
+              setIsKeyboardOpen(false);
+            };
+          }
         }
-        const previousTab = tabs.indexOf(activeTab) - 1;
-        if (previousTab >= 0) {
-          setSlideDirection(-1);
-          setActiveTab(tabs[previousTab]);
-          setIsKeyboardOpen(false);
-        }
-      } else if (start.side === 'right' && deltaX < 0) {
+      } else if (isCommitGesture && start.side === 'right' && deltaX < 0) {
         const nextTab = tabs.indexOf(activeTab) + 1;
         if (nextTab < tabs.length) {
-          setSlideDirection(1);
-          setActiveTab(tabs[nextTab]);
-          setIsKeyboardOpen(false);
+          transitionDirection = 1;
+          commitTransition = () => {
+            setSlideDirection(transitionDirection);
+            setActiveTab(tabs[nextTab]);
+            setIsKeyboardOpen(false);
+          };
         }
       }
+
+      if (commitTransition) {
+        setIsGestureTransitioning(true);
+        setEdgeSwipeSide(start.side);
+        const maxOffset = window.innerWidth * 0.45;
+        edgeSwipeOffset.set(start.side === 'left'
+          ? Math.max(0, Math.min(maxOffset, deltaX))
+          : Math.min(0, Math.max(-maxOffset, deltaX)));
+      }
+      const arrowExitDirection = transitionDirection > 0 ? -1 : 1;
+      animate(edgeSwipeOffset, commitTransition ? arrowExitDirection * (window.innerWidth + 64) : 0, {
+        duration: commitTransition ? 0.2 : 0.18,
+        ease: [0.22, 1, 0.36, 1],
+        onComplete: () => {
+          setEdgeSwipeSide(null);
+          if (!commitTransition) return;
+          commitTransition();
+          if (gestureTransitionTimerRef.current !== null) {
+            window.clearTimeout(gestureTransitionTimerRef.current);
+          }
+          gestureTransitionTimerRef.current = window.setTimeout(() => {
+            setIsGestureTransitioning(false);
+            gestureTransitionTimerRef.current = null;
+          }, 500);
+        },
+      });
     };
 
-    const handlePointerCancel = () => {
-      edgeSwipeRef.current = null;
-    };
+    const handlePointerUp = (event: PointerEvent) => finishEdgeSwipe(event);
+    const handlePointerCancel = () => finishEdgeSwipe(null);
 
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerCancel);
@@ -219,7 +285,13 @@ const MainAppContent: React.FC = () => {
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
     };
-  }, [activeTab, activeView, currentTrip, exitTrip]);
+  }, [activeTab, currentTrip?.id, edgeSwipeOffset, exitTrip]);
+
+  useEffect(() => () => {
+    if (gestureTransitionTimerRef.current !== null) {
+      window.clearTimeout(gestureTransitionTimerRef.current);
+    }
+  }, []);
 
   // Splash screen until session resolves
   if (isLoading && !isForcedReady) {
@@ -241,6 +313,8 @@ const MainAppContent: React.FC = () => {
       <main
         className="flex-1 w-full overflow-hidden relative"
         onPointerDown={handleEdgePointerDown}
+        onPointerMove={handleEdgePointerMove}
+        style={{ touchAction: edgeSwipeSide ? 'none' : 'pan-y' }}
       >
         <AnimatePresence initial={false} custom={slideDirection} mode="popLayout">
           <motion.div
@@ -334,6 +408,29 @@ const MainAppContent: React.FC = () => {
       )}
       {(call.activeCall || call.incomingCall) && (
         <CallOverlay call={call} userId={user?.id} />
+      )}
+      {edgeSwipeSide && (
+        <motion.div
+          aria-hidden="true"
+          className={`pointer-events-none fixed top-1/2 z-[13010] -translate-y-1/2 ${
+            edgeSwipeSide === 'left' ? 'left-2' : 'right-2'
+          }`}
+          style={{ x: edgeSwipeOffset }}
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-[0_4px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            {edgeSwipeSide === 'left'
+              ? <ArrowRight size={22} weight="bold" />
+              : <ArrowLeft size={22} weight="bold" />}
+          </div>
+        </motion.div>
+      )}
+      {isGestureTransitioning && (
+        <div
+          className="fixed inset-0 z-[13000] touch-none"
+          onWheel={(event) => event.preventDefault()}
+          onTouchMove={(event) => event.preventDefault()}
+          aria-hidden="true"
+        />
       )}
     </div>
   );

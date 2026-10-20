@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CaretDown, CaretLeft, CloudSun } from '@phosphor-icons/react';
+import { CaretDown, CloudSun } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
@@ -128,7 +128,7 @@ const TripLocationMap: React.FC<{
 export const TripOverview: React.FC = () => {
   const { language, t } = useLanguage();
   const { user } = useAuth();
-  const { currentTrip, tripMembers, messages, exitTrip } = useTrip();
+  const { currentTrip, tripMembers, messages } = useTrip();
   const locations = useTripLocations(currentTrip?.id);
   const [forecast, setForecast] = useState<ForecastDay[]>([]);
   const [selectedForecast, setSelectedForecast] = useState<ForecastDay | null>(null);
@@ -231,9 +231,7 @@ export const TripOverview: React.FC = () => {
             }`}>{currentTrip.name}</span>
             <span className="-mt-0.5 text-[11px] font-medium text-slate-400">{tripMembers.length} {tripMembers.length === 1 ? 'member' : 'members'}</span>
           </div>
-          <button type="button" onClick={exitTrip} className="-mr-1 flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0A84FF] active:opacity-70">
-            <span>{t('Trips')}</span> <CaretLeft size={20} weight="bold" className="rotate-180" />
-          </button>
+          <div aria-hidden="true" className="w-14" />
         </div>
       </header>
 
