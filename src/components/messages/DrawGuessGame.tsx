@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowCounterClockwise, ArrowLeft, ArrowUp, Check, Play } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowLeft, Check, Play } from '@phosphor-icons/react';
 import { Message, TripMember } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { Avatar } from '../common/Avatar';
@@ -409,6 +409,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     const guess = guessText.trim();
     if (!guess || !game || !supabase) return;
     setGuessText('');
+    guessInputRef.current?.focus({ preventScroll: true });
     const { error: guessError } = await supabase.rpc('submit_draw_game_guess', {
       p_game_id: game.id,
       p_guess: guess,
@@ -548,33 +549,16 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                     ref={guessInputRef}
                     value={guessText}
                     onChange={(event) => setGuessText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void submitGuess();
+                      }
+                    }}
                     placeholder={t('Type your guess')}
                     className="block w-full min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
                     enterKeyHint="send"
                   />
-                </div>
-                <div
-                  className="flex min-w-0 shrink-0 items-center justify-end overflow-hidden"
-                  style={{
-                    width: guessText.trim() ? 40 : 0,
-                    flexBasis: guessText.trim() ? 40 : 0,
-                    opacity: guessText.trim() ? 1 : 0,
-                    transition: 'width 200ms cubic-bezier(0.16, 1, 0.3, 1), flex-basis 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease-out',
-                  }}
-                >
-                  <button
-                    type="submit"
-                    aria-label={t('Send guess')}
-                    tabIndex={guessText.trim() ? 0 : -1}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onTouchStart={(event) => {
-                      event.preventDefault();
-                      void submitGuess();
-                    }}
-                    className={`flex h-10 w-10 shrink-0 origin-right items-center justify-center rounded-full bg-[#0A84FF] transition-transform duration-200 ${guessText.trim() ? 'scale-100' : 'scale-0'}`}
-                  >
-                    <ArrowUp size={17} weight="bold" />
-                  </button>
                 </div>
               </form>
             )}
