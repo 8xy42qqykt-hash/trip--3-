@@ -3,6 +3,7 @@ export interface Profile {
   display_name: string;
   avatar_url?: string | null;
   color: string;
+  language?: 'en' | 'fi';
   created_at?: string;
 }
 

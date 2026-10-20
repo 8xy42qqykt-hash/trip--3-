@@ -7,6 +7,7 @@ import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { useTripLocations, type SharedTripLocation } from './useTripLocations';
 import { Profile } from '../../types';
+import { useLanguage } from '../../context/LanguageContext';
 
 type ForecastHour = { time: string; temperature: number };
 type ForecastDay = {
@@ -69,6 +70,7 @@ const TripLocationMap: React.FC<{
   members: ReturnType<typeof useTrip>['tripMembers'];
   onMemberClick: (userId: string) => void;
 }> = ({ locations, members, onMemberClick }) => {
+  const { t } = useLanguage();
   const mapElementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
@@ -119,12 +121,13 @@ const TripLocationMap: React.FC<{
     <div
       ref={mapElementRef}
       className="relative z-0 isolate h-72 w-full rounded-[22px] bg-[#17171a]"
-      aria-label="Trip members map"
+      aria-label={t('Trip members map')}
     />
   );
 };
 
 export const TripOverview: React.FC = () => {
+  const { language, t } = useLanguage();
   const { user } = useAuth();
   const { currentTrip, tripMembers, messages, exitTrip } = useTrip();
   const locations = useTripLocations(currentTrip?.id);
@@ -248,7 +251,7 @@ export const TripOverview: React.FC = () => {
         />
         <div className="relative z-10 flex h-14 w-full items-center justify-between px-3.5">
           <button type="button" onClick={exitTrip} className="-ml-1 flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0A84FF] active:opacity-70">
-            <CaretLeft size={20} weight="bold" /> <span>Trips</span>
+            <CaretLeft size={20} weight="bold" /> <span>{t('Trips')}</span>
           </button>
           <div className="flex max-w-[200px] flex-col truncate text-center">
             <span className="truncate text-base font-bold tracking-tight text-white">{currentTrip.name}</span>
@@ -261,7 +264,7 @@ export const TripOverview: React.FC = () => {
       <section className="mb-7">
         <div className="mb-3 flex items-center gap-2">
           <CloudSun size={20} className="text-[#0A84FF]" />
-          <h2 className="text-lg font-bold">Weather</h2>
+          <h2 className="text-lg font-bold">{t('Weather')}</h2>
         </div>
         {forecast.length ? (
           <>
@@ -276,7 +279,7 @@ export const TripOverview: React.FC = () => {
                   }`}
                 >
                   <span className="text-[11px] font-medium uppercase leading-none">
-                    {new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3)}
+                    {new Date(`${day.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { weekday: 'short' }).slice(0, 3)}
                   </span>
                   <span className="mt-1.5 text-base font-semibold leading-none">{day.currentTemperature ?? day.average}°</span>
                 </button>
@@ -291,8 +294,8 @@ export const TripOverview: React.FC = () => {
                   className="flex min-h-12 w-full items-center justify-between px-4 text-left"
                 >
                   <span className="text-sm font-semibold">
-                    {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })}
-                    <span className="ml-2 font-normal text-slate-400">{weatherDescription(selectedForecast.code)}</span>
+                    {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
+                    <span className="ml-2 font-normal text-slate-400">{t(weatherDescription(selectedForecast.code))}</span>
                   </span>
                   <CaretDown size={18} className={`shrink-0 text-slate-400 transition-transform ${isWeatherExpanded ? 'rotate-180' : ''}`} />
                 </button>
@@ -300,7 +303,7 @@ export const TripOverview: React.FC = () => {
                   <div className="min-h-0 overflow-hidden">
                     <div className="border-t border-white/[0.08] px-4 pb-4 pt-3">
                       <p className="mb-3 text-xs text-slate-400">
-                        Average {selectedForecast.average}°C · High {selectedForecast.maximum}°C · Low {selectedForecast.minimum}°C
+                        {t('Average')} {selectedForecast.average}°C · {t('High')} {selectedForecast.maximum}°C · {t('Low')} {selectedForecast.minimum}°C
                       </p>
                       <div className="grid grid-cols-4 gap-x-2 gap-y-3">
                         {selectedForecast.hours.map((hour) => (
@@ -318,22 +321,22 @@ export const TripOverview: React.FC = () => {
           </>
         ) : (
           <p className="rounded-2xl bg-white/[0.06] p-4 text-sm text-slate-400">
-            {isLoadingWeather ? 'Loading forecast…' : 'A trip member must enable location sharing in Settings to show local weather.'}
+            {t(isLoadingWeather ? 'Loading forecast…' : 'A trip member must enable location sharing in Settings to show local weather.')}
           </p>
         )}
       </section>
 
       <section className="mb-7">
         <div className="mb-3">
-          <h2 className="text-lg font-bold">Trip map</h2>
-          <p className="text-xs text-slate-400">Members who share their location appear on the map.</p>
+          <h2 className="text-lg font-bold">{t('Trip map')}</h2>
+          <p className="text-xs text-slate-400">{t('Members who share their location appear on the map.')}</p>
         </div>
         <TripLocationMap locations={locations} members={tripMembers} onMemberClick={markerClick} />
-        {!locations.length && <p className="mt-3 text-sm text-slate-500">No one is sharing a location yet. Manage sharing in Settings.</p>}
+        {!locations.length && <p className="mt-3 text-sm text-slate-500">{t('No one is sharing a location yet. Manage sharing in Settings.')}</p>}
       </section>
 
       <section className="mb-7">
-        <h2 className="mb-3 text-lg font-bold">Trip collection</h2>
+        <h2 className="mb-3 text-lg font-bold">{t('Trip collection')}</h2>
         {sharedPhotos.length ? (
           <div className="columns-2 gap-2">
             {sharedPhotos.map((photo) => (
@@ -341,17 +344,17 @@ export const TripOverview: React.FC = () => {
                 key={photo.id}
                 type="button"
                 onClick={() => photo.image_url && setSelectedPhoto(photo.image_url)}
-                aria-label="View shared trip photo"
+                aria-label={t('View shared trip photo')}
                 className="mb-2 block w-full break-inside-avoid overflow-hidden rounded-2xl bg-transparent"
               >
                 <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto w-full rounded-2xl object-contain" />
               </button>
             ))}
           </div>
-        ) : <p className="text-sm text-slate-500">Photos shared in chat appear here.</p>}
+        ) : <p className="text-sm text-slate-500">{t('Photos shared in chat appear here.')}</p>}
       </section>
 
-      {error && <p role="alert" className="mb-4 rounded-xl bg-red-950/70 p-3 text-sm text-red-200">{error}</p>}
+      {error && <p role="alert" className="mb-4 rounded-xl bg-red-950/70 p-3 text-sm text-red-200">{t(error)}</p>}
 
       <MemberProfileSheet
         profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}
@@ -363,13 +366,13 @@ export const TripOverview: React.FC = () => {
         <div className="fixed inset-0 z-[11000] flex flex-col items-center justify-center bg-black/95 p-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
           <div className="flex w-full max-w-3xl items-center justify-end gap-2 pb-3">
             <button type="button" onClick={() => void downloadSelectedPhoto()} disabled={isDownloading} className="flex min-h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white disabled:opacity-60">
-              <Download size={18} /> {isDownloading ? 'Saving…' : 'Save photo'}
+              <Download size={18} /> {t(isDownloading ? 'Saving…' : 'Save photo')}
             </button>
-            <button type="button" onClick={() => setSelectedPhoto(null)} aria-label="Close photo" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+            <button type="button" onClick={() => setSelectedPhoto(null)} aria-label={t('Close photo')} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
               <X size={20} />
             </button>
           </div>
-          <img src={selectedPhoto} alt="Shared trip photo" className="max-h-[82dvh] max-w-full object-contain" />
+          <img src={selectedPhoto} alt={t('Shared trip photo')} className="max-h-[82dvh] max-w-full object-contain" />
         </div>
       )}
     </div>

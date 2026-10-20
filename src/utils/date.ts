@@ -8,7 +8,8 @@ export function formatTripDate(dateStr: string): string {
 export function formatDayShort(dateStr: string): string {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const isFinnish = typeof document !== 'undefined' && document.documentElement.lang === 'fi';
+  const days = isFinnish ? ['su', 'ma', 'ti', 'ke', 'to', 'pe', 'la'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayName = days[d.getDay()];
   const dayNum = String(d.getDate()).padStart(2, '0');
   const monthNum = String(d.getMonth() + 1).padStart(2, '0');
@@ -29,7 +30,7 @@ export function isToday(dateStr: string): boolean {
 
 export function getDateLabel(dateStr: string): string {
   if (isToday(dateStr)) {
-    return 'Today';
+    return typeof document !== 'undefined' && document.documentElement.lang === 'fi' ? 'Tänään' : 'Today';
   }
   return formatDayShort(dateStr);
 }
@@ -86,16 +87,17 @@ export function formatMessageDaySeparator(isoString: string): string {
   const mins = String(d.getMinutes()).padStart(2, '0');
   const timeStr = `${hours}:${mins}`;
   const dateStr = `${y}-${m}-${day}`;
+  const isFinnish = typeof document !== 'undefined' && document.documentElement.lang === 'fi';
   if (isToday(dateStr)) {
-    return `Today ${timeStr}`;
+    return `${isFinnish ? 'Tänään' : 'Today'} ${timeStr}`;
   }
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
   if (dateStr === yStr) {
-    return `Yesterday ${timeStr}`;
+    return `${isFinnish ? 'Eilen' : 'Yesterday'} ${timeStr}`;
   }
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const days = isFinnish ? ['su', 'ma', 'ti', 'ke', 'to', 'pe', 'la'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayName = days[d.getDay()];
   return `${dayName} ${day}.${m}.${y} ${timeStr}`;
 }

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Camera, X, ArrowsClockwise } from '@phosphor-icons/react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface CameraModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
   onClose,
   onCapture,
 }) => {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
@@ -131,7 +133,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
           {hasCameraError ? (
             <div className="flex flex-col items-center gap-3 p-6 text-center text-white">
               <Camera size={44} className="text-slate-400" />
-              <p className="text-sm text-slate-300">Camera access required</p>
+              <p className="text-sm text-slate-300">{t('Camera access required')}</p>
               <button
                 type="button"
                 onClick={() => fileFallbackRef.current?.click()}

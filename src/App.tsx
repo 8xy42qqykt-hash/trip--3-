@@ -14,6 +14,8 @@ import { useTripPresence } from './components/messages/useTripPresence';
 import { useGroupCall } from './components/messages/useGroupCall';
 import { TripOverview } from './components/trip/TripOverview';
 import { TripLocationTracker } from './components/trip/TripLocationTracker';
+import { LanguageProvider } from './context/LanguageContext';
+import { useLanguage } from './context/LanguageContext';
 
 type AppViewKey = 'trips' | TabKey;
 
@@ -27,6 +29,7 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
 };
 
 const MainAppContent: React.FC = () => {
+  const { setLanguage } = useLanguage();
   const { user, profile, isLoading } = useAuth();
   const { currentTrip, userTrips, selectTrip } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
@@ -40,6 +43,12 @@ const MainAppContent: React.FC = () => {
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
   const deepLinkHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (profile?.language === 'en' || profile?.language === 'fi') {
+      setLanguage(profile.language);
+    }
+  }, [profile?.language, setLanguage]);
 
   useEffect(() => {
     if (deepLinkHandledRef.current || !user) return;
@@ -228,12 +237,14 @@ const MainAppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <TripProvider>
-          <MainAppContent />
-        </TripProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <TripProvider>
+            <MainAppContent />
+          </TripProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

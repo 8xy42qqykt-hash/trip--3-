@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, Check, Play } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowLeft, ArrowUp, Check, Play } from '@phosphor-icons/react';
 import { Message, TripMember } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { Avatar } from '../common/Avatar';
+import { useLanguage } from '../../context/LanguageContext';
+import { getDrawGameWordLabel } from '../../utils/drawGameWords';
 
 type DrawGame = {
   id: string;
@@ -31,7 +33,7 @@ type Guess = {
   created_at: string;
 };
 
-const COLORS = ['#ffffff', '#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2'];
+const COLORS = ['#000000', '#ff453a', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#bf5af2'];
 
 interface DrawGuessGameProps {
   gameId: string;
@@ -54,16 +56,18 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   onClose,
   sendMessage,
 }) => {
+  const { language, t } = useLanguage();
   const [game, setGame] = useState<DrawGame | null>(null);
   const [guesses, setGuesses] = useState<Guess[]>([]);
   const [secretWord, setSecretWord] = useState('');
   const [guessText, setGuessText] = useState('');
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(COLORS[1]);
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
   const [remoteDraft, setRemoteDraft] = useState<Stroke | null>(null);
   const [error, setError] = useState('');
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const guessInputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const draftRef = useRef<Stroke | null>(null);
@@ -85,12 +89,12 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   }, []);
 
   const memberName = useCallback((id: string) => (
-    members.find((member) => member.user_id === id)?.profile?.display_name || 'Member'
-  ), [members]);
+    members.find((member) => member.user_id === id)?.profile?.display_name || t('Member')
+  ), [members, t]);
 
   const loadGame = useCallback(async () => {
     if (!supabase) {
-      setError('Draw and Guess needs an online connection.');
+      setError(t('Draw and Guess needs an online connection.'));
       return;
     }
     const { data, error: loadError } = await supabase
@@ -100,11 +104,11 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       .maybeSingle();
     if (loadError) {
       console.error('Could not load Draw and Guess game:', loadError);
-      setError('Could not load the game. Please try again.');
+      setError(t('Could not load the game. Please try again.'));
       return;
     }
     if (!data) {
-      setError('This game is no longer available.');
+      setError(t('This game is no longer available.'));
       return;
     }
     const loaded = data as DrawGame;
@@ -119,14 +123,14 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
         .maybeSingle();
       if (secretError) {
         console.error('Could not load the private drawing word:', secretError);
-        setError('Could not load your drawing word.');
+        setError(t('Could not load your drawing word.'));
       } else {
         setSecretWord(secret?.word || '');
       }
     } else {
       setSecretWord('');
     }
-  }, [gameId, userId]);
+  }, [gameId, t, userId]);
 
   const loadGuesses = useCallback(async () => {
     if (!supabase) return;
@@ -137,11 +141,11 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       .order('created_at', { ascending: true });
     if (loadError) {
       console.error('Could not load game guesses:', loadError);
-      setError('Could not load the game chat.');
+      setError(t('Could not load the game chat.'));
       return;
     }
     setGuesses((data || []) as Guess[]);
-  }, [gameId]);
+  }, [gameId, t]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -164,6 +168,11 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
         setRemoteDraft(null);
         strokesRef.current = [...strokesRef.current, stroke];
         setGame((current) => current ? { ...current, drawing: strokesRef.current } : current);
+      })
+      .on('broadcast', { event: 'drawing_undo' }, ({ payload }) => {
+        const drawing = payload.drawing as Stroke[];
+        strokesRef.current = drawing;
+        setGame((current) => current ? { ...current, drawing } : current);
       })
       .subscribe();
     channelRef.current = channel;
@@ -220,7 +229,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     });
     if (startError) {
       console.error('Could not start Draw and Guess round:', startError);
-      setError('Could not start the next round.');
+      setError(t('Could not start the next round.'));
       return;
     }
     await loadGame();
@@ -250,7 +259,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
           const { error: finishError } = await supabase!.rpc('finish_draw_game', { p_game_id: game.id });
           if (finishError) {
             console.error('Could not finish Draw and Guess game:', finishError);
-            setError('Could not finish the game.');
+            setError(t('Could not finish the game.'));
             return;
           }
           await announceResults(game.scores || {}, game.participant_ids || game.players);
@@ -270,7 +279,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     const { error: joinError } = await supabase.rpc('join_draw_game', { p_game_id: game.id });
     if (joinError) {
       console.error('Could not join Draw and Guess game:', joinError);
-      setError('Could not join this game. Check your connection and try again.');
+      setError(t('Could not join this game. Check your connection and try again.'));
       return;
     }
     await loadGame();
@@ -289,7 +298,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       const { error: cancelError } = await supabase.rpc('cancel_draw_game', { p_game_id: game.id });
       if (cancelError) {
         console.error('Could not cancel Draw and Guess game:', cancelError);
-        setError('Could not cancel the game.');
+        setError(t('Could not cancel the game.'));
         return;
       }
       onClose();
@@ -300,7 +309,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     });
     if (leaveError) {
       console.error('Could not leave Draw and Guess game:', leaveError);
-      setError('Could not leave the game. Please try again.');
+      setError(t('Could not leave the game. Please try again.'));
       return;
     }
     if (finished) {
@@ -362,12 +371,40 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     });
     if (drawingError) {
       console.error('Could not save drawing stroke:', drawingError);
-      setError('Could not save the latest drawing stroke.');
+      setError(t('Could not save the latest drawing stroke.'));
     }
   };
 
-  const submitGuess = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const undoLastStroke = async () => {
+    if (!game || !supabase || game.drawer_id !== userId || strokesRef.current.length === 0) return;
+    const updatedDrawing = strokesRef.current.slice(0, -1);
+    const { error: undoError } = await supabase.rpc('save_draw_game_drawing', {
+      p_game_id: game.id,
+      p_drawing: updatedDrawing,
+    });
+    if (undoError) {
+      console.error('Could not undo the latest drawing stroke:', undoError);
+      setError(t('Could not undo the latest drawing stroke.'));
+      return;
+    }
+    strokesRef.current = updatedDrawing;
+    setGame((current) => current ? { ...current, drawing: updatedDrawing } : current);
+    void channelRef.current?.send({
+      type: 'broadcast',
+      event: 'drawing_undo',
+      payload: { drawing: updatedDrawing },
+    });
+  };
+
+  useEffect(() => {
+    if (!game || game.status !== 'playing' || game.drawer_id === userId || game.winner_id) return;
+    const focusInput = () => guessInputRef.current?.focus({ preventScroll: true });
+    const frame = window.requestAnimationFrame(focusInput);
+    return () => window.cancelAnimationFrame(frame);
+  }, [game?.id, game?.status, game?.drawer_id, game?.round_number, game?.winner_id, userId]);
+
+  const submitGuess = async (event?: React.FormEvent) => {
+    event?.preventDefault();
     const guess = guessText.trim();
     if (!guess || !game || !supabase) return;
     setGuessText('');
@@ -377,21 +414,30 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     });
     if (guessError) {
       console.error('Could not submit game guess:', guessError);
-      setError('Could not send your guess.');
+      setError(t('Could not send your guess.'));
       setGuessText(guess);
       return;
     }
     await loadGame();
     await loadGuesses();
+    guessInputRef.current?.focus({ preventScroll: true });
   };
 
   const isDrawer = game?.drawer_id === userId;
   const playerProfiles = game?.players.map((id) => members.find((member) => member.user_id === id)).filter(Boolean) || [];
+  const drawingSize = Math.max(
+    120,
+    Math.min(
+      window.innerHeight * 0.4,
+      window.innerWidth - 88,
+      keyboardOffset > 0 ? window.innerHeight - keyboardOffset - 430 : Number.POSITIVE_INFINITY,
+    ),
+  );
 
   return (
     <div className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
-        <button type="button" onClick={() => void closeGame()} aria-label="Cancel game or leave game" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
+        <button type="button" onClick={() => void closeGame()} aria-label={t('Cancel game or leave game')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
           <ArrowLeft size={21} />
         </button>
         {game?.status === 'playing' && (
@@ -409,10 +455,10 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             type="button"
             disabled={game.players.length < 2}
             onClick={() => void startRound()}
-            aria-label="Start game"
+            aria-label={t('Start game')}
             className="flex min-h-10 items-center gap-2 rounded-full bg-[#0A84FF] px-4 text-sm font-bold disabled:opacity-40"
           >
-            <Play size={17} weight="fill" /> Start
+            <Play size={17} weight="fill" /> {t('Start')}
           </button>
         )}
       </header>
@@ -433,34 +479,51 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
         ) : game?.status === 'playing' ? (
           <>
             <div className="shrink-0 py-1 text-center">
-              <p className="min-h-8 text-xl font-black tracking-wide">{isDrawer ? secretWord : game.winner_id ? `${memberName(game.winner_id)} guessed it!` : '\u00a0'}</p>
+              <p className="min-h-8 text-xl font-black tracking-wide">{isDrawer ? getDrawGameWordLabel(secretWord, language) : game.winner_id ? `${memberName(game.winner_id)} ${t('guessed it!')}` : '\u00a0'}</p>
             </div>
-            <canvas
-              ref={canvasRef}
-              onPointerDown={onCanvasDown}
-              onPointerMove={onCanvasMove}
-              onPointerUp={() => void onCanvasUp()}
-              onPointerCancel={() => void onCanvasUp()}
-              style={{ width: 'min(100%, 40vh)' }}
-              className={`mx-auto aspect-square max-h-[40vh] shrink-0 rounded-xl bg-white ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
-              aria-label="Live drawing canvas"
-            />
-            {isDrawer && !game.winner_id && (
-              <div className="flex shrink-0 items-center justify-center gap-3">
-                {COLORS.map((swatch) => (
+            <div
+              className="mx-auto flex w-full min-w-0 flex-none items-stretch justify-center gap-3 px-1"
+              style={{ height: `${drawingSize}px` }}
+            >
+              {isDrawer && !game.winner_id && (
+                <div className="flex shrink-0 flex-col justify-between py-1">
+                  {COLORS.map((swatch) => (
+                    <button
+                      key={swatch}
+                      type="button"
+                      onClick={() => setColor(swatch)}
+                      aria-label={`Choose ${swatch} pen`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-transform ${color === swatch ? 'scale-110 border-white' : 'border-white/30'}`}
+                      style={{ backgroundColor: swatch }}
+                    >
+                      {color === swatch && <Check size={14} className="text-white" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="relative shrink-0" style={{ width: `${drawingSize}px`, height: `${drawingSize}px` }}>
+                <canvas
+                  ref={canvasRef}
+                  onPointerDown={onCanvasDown}
+                  onPointerMove={onCanvasMove}
+                  onPointerUp={() => void onCanvasUp()}
+                  onPointerCancel={() => void onCanvasUp()}
+                  className={`block h-full w-full rounded-xl bg-black ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
+                  aria-label={t('Live drawing canvas')}
+                />
+                {isDrawer && !game.winner_id && (
                   <button
-                    key={swatch}
                     type="button"
-                    onClick={() => setColor(swatch)}
-                    aria-label={`Choose ${swatch} pen`}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full border-2 ${color === swatch ? 'scale-110 border-white' : 'border-white/20'}`}
-                    style={{ backgroundColor: swatch }}
+                    onClick={() => void undoLastStroke()}
+                    disabled={game.drawing.length === 0}
+                    aria-label={t('Undo drawing')}
+                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white disabled:opacity-35"
                   >
-                    {color === swatch && <Check size={14} className={swatch === '#ffffff' ? 'text-black' : 'text-white'} />}
+                    <ArrowCounterClockwise size={18} weight="bold" />
                   </button>
-                ))}
+                )}
               </div>
-            )}
+            </div>
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2">
               {guesses.map((item) => (
                 <p key={item.id} className={`text-sm ${item.correct ? 'font-bold text-emerald-300' : 'text-white/80'}`}>
@@ -479,18 +542,26 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                 }}
                 className="fixed left-3.5 right-3.5 z-[12001] mx-auto flex min-h-[46px] max-w-2xl items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
               >
-                <input
-                  value={guessText}
-                  onChange={(event) => setGuessText(event.target.value)}
-                  placeholder="Type your guess"
-                  className="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
-                  enterKeyHint="send"
-                />
+                <div className="flex min-w-0 flex-1 items-center">
+                  <input
+                    ref={guessInputRef}
+                    value={guessText}
+                    onChange={(event) => setGuessText(event.target.value)}
+                    placeholder={t('Type your guess')}
+                    className="w-full min-w-0 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
+                    enterKeyHint="send"
+                  />
+                </div>
                 <div className={`flex shrink-0 items-center justify-end transition-[width,opacity] duration-200 ease-out ${guessText.trim() ? 'w-10 opacity-100' : 'w-0 opacity-0'}`}>
                   <button
                     type="submit"
-                    aria-label="Send guess"
+                    aria-label={t('Send guess')}
                     tabIndex={guessText.trim() ? 0 : -1}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onTouchStart={(event) => {
+                      event.preventDefault();
+                      void submitGuess();
+                    }}
                     className={`flex h-10 w-10 origin-right items-center justify-center rounded-full bg-[#0A84FF] transition-transform duration-200 ${guessText.trim() ? 'scale-100' : 'scale-0'}`}
                   >
                     <ArrowUp size={17} weight="bold" />
@@ -505,7 +576,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
               {(game?.participant_ids || game?.players || []).map((id) => (
                 <div key={id} className="flex items-center gap-3">
                   <span className="flex-1 text-sm">{memberName(id)}</span>
-                  <span className="text-sm font-semibold">{game?.scores?.[id] || 0} rounds won</span>
+                  <span className="text-sm font-semibold">{game?.scores?.[id] || 0} {t('rounds won')}</span>
                 </div>
               ))}
             </div>

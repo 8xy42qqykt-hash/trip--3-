@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { CaretLeft } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface CollapsingHeaderLayoutProps {
   title: string;
@@ -19,6 +20,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
   children,
   showBackButton = true,
 }) => {
+  const { t } = useLanguage();
   const { exitTrip } = useTrip();
   const [isScrolled, setIsScrolled] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,10 +59,10 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
                 type="button"
                 onClick={exitTrip}
                 className="min-h-[44px] flex items-center gap-1 text-sm font-semibold text-[#0A84FF] active-press cursor-pointer py-1.5 pr-2 -ml-2"
-                title="Exit to My Trips"
+                title={t('Exit to My Trips')}
               >
                 <CaretLeft size={18} weight="bold" />
-                <span>Trips</span>
+                <span>{t('Trips')}</span>
               </button>
             ) : null}
           </div>

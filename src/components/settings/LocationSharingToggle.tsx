@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MapPin } from '@phosphor-icons/react';
 import { supabase } from '../../lib/supabase';
 import { useTripLocations } from '../trip/useTripLocations';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface LocationSharingToggleProps {
   tripId?: string;
@@ -9,6 +10,7 @@ interface LocationSharingToggleProps {
 }
 
 export const LocationSharingToggle: React.FC<LocationSharingToggleProps> = ({ tripId, userId }) => {
+  const { t } = useLanguage();
   const locations = useTripLocations(tripId);
   const isSharing = locations.some((location) => location.user_id === userId && location.sharing);
   const [isBusy, setIsBusy] = useState(false);
@@ -76,14 +78,14 @@ export const LocationSharingToggle: React.FC<LocationSharingToggleProps> = ({ tr
           <MapPin size={18} weight="bold" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white">Location sharing</p>
-          <p className="text-xs text-slate-400">{isSharing ? 'Visible to trip members' : 'Off for this trip'}</p>
+          <p className="text-sm font-semibold text-white">{t('Location sharing')}</p>
+          <p className="text-xs text-slate-400">{t(isSharing ? 'Visible to trip members' : 'Off for this trip')}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={isSharing}
-          aria-label="Share my location with trip members"
+          aria-label={t('Share my location with trip members')}
           onClick={() => void toggleSharing()}
           disabled={isBusy || !tripId || !userId}
           className={`relative h-8 w-[54px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60 ${
@@ -93,8 +95,8 @@ export const LocationSharingToggle: React.FC<LocationSharingToggleProps> = ({ tr
           <span className="absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-[left] duration-200" style={{ left: isSharing ? 26 : 4 }} />
         </button>
       </div>
-      {isBusy && <p className="mt-2 text-xs text-slate-400">Updating location sharing…</p>}
-      {status && <p role="status" className="mt-2 text-xs text-slate-300">{status}</p>}
+      {isBusy && <p className="mt-2 text-xs text-slate-400">{t('Updating location sharing…')}</p>}
+      {status && <p role="status" className="mt-2 text-xs text-slate-300">{t(status)}</p>}
     </div>
   );
 };

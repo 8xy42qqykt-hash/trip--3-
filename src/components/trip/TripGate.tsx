@@ -6,8 +6,10 @@ import { formatTripDate, getTodayDateString } from '../../utils/date';
 import { Avatar } from '../common/Avatar';
 import { BottomSheet } from '../common/BottomSheet';
 import { Plus, Hash, CalendarBlank, SignOut, CaretLeft, CaretRight, Check, X } from '@phosphor-icons/react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSelected }) => {
+  const { t } = useLanguage();
   const {
     createTrip,
     joinTrip,
@@ -46,7 +48,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
     const res = await createTrip(name, startDate, endDate);
     setLoading(false);
     if (res.error) {
-      alert(res.error);
+      alert(t(res.error));
     } else {
       setActiveForm(null);
       setIsPlusMenuOpen(false);
@@ -97,7 +99,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
       {/* Header with NO logo icon box and NO trip count text */}
       <div className="flex items-center justify-between mb-7 px-1 pt-1">
         <h1 className="text-3xl font-extrabold tracking-tight text-white leading-tight">
-          Trips
+          {t('Trips')}
         </h1>
 
         <div className="flex items-center gap-3">
@@ -106,7 +108,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
             type="button"
             onClick={openPlusPopup}
             className="w-[38px] h-[38px] min-w-[38px] min-h-[38px] rounded-full bg-[#0A84FF] text-white flex items-center justify-center active-press cursor-pointer shadow-md hover:bg-[#007AFF] transition-colors"
-            title="New Trip"
+            title={t('New Trip')}
           >
             <Plus size={20} weight="bold" />
           </button>
@@ -120,7 +122,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
             type="button"
             onClick={signOut}
             className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-white/10 active-press cursor-pointer transition-colors"
-            title="Sign out"
+            title={t('Sign out')}
           >
             <SignOut size={19} weight="bold" />
           </button>
@@ -129,7 +131,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
 
       {pendingInvitations.length > 0 && (
         <section className="mb-6 rounded-3xl border border-[#0A84FF]/25 bg-[#0A84FF]/[0.08] p-4">
-          <h2 className="mb-3 text-base font-bold text-white">Invitations</h2>
+          <h2 className="mb-3 text-base font-bold text-white">{t('Invitations')}</h2>
           {pendingInvitations.map((invitation) => (
             <div key={invitation.id} className="border-t border-white/10 py-3 first:border-0 first:pt-0 last:pb-0">
               <div className="flex items-center gap-3">
@@ -140,9 +142,9 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   size={38}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-white">{invitation.trip?.name || 'Trip invitation'}</div>
+                  <div className="truncate text-sm font-bold text-white">{invitation.trip?.name || t('Trip invitation')}</div>
                   <div className="text-xs text-slate-300">
-                    Invited by {invitation.inviter?.display_name || 'Trip member'}
+                    {t('Invited by')} {invitation.inviter?.display_name || t('Trip member')}
                   </div>
                   {invitation.trip?.start_date && invitation.trip?.end_date && (
                     <div className="mt-0.5 text-[11px] text-slate-400">
@@ -158,7 +160,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   onClick={() => void handleInvitationResponse(invitation.id, true)}
                   className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
                 >
-                  <Check size={17} weight="bold" /> Accept
+                  <Check size={17} weight="bold" /> {t('Accept')}
                 </button>
                 <button
                   type="button"
@@ -166,12 +168,12 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   onClick={() => void handleInvitationResponse(invitation.id, false)}
                   className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white/10 text-sm font-semibold text-slate-200 disabled:opacity-50"
                 >
-                  <X size={16} weight="bold" /> Reject
+                  <X size={16} weight="bold" /> {t('Reject')}
                 </button>
               </div>
             </div>
           ))}
-          {invitationError && <p role="alert" className="mt-3 text-xs text-red-300">{invitationError}</p>}
+          {invitationError && <p role="alert" className="mt-3 text-xs text-red-300">          {t(invitationError)}</p>}
         </section>
       )}
 
@@ -179,7 +181,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
       <div className="flex flex-col gap-3 flex-1">
         {isLoadingTrips && userTrips.length === 0 ? (
           <div className="py-20 text-center text-slate-400 text-sm animate-pulse">
-            Loading trips...
+            {t('Loading trips...')}
           </div>
         ) : userTrips.length > 0 ? (
           <div className="divide-y divide-white/[0.08]">
@@ -202,7 +204,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                       </span>
                       {isTripOwner && (
                         <span className="text-[11px] font-bold text-[#0A84FF] bg-[#0A84FF]/15 px-2.5 py-0.5 rounded-full shrink-0">
-                          Owner
+                          {t('Owner')}
                         </span>
                       )}
                     </div>
@@ -213,7 +215,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                       </span>
                     </div>
                     <div className="text-xs text-slate-500 font-mono">
-                      Code: {trip.invite_code}
+                      {t('Code')}: {trip.invite_code}
                     </div>
                   </div>
                   <CaretRight size={18} weight="bold" className="text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
@@ -225,7 +227,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
           <div className="py-20 px-5 text-center mt-3">
             <CalendarBlank size={42} className="mx-auto text-slate-500 mb-3 opacity-80" />
             <h3 className="text-lg font-bold text-white">
-              No Trips
+              {t('No Trips')}
             </h3>
             <button
               type="button"
@@ -233,7 +235,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
               className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0A84FF] text-white text-sm font-bold active-press shadow-md cursor-pointer hover:bg-[#007AFF] transition-colors"
             >
               <Plus size={17} weight="bold" />
-              <span>Create or Join Trip</span>
+              <span>{t('Create or Join Trip')}</span>
             </button>
           </div>
         )}
@@ -259,7 +261,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   <Plus size={20} weight="bold" />
                 </div>
                 <span className="text-base font-bold text-white">
-                  Create Trip
+                  {t('Create Trip')}
                 </span>
               </div>
               <CaretRight size={18} weight="bold" className="text-slate-400" />
@@ -274,7 +276,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   <Hash size={20} weight="bold" />
                 </div>
                 <span className="text-base font-bold text-white">
-                  Join Trip
+                  {t('Join Trip')}
                 </span>
               </div>
               <CaretRight size={18} weight="bold" className="text-slate-400" />
@@ -303,7 +305,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                 autoCapitalize="words"
                 autoCorrect="on"
                 spellCheck={true}
-                placeholder="Trip Name"
+                placeholder={t('Trip Name')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -333,14 +335,14 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   onClick={() => setActiveForm(null)}
                   className="flex-1 h-12 rounded-[20px] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
                 >
-                  Back
+                  {t('Back')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !name.trim()}
                   className="flex-1 h-12 rounded-[20px] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
-                  {loading ? 'Creating...' : 'Create Trip'}
+                  {t(loading ? 'Creating...' : 'Create Trip')}
                 </button>
               </div>
             </form>
@@ -356,7 +358,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                 <CaretLeft size={20} weight="bold" />
               </button>
               <h3 className="text-lg font-bold text-white">
-                Join Trip
+                {t('Join Trip')}
               </h3>
             </div>
             <form onSubmit={handleJoin} className="space-y-3.5 mb-4">
@@ -369,7 +371,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                 autoCorrect="off"
                 spellCheck={false}
                 maxLength={6}
-                placeholder="6-Letter Code (e.g. ABCXYZ)"
+                placeholder={t('6-Letter Code (e.g. ABCXYZ)')}
                 value={inviteCode}
                 onChange={(e) => {
                   setInviteCode(e.target.value.toUpperCase());
@@ -380,7 +382,7 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
               />
               {joinError && (
                 <div className="text-xs text-red-400 text-center py-2.5 px-3.5 bg-red-500/15 rounded-[16px] border border-red-500/20">
-                  {joinError}
+                  {t(joinError)}
                 </div>
               )}
               <div className="pt-2 flex gap-2.5">
@@ -389,14 +391,14 @@ export const TripGate: React.FC<{ onTripSelected?: () => void }> = ({ onTripSele
                   onClick={() => setActiveForm(null)}
                   className="flex-1 h-12 rounded-[20px] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
                 >
-                  Back
+                  {t('Back')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading || inviteCode.trim().length !== 6}
                   className="flex-1 h-12 rounded-[20px] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
-                  {loading ? 'Joining...' : 'Join Trip'}
+                  {t(loading ? 'Joining...' : 'Join Trip')}
                 </button>
               </div>
             </form>

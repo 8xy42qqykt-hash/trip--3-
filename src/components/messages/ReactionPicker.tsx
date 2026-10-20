@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { PollResultMessage } from './PollResultMessage';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ReactionPickerProps {
   message: Message;
@@ -56,6 +57,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   onAction,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const isPollResult = message.type === 'poll_result' && message.metadata;
   const isImageOnly = message.type === 'image' && Boolean(message.image_url);
 
@@ -219,7 +221,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
               }`}
             >
               <div className="space-y-2">
-                <div className="text-xs font-semibold tracking-wide text-white/70">Grocery list</div>
+                <div className="text-xs font-semibold tracking-wide text-white/70">{t('Grocery list')}</div>
                 <div className="space-y-1.5">
                   {(message.metadata?.items || message.content.split(/\r?\n/).map((text: string) => ({ text, checked: false }))).map((item: { text: string; checked?: boolean }, index: number) => (
                     <div key={`${item.text}-${index}`} className="flex min-h-8 items-center gap-2 text-sm">
@@ -300,7 +302,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             }}
             className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
           >
-            <span>Reply</span>
+            <span>{t('Reply')}</span>
             <ArrowBendUpLeft size={18} weight="bold" className="text-slate-400" />
           </button>
           <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
@@ -312,7 +314,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             }}
             className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
           >
-            <span>Copy</span>
+            <span>{t('Copy')}</span>
             <Copy size={18} weight="bold" className="text-slate-400" />
           </button>
           {onEdit && (
@@ -326,7 +328,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
                 }}
                 className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
               >
-                <span>Edit</span>
+                <span>{t('Edit')}</span>
                 <PencilSimple size={18} weight="bold" className="text-slate-400" />
               </button>
             </>
@@ -342,7 +344,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
                 }}
                 className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
               >
-                <span>{message.type === 'meal' ? 'Cook' : 'Contribute'}</span>
+                <span>{t(message.type === 'meal' ? 'Cook' : 'Contribute')}</span>
                 {message.type === 'meal'
                   ? <CookingPot size={18} weight="bold" className="text-slate-400" />
                   : <HandHeart size={18} weight="bold" className="text-slate-400" />}
@@ -360,7 +362,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
                 }}
                 className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-red-400 hover:bg-red-500/15 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
               >
-                <span>Delete</span>
+                <span>{t('Delete')}</span>
                 <Trash size={18} weight="bold" />
               </button>
             </>

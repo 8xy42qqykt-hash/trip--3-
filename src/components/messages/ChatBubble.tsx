@@ -15,6 +15,7 @@ import { PollResultMessage } from './PollResultMessage';
 import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
 import { DrawGameInviteCard } from './DrawGameInviteCard';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ChatBubbleProps {
   message: Message;
@@ -86,6 +87,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onProfileClick,
   onOpenDrawGame,
 }) => {
+  const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
@@ -295,7 +297,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               {replyMessage && (
                 <div className="mb-1 max-w-full min-w-0 px-3.5 py-1.5 rounded-[16px] text-xs bg-white/10 text-slate-200">
                   <div className="font-bold text-[11px] opacity-80">
-                    {replyMessage.sender?.display_name || 'Member'}
+                    {replyMessage.sender?.display_name || t('Member')}
                   </div>
                   <div className="reply-preview-content text-[11px] leading-snug">
                     {replyMessage.content}
@@ -337,7 +339,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                     }`}
                   >
                     <div className="font-bold text-[11px] opacity-80">
-                      {replyMessage.sender?.display_name || 'Member'}
+                      {replyMessage.sender?.display_name || t('Member')}
                     </div>
                     <div className="reply-preview-content text-[11px] leading-snug">
                       {replyMessage.content}
@@ -350,7 +352,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   <PollResultMessage metadata={message.metadata} isOwn={isOwn} />
                 ) : message.type === 'grocery_list' ? (
                   <div className="min-w-[190px] space-y-2">
-                    <div className="text-xs font-semibold tracking-wide text-white/70">Grocery list</div>
+                    <div className="text-xs font-semibold tracking-wide text-white/70">{t('Grocery list')}</div>
                     <div className="space-y-1.5">
                       {(message.metadata?.items || message.content.split(/\r?\n/).map((text: string) => ({ text, checked: false }))).map((item: { text: string; checked: boolean }, index: number) => (
                         <button
@@ -393,10 +395,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 ) : message.type === 'call' ? (
                   <div className="min-w-[200px]">
                     <div className="mb-1 text-xs font-semibold tracking-wide text-white/70">
-                      {message.metadata?.kind === 'video' ? 'Video call' : 'Voice call'}
+                      {t(message.metadata?.kind === 'video' ? 'Video call' : 'Voice call')}
                     </div>
                     <p className="font-semibold">
-                      {message.metadata?.status === 'ended' ? 'Call ended' : 'Call in progress'}
+                      {t(message.metadata?.status === 'ended' ? 'Call ended' : 'Call in progress')}
                     </p>
                     {message.metadata?.status === 'ended' && Number.isFinite(message.metadata?.durationSeconds) && (
                       <p className="mt-0.5 text-xs text-white/70">
@@ -417,7 +419,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                           }}
                           className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]"
                         >
-                          Join call
+                          {t('Join call')}
                         </button>
                       )}
                   </div>
@@ -480,7 +482,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 && !(message.type === 'plan' && (message.metadata?.date || message.metadata?.time))
                 && (
                   <span className="flex items-center gap-1">
-                    <span>{message.sender?.display_name || 'Member'}</span>
+                    <span>{message.sender?.display_name || t('Member')}</span>
                     <span aria-hidden="true">•</span>
                     <span>{formatMessageTime(message.created_at)}</span>
                   </span>
@@ -488,19 +490,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           ) : isLastInGroup && (
             <span className="flex min-h-5 items-center gap-1">
-              <span>{message.sender?.display_name || 'Member'}</span>
+              <span>{message.sender?.display_name || t('Member')}</span>
               <span aria-hidden="true">•</span>
               <span>{formatMessageTime(message.created_at)}</span>
             </span>
           )}
           {message.type === 'meal' && (
-            <ProfileRow label="Cook:" ids={message.metadata?.cooks || []} members={members} onProfileClick={onProfileClick} />
+            <ProfileRow label={t('Cook:')} ids={message.metadata?.cooks || []} members={members} onProfileClick={onProfileClick} />
           )}
           {message.type === 'plan' && (
-            <ProfileRow label="Contributors:" ids={message.metadata?.contributors || []} members={members} onProfileClick={onProfileClick} />
+            <ProfileRow label={t('Contributors:')} ids={message.metadata?.contributors || []} members={members} onProfileClick={onProfileClick} />
           )}
           {message.type === 'call' && (
-            <ProfileRow label="Participants:" ids={message.metadata?.participantIds || []} members={members} onProfileClick={onProfileClick} />
+            <ProfileRow label={t('Participants:')} ids={message.metadata?.participantIds || []} members={members} onProfileClick={onProfileClick} />
           )}
         </div>
       )}
@@ -514,6 +516,7 @@ const ProfileRow: React.FC<{
   members: TripMember[];
   onProfileClick?: (userId: string) => void;
 }> = ({ label, ids, members, onProfileClick }) => {
+  const { t } = useLanguage();
   const profiles = ids
     .map((id) => members.find((member) => member.user_id === id)?.profile)
     .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
@@ -527,7 +530,7 @@ const ProfileRow: React.FC<{
             key={profile.id}
             type="button"
             onClick={() => onProfileClick?.(profile.id)}
-            aria-label={`View ${profile.display_name} profile`}
+            aria-label={`${t('View profile')}: ${profile.display_name}`}
             className="rounded-full border-2 border-black"
           >
             <Avatar

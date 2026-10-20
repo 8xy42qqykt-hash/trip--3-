@@ -10,6 +10,7 @@ import {
 } from '@phosphor-icons/react';
 import { Avatar } from '../common/Avatar';
 import { CallParticipant, GroupCallManager } from './useGroupCall';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface CallOverlayProps {
   call: GroupCallManager;
@@ -31,6 +32,7 @@ const VideoTile: React.FC<{
   spotlight?: boolean;
   onClick?: () => void;
 }> = ({ profile, stream, muted = false, audioOnly, local = false, spotlight = false, onClick }) => {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [needsPlaybackTap, setNeedsPlaybackTap] = useState(false);
@@ -59,7 +61,7 @@ const VideoTile: React.FC<{
           onClick();
         }
       }}
-      aria-label={`${spotlight ? 'Return to call grid from' : 'Spotlight'} ${profile.display_name}`}
+      aria-label={`${t(spotlight ? 'Return to call grid from' : 'Spotlight')}: ${profile.display_name}`}
       className={`relative min-w-0 overflow-hidden rounded-2xl bg-[#1c1c20] text-left transition-[flex-basis,transform] duration-300 ease-out ${
         audioOnly ? 'aspect-square' : 'aspect-video'
       }`}
@@ -99,7 +101,7 @@ const VideoTile: React.FC<{
           }}
           className="absolute inset-x-3 top-3 rounded-xl bg-black/70 px-3 py-2 text-xs font-semibold text-white"
         >
-          Tap to enable {audioOnly ? 'audio' : 'video'}
+          {t('Tap to enable')} {t(audioOnly ? 'audio' : 'video')}
         </button>
       )}
       <div className={`${stream && !audioOnly ? 'hidden' : 'flex'} absolute inset-0 items-center justify-center`}>
@@ -119,6 +121,7 @@ const VideoTile: React.FC<{
 };
 
 export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
+  const { t } = useLanguage();
   const [isMicrophoneOn, setIsMicrophoneOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -175,7 +178,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
         {call.callError && (
           <div className="mb-3 flex items-center justify-between rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
             <span>{call.callError}</span>
-            <button type="button" onClick={call.clearCallError} aria-label="Dismiss call error">×</button>
+            <button type="button" onClick={call.clearCallError} aria-label={t('Dismiss call error')}>×</button>
           </div>
         )}
 
@@ -229,7 +232,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             </div>
           )}
           {others.length === 0 && (
-            <div className="py-2 text-center text-xs text-slate-400">Waiting for others to join…</div>
+            <div className="py-2 text-center text-xs text-slate-400">{t('Waiting for others to join…')}</div>
           )}
         </main>
 
@@ -240,7 +243,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           <button
             type="button"
             onClick={() => setIsMicrophoneOn(call.toggleMicrophone())}
-            aria-label={isMicrophoneOn ? 'Mute microphone' : 'Unmute microphone'}
+            aria-label={t(isMicrophoneOn ? 'Mute microphone' : 'Unmute microphone')}
             className={`flex h-11 w-11 items-center justify-center rounded-full ${
               isMicrophoneOn ? 'bg-white/15' : 'bg-red-500'
             }`}
@@ -251,7 +254,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             <button
               type="button"
               onClick={() => setIsCameraOn(call.toggleCamera())}
-              aria-label={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
+              aria-label={t(isCameraOn ? 'Turn camera off' : 'Turn camera on')}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 isCameraOn ? 'bg-white/15' : 'bg-red-500'
               }`}
@@ -262,7 +265,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           <button
             type="button"
             onClick={() => void call.leaveCall()}
-            aria-label="Leave call"
+            aria-label={t('Leave call')}
             className="flex h-11 w-14 items-center justify-center rounded-full bg-red-600 text-white"
           >
             <PhoneDisconnect size={26} weight="fill" />
@@ -289,10 +292,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           className="mb-5"
         />
         <h2 className="text-2xl font-bold text-white">
-          {call.incomingCall.hostProfile.display_name} is calling
+          {call.incomingCall.hostProfile.display_name} {t('is calling')}
         </h2>
         <p className="mt-2 text-sm text-slate-400">
-          {call.incomingCall.kind === 'video' ? 'Video call' : 'Voice call'} · up to 6 people
+          {t(call.incomingCall.kind === 'video' ? 'Video call' : 'Voice call')} · {t('up to 6 people')}
         </p>
         {call.callError && <p className="mt-3 text-sm text-red-300">{call.callError}</p>}
         <div className="mt-8 flex justify-center gap-6">
@@ -300,7 +303,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             type="button"
             onClick={call.declineCall}
             className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600"
-            aria-label="Decline call"
+            aria-label={t('Decline call')}
           >
             <PhoneDisconnect size={28} weight="fill" />
           </button>
@@ -308,7 +311,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
             type="button"
             onClick={() => void call.acceptCall()}
             className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500"
-            aria-label="Accept call"
+            aria-label={t('Accept call')}
           >
             <Phone size={28} weight="fill" />
           </button>

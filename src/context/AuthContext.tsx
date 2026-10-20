@@ -94,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           display_name: fallbackName,
           color: fallbackColor,
           avatar_url: null,
+          language: 'en' as const,
         };
         const { error: upsertErr } = await supabase.from('profiles').upsert(newProf);
         if (!upsertErr) {
@@ -248,6 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           display_name: cleanName,
           color,
           avatar_url: null,
+          language: 'en' as const,
         };
 
         await supabase.from('profiles').upsert(newProf);

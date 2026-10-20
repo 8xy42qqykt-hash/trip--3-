@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   User,
   X,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
@@ -24,12 +25,15 @@ import { PWAInstallPrompt } from '../common/PWAInstallPrompt';
 import { CollapsingHeaderLayout } from '../common/CollapsingHeaderLayout';
 import { NotificationPermissionButton } from './NotificationPermissionButton';
 import { LocationSharingToggle } from './LocationSharingToggle';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface SettingsViewProps {
   onNavigateToMessages?: (mentionName?: string) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages }) => {
+  const { language, setLanguage, t } = useLanguage();
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const { user, profile, updateProfile, signOut } = useAuth();
   const {
     currentTrip,
@@ -216,7 +220,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
 
   const handleCopyMemberName = () => {
     if (!selectedMember) return;
-    const name = selectedMember.profile?.display_name || 'Member';
+    const name = selectedMember.profile?.display_name || t('Member');
     navigator.clipboard.writeText(name);
     setCopiedMemberName(true);
     setTimeout(() => setCopiedMemberName(false), 2000);
@@ -224,7 +228,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
 
   const handleChatWithMember = () => {
     if (!selectedMember) return;
-    const name = selectedMember.profile?.display_name || 'Member';
+    const name = selectedMember.profile?.display_name || t('Member');
     setSelectedMember(null);
     if (onNavigateToMessages) {
       onNavigateToMessages(name);
@@ -246,7 +250,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
   };
 
   return (
-    <CollapsingHeaderLayout title="Settings">
+    <CollapsingHeaderLayout title={t('Settings')}>
       <div className="space-y-6 pt-2 pb-24">
         <div className="flex flex-col items-center text-center pt-2">
           <div className="relative mb-3">
@@ -261,7 +265,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
               disabled={uploadingAvatar}
               onClick={() => fileInputRef.current?.click()}
               className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#0A84FF] text-white flex items-center justify-center border-2 border-black active:scale-90 cursor-pointer shadow-md transition-transform"
-              title="Change avatar"
+              title={t('Change avatar')}
             >
               <Camera size={15} weight="bold" />
             </button>
@@ -296,7 +300,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                 onClick={handleSaveName}
                 className="text-sm font-bold text-[#0A84FF] active-press cursor-pointer px-3 py-1.5"
               >
-                Save
+                {t('Save')}
               </button>
             </div>
           ) : (
@@ -308,16 +312,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
               }}
               className="text-lg font-bold text-white mt-0.5 active:scale-98 cursor-pointer transition-transform"
             >
-              {profile?.display_name || 'User'}
+              {profile?.display_name || t('User')}
             </button>
           )}
 
-          <div className="mt-3 flex items-center gap-2" aria-label="Choose profile icon color">
+          <div className="mt-3 flex items-center gap-2" aria-label={t('Choose profile icon color')}>
             {['#0A84FF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55', '#00C7BE', '#5856D6'].map((color) => (
               <button
                 key={color}
                 type="button"
-                aria-label={`Use ${color} profile color`}
+                aria-label={`${t('Use profile color')} ${color}`}
                 aria-pressed={profile?.color === color && !profile?.avatar_url}
                 onClick={() => void updateProfile({ color, avatar_url: null })}
                 className="h-7 w-7 rounded-full border-2 border-white/20 shadow-sm active:scale-90"
@@ -330,11 +334,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         <div className="space-y-4">
           <NotificationPermissionButton />
           <LocationSharingToggle tripId={currentTrip.id} userId={user?.id} />
+          <section className="space-y-2">
+            <h3 className="text-base font-bold text-white">{t('Language')}</h3>
+            <div className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={isLanguageMenuOpen}
+                aria-label={t('Language')}
+                onClick={() => setIsLanguageMenuOpen((open) => !open)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setIsLanguageMenuOpen(false);
+                }}
+                className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-white/[0.1] bg-[#1c1c1e] px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
+              >
+                <span>{language === 'fi' ? 'Suomi' : 'English'}</span>
+                <CaretDown
+                  size={18}
+                  weight="bold"
+                  className={`text-slate-400 transition-transform duration-200 ${isLanguageMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isLanguageMenuOpen && (
+                <div
+                  role="listbox"
+                  aria-label={t('Language')}
+                  className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-white/[0.12] bg-[#242428]/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-2xl animate-spring-in"
+                >
+                  {([
+                    { value: 'en', label: 'English' },
+                    { value: 'fi', label: 'Suomi' },
+                  ] as const).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={language === option.value}
+                      onClick={() => {
+                        setLanguage(option.value);
+                        void updateProfile({ language: option.value });
+                        setIsLanguageMenuOpen(false);
+                      }}
+                      className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-sm font-medium transition-colors ${
+                        language === option.value ? 'bg-white/[0.1] text-white' : 'text-slate-300 hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      {option.label}
+                      {language === option.value && <Check size={17} weight="bold" className="text-[#0A84FF]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
         {isOwner && <section className="space-y-3 border-y border-white/[0.08] py-4">
           <div>
-            <h3 className="text-base font-bold text-white">Invite people</h3>
-            <p className="mt-1 text-xs text-slate-400">Enter one or more email addresses, separated by commas or spaces. Invitees must accept before they can see this trip.</p>
+            <h3 className="text-base font-bold text-white">{t('Invite people')}</h3>
+            <p className="mt-1 text-xs text-slate-400">{t('Enter one or more email addresses, separated by commas or spaces. Invitees must accept before they can see this trip.')}</p>
           </div>
           <textarea
             value={inviteEmails}
@@ -351,17 +408,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
             disabled={isInviting || !inviteEmails.trim()}
             className="min-h-11 w-full rounded-full bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
           >
-            {isInviting ? 'Sending…' : 'Send invitations'}
+            {t(isInviting ? 'Sending…' : 'Send invitations')}
           </button>
-          {inviteStatus && <p role="status" className="text-xs text-slate-300">{inviteStatus}</p>}
+          {inviteStatus && <p role="status" className="text-xs text-slate-300">{t(inviteStatus)}</p>}
           {sentInvitations.length > 0 && (
             <div className="space-y-2 pt-1">
-              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-400">Pending invitations</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-slate-400">{t('Pending invitations')}</h4>
               {sentInvitations.map((invitation) => (
                 <div key={invitation.id} className="flex min-h-12 items-center gap-2 rounded-xl bg-white/[0.05] px-3 py-2">
                   <span className="min-w-0 flex-1 truncate text-sm text-white">{invitation.email}</span>
-                  <button type="button" onClick={() => void resendInvitation(invitation.id)} className="min-h-9 rounded-full px-3 text-xs font-semibold text-[#70baff]">Resend</button>
-                  <button type="button" onClick={() => void cancelInvitation(invitation.id)} className="min-h-9 rounded-full px-3 text-xs font-semibold text-red-300">Cancel</button>
+                  <button type="button" onClick={() => void resendInvitation(invitation.id)} className="min-h-9 rounded-full px-3 text-xs font-semibold text-[#70baff]">{t('Resend')}</button>
+                  <button type="button" onClick={() => void cancelInvitation(invitation.id)} className="min-h-9 rounded-full px-3 text-xs font-semibold text-red-300">{t('Cancel')}</button>
                 </div>
               ))}
             </div>
@@ -370,7 +427,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         {/* Trip Info & Invite Code - Clean row */}
         <div className="space-y-1">
           <div className="text-xs font-bold text-slate-400 px-2">
-            Invite Code
+            {t('Invite Code')}
           </div>
           <div className="flex items-center justify-between py-2 px-2">
             <div>
@@ -378,7 +435,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                 {currentTrip.invite_code}
               </span>
               <p className="text-xs text-slate-400 mt-0.5">
-                Share this code with friends to join
+                {t('Share this code with friends to join')}
               </p>
             </div>
             <button
@@ -389,12 +446,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
               {copiedCode ? (
                 <>
                   <Check size={14} weight="bold" className="text-emerald-400" />
-                  <span>Copied</span>
+                  <span>{t('Copied')}</span>
                 </>
               ) : (
                 <>
                   <Copy size={14} weight="bold" />
-                  <span>Copy</span>
+                  <span>{t('Copy')}</span>
                 </>
               )}
             </button>
@@ -405,18 +462,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         {isOwner && (
           <div className="space-y-3 pt-1">
             <div className="text-xs font-bold text-slate-400 px-2">
-              Trip Details (Owner)
+              {t('Trip Details (Owner)')}
             </div>
             <div className="space-y-3 px-1">
               <div>
                 <label className="text-xs font-medium text-slate-400 block mb-1">
-                  Trip Name
+                  {t('Trip Name')}
                 </label>
                 <input
                   type="text"
                   value={tripName}
                   onChange={(e) => setTripName(e.target.value)}
-                  placeholder="e.g. Hawaii Summer 2026"
+                  placeholder={t('e.g. Hawaii Summer 2026')}
                   className="w-full h-12 px-3.5 rounded-[16px] bg-white/10 text-white text-[16px] outline-none"
                 />
               </div>
@@ -427,9 +484,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                   className="h-12 px-3.5 rounded-[16px] bg-white/10 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
-                    <span className="text-[10px] text-slate-400 block leading-tight">Start Date</span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">{t('Start Date')}</span>
                     <span className="text-xs font-semibold text-white">
-                      {startDate ? formatTripDate(startDate) : 'Select'}
+                      {startDate ? formatTripDate(startDate) : t('Select')}
                     </span>
                   </div>
                   <CalendarBlank size={16} className="text-slate-400 shrink-0" />
@@ -440,9 +497,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                   className="h-12 px-3.5 rounded-[16px] bg-white/10 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
-                    <span className="text-[10px] text-slate-400 block leading-tight">End Date</span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">{t('End Date')}</span>
                     <span className="text-xs font-semibold text-white">
-                      {endDate ? formatTripDate(endDate) : 'Select'}
+                      {endDate ? formatTripDate(endDate) : t('Select')}
                     </span>
                   </div>
                   <CalendarBlank size={16} className="text-slate-400 shrink-0" />
@@ -454,7 +511,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                   onClick={handleSaveTrip}
                   className="w-full h-12 rounded-[18px] bg-[#0A84FF] text-white font-bold text-sm active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
-                  {savedTripNotice ? 'Saved!' : 'Save Changes'}
+                  {t(savedTripNotice ? 'Saved!' : 'Save Changes')}
                 </button>
               </div>
             </div>
@@ -483,8 +540,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         {/* Members - Clean divided list with Long-Click & Tap interactions */}
         <div className="space-y-1.5">
           <div className="text-xs font-bold text-slate-400 px-2 flex items-center justify-between">
-            <span>Members ({tripMembers.length})</span>
-            <span className="text-[11px] text-slate-500 font-normal">Tap or hold to inspect</span>
+            <span>{t('Members')} ({tripMembers.length})</span>
+            <span className="text-[11px] text-slate-500 font-normal">{t('Tap or hold to inspect')}</span>
           </div>
           <div className="divide-y divide-white/[0.08] overflow-hidden">
             {tripMembers.map((m) => (
@@ -495,7 +552,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                 onPointerCancel={handleMemberPointerUp}
                 onClick={() => handleMemberClick(m)}
                 className="flex items-center justify-between min-h-[52px] px-2 py-2.5 cursor-pointer active:bg-white/10 rounded-xl transition-all"
-                title="Tap or hold for member profile"
+                title={t('Tap or hold for member profile')}
               >
                 <div className="flex items-center gap-3">
                   <Avatar
@@ -506,23 +563,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                   />
                   <div>
                     <div className="text-sm font-semibold text-white flex items-center gap-1.5">
-                      <span>{m.profile?.display_name || 'Member'}</span>
+                      <span>{m.profile?.display_name || t('Member')}</span>
                       {user?.id === m.user_id && (
-                        <span className="text-[11px] text-slate-400 font-normal">(You)</span>
+                        <span className="text-[11px] text-slate-400 font-normal">{t('(You)')}</span>
                       )}
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      {m.role === 'owner' ? 'Trip Organizer' : 'Member'}
+                      {t(m.role === 'owner' ? 'Trip Organizer' : 'Member')}
                     </div>
                   </div>
                 </div>
                 {m.role === 'owner' ? (
                   <span className="text-[11px] font-bold text-[#0A84FF] bg-[#0A84FF]/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                     <ShieldCheck size={12} weight="bold" />
-                    <span>Owner</span>
+                    <span>{t('Owner')}</span>
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-500">View</span>
+                  <span className="text-xs text-slate-500">{t('View')}</span>
                 )}
               </div>
             ))}
@@ -542,7 +599,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
             className="w-full min-h-[48px] px-4 rounded-[18px] bg-red-500/15 hover:bg-red-500/25 flex items-center justify-center gap-2 text-red-400 font-bold text-sm active-press cursor-pointer transition-colors"
           >
             <SignOut size={18} weight="bold" />
-            <span>Sign Out</span>
+            <span>{t('Sign Out')}</span>
           </button>
         </div>
       </div>
@@ -569,23 +626,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
 
             {/* Name & Role */}
             <h3 className="text-xl font-bold text-white mb-1">
-              {selectedMember.profile?.display_name || 'Member'}
+              {selectedMember.profile?.display_name || t('Member')}
             </h3>
 
             <div className="flex items-center gap-1.5 mb-6">
               {selectedMember.role === 'owner' ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#0A84FF] bg-[#0A84FF]/15 px-3 py-1 rounded-full">
                   <ShieldCheck size={14} weight="bold" />
-                  <span>Trip Owner</span>
+                  <span>{t('Trip Owner')}</span>
                 </span>
               ) : (
                 <span className="text-xs font-medium text-slate-400 bg-white/10 px-3 py-1 rounded-full">
-                  Trip Member
+                  {t('Trip Member')}
                 </span>
               )}
               {user?.id === selectedMember.user_id && (
                 <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-full">
-                  You
+                  {t('You')}
                 </span>
               )}
             </div>
@@ -599,7 +656,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                 className="w-full h-12 rounded-[18px] bg-[#0A84FF] hover:bg-[#007AFF] text-white font-semibold text-sm flex items-center justify-center gap-2.5 active-press cursor-pointer transition-colors"
               >
                 <PaperPlaneTilt size={18} weight="bold" />
-                <span>Send Message / Mention</span>
+                <span>{t('Send Message / Mention')}</span>
               </button>
 
               {/* Copy Name */}
@@ -611,12 +668,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                 {copiedMemberName ? (
                   <>
                     <Check size={18} weight="bold" className="text-emerald-400" />
-                    <span>Copied!</span>
+                    <span>{t('Copied!')}</span>
                   </>
                 ) : (
                   <>
                     <Copy size={18} weight="bold" />
-                    <span>Copy Name</span>
+                    <span>{t('Copy Name')}</span>
                   </>
                 )}
               </button>
@@ -627,7 +684,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                   {confirmRemove ? (
                     <div className="p-3.5 rounded-[18px] bg-red-500/15 border border-red-500/20 text-left space-y-3">
                       <div className="text-xs text-red-300">
-                        Remove <strong className="text-white">{selectedMember.profile?.display_name}</strong> from this trip? They will lose access to all trip data.
+                        {t('Remove')} <strong className="text-white">{selectedMember.profile?.display_name}</strong> {t('from this trip? They will lose access to all trip data.')}
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -637,14 +694,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                           className="flex-1 h-10 rounded-[14px] bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 active-press cursor-pointer"
                         >
                           <Trash size={14} weight="bold" />
-                          <span>{isRemoving ? 'Removing...' : 'Yes, Remove'}</span>
+                          {t(isRemoving ? 'Removing...' : 'Yes, Remove')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmRemove(false)}
                           className="px-4 h-10 rounded-[14px] bg-white/10 text-slate-300 text-xs font-semibold active-press cursor-pointer"
                         >
-                          Cancel
+                          {t('Cancel')}
                         </button>
                       </div>
                     </div>
@@ -655,7 +712,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
                       className="w-full h-12 rounded-[18px] bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm flex items-center justify-center gap-2 active-press cursor-pointer transition-colors"
                     >
                       <Trash size={18} weight="bold" />
-                      <span>Remove from Trip</span>
+                      <span>{t('Remove from Trip')}</span>
                     </button>
                   )}
                 </div>

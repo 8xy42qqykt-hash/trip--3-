@@ -4,9 +4,11 @@ import { Eye, EyeSlash } from '@phosphor-icons/react';
 import { handleEnterKeyNavigation } from '../../utils/formNavigation';
 import { Avatar } from '../common/Avatar';
 import tripLogo from '../../../trip-logo.png';
+import { useLanguage } from '../../context/LanguageContext';
 
 export const AuthScreen: React.FC = () => {
   const { signIn, signUp, savedAccounts } = useAuth();
+  const { t } = useLanguage();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +30,7 @@ export const AuthScreen: React.FC = () => {
         if (res.error) setError(res.error);
       }
     } catch (err: any) {
-      setError(err?.message || 'Error occurred');
+      setError(err?.message || t('Error occurred'));
     } finally {
       setSubmitting(false);
     }
@@ -49,7 +51,7 @@ export const AuthScreen: React.FC = () => {
           Trip
         </h1>
         <p className="text-sm text-slate-400 mt-1.5">
-          {isSignUp ? 'Create your account' : 'Sign in to access your trips'}
+          {t(isSignUp ? 'Create your account' : 'Sign in to access your trips')}
         </p>
       </div>
 
@@ -57,7 +59,7 @@ export const AuthScreen: React.FC = () => {
       {savedAccounts.length > 0 && !isSignUp && (
         <div className="mb-5">
           <div className="text-xs font-semibold text-slate-400 px-1 mb-2">
-            Switch Account
+            {t('Switch Account')}
           </div>
           <div className="flex gap-2.5 overflow-x-auto pb-1">
             {savedAccounts.map((acc) => (
@@ -95,7 +97,7 @@ export const AuthScreen: React.FC = () => {
                 autoComplete="name"
                 enterKeyHint="next"
                 autoCapitalize="words"
-                placeholder="Display Name"
+                placeholder={t('Display Name')}
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 onKeyDown={(e) => handleEnterKeyNavigation(e)}
@@ -111,7 +113,7 @@ export const AuthScreen: React.FC = () => {
               autoComplete="email"
               enterKeyHint="next"
               autoCapitalize="none"
-              placeholder="Email"
+              placeholder={t('Email')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => handleEnterKeyNavigation(e)}
@@ -124,7 +126,7 @@ export const AuthScreen: React.FC = () => {
               type={showPassword ? 'text' : 'password'}
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
               enterKeyHint="go"
-              placeholder="Password"
+              placeholder={t('Password')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => handleEnterKeyNavigation(e)}
@@ -143,7 +145,7 @@ export const AuthScreen: React.FC = () => {
 
         {error && (
           <div className="text-sm text-red-400 text-center px-4 py-3 bg-red-500/15 rounded-[18px] border border-red-500/20">
-            {error}
+            {t(error)}
           </div>
         )}
 
@@ -153,7 +155,7 @@ export const AuthScreen: React.FC = () => {
           disabled={submitting}
           className="w-full h-13 rounded-[22px] bg-[#0A84FF] text-white font-bold text-base flex items-center justify-center active-press cursor-pointer disabled:opacity-50 shadow-md hover:bg-[#007AFF] transition-colors"
         >
-          {submitting ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
+          {t(submitting ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In')}
         </button>
 
         {/* Secondary switch button */}
@@ -166,7 +168,7 @@ export const AuthScreen: React.FC = () => {
             }}
             className="text-sm font-semibold text-[#0A84FF] active-press cursor-pointer hover:opacity-85 transition-opacity py-1 px-3"
           >
-            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Create one"}
+            {t(isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Create one")}
           </button>
         </div>
       </form>

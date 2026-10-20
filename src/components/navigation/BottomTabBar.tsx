@@ -6,6 +6,7 @@ import {
   MapTrifold,
   Gear,
 } from '@phosphor-icons/react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export type TabKey = 'trips' | 'messages' | 'groceries' | 'schedule' | 'my_trip' | 'settings';
 
@@ -22,6 +23,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   isHidden = false,
   hidden = false,
 }) => {
+  const { t } = useLanguage();
   // Listen directly to keyboard/input-focus events to guarantee closing on every device immediately
   const [eventHidden, setEventHidden] = useState(false);
 
@@ -42,17 +44,17 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   }
 
   const tabs: { key: TabKey; label: string; Icon: React.ComponentType<any> }[] = [
-    { key: 'messages', label: 'Messages', Icon: PaperPlaneTilt },
-    { key: 'groceries', label: 'Groceries', Icon: ShoppingCart },
-    { key: 'schedule', label: 'Plans', Icon: CalendarBlank },
-    { key: 'my_trip', label: 'My Trip', Icon: MapTrifold },
-    { key: 'settings', label: 'Settings', Icon: Gear },
+    { key: 'messages', label: t('Messages'), Icon: PaperPlaneTilt },
+    { key: 'groceries', label: t('Groceries'), Icon: ShoppingCart },
+    { key: 'schedule', label: t('Plans'), Icon: CalendarBlank },
+    { key: 'my_trip', label: t('My Trip'), Icon: MapTrifold },
+    { key: 'settings', label: t('Settings'), Icon: Gear },
   ];
 
   return (
     <nav
       role="navigation"
-      aria-label="Bottom Navigation"
+      aria-label={t('Bottom Navigation')}
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}

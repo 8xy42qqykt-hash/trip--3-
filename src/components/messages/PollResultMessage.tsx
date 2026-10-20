@@ -1,5 +1,6 @@
 import React from 'react';
 import { Avatar } from '../common/Avatar';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface PollResultMessageProps {
   metadata: any;
@@ -7,10 +8,11 @@ interface PollResultMessageProps {
 }
 
 export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, isOwn }) => {
+  const { t } = useLanguage();
   if (!metadata) return null;
   const options = metadata.options || [];
   const totalVotes = metadata.total_votes || 1;
-  const cleanQuestion = metadata.question || 'Poll Results';
+  const cleanQuestion = metadata.question || t('Poll Results');
 
   return (
     <div className="flex flex-col gap-2.5 min-w-[260px] max-w-sm py-1.5 select-none">
@@ -20,7 +22,7 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, 
           {cleanQuestion}
         </span>
         <span className="text-xs opacity-75 shrink-0 text-white font-medium">
-          {metadata.total_votes || 0} {metadata.total_votes === 1 ? 'vote' : 'votes'}
+          {metadata.total_votes || 0} {t(metadata.total_votes === 1 ? 'vote' : 'votes')}
         </span>
       </div>
 
@@ -82,10 +84,10 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, 
 
       {/* Footer */}
       <div className="pt-1.5 text-[11px] opacity-75 flex justify-between items-center text-white">
-        <span>Ended by {metadata.ended_by || 'Creator'}</span>
+        <span>{t('Ended by')} {metadata.ended_by || t('Creator')}</span>
         {metadata.winner && metadata.winner !== 'No votes' && (
           <span className="font-bold">
-            Winner: {metadata.winner}
+            {t('Winner')}: {metadata.winner}
           </span>
         )}
       </div>

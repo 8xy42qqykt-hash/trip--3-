@@ -3,6 +3,7 @@ import { CaretDown, Check } from '@phosphor-icons/react';
 import { Poll } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../common/Avatar';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface PinnedPollsProps {
   polls: Poll[];
@@ -15,6 +16,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
   onVote,
   onEndPoll,
 }) => {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const openPolls = polls.filter((p) => !p.is_closed);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -114,7 +116,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
 
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-semibold text-slate-300">
-                {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
+                {totalVotes} {t(totalVotes === 1 ? 'vote' : 'votes')}
               </span>
               <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-slate-300">
                 <CaretDown
@@ -210,7 +212,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                           <div
                             onClick={(e) => toggleShowVoters(opt.id, e)}
                             className="flex -space-x-2 overflow-hidden p-0.5 rounded-full hover:opacity-80 active:scale-95 transition-transform"
-                            title="View all voters"
+                            title={t('View all voters')}
                           >
                             {voters.map((voter) => (
                               <Avatar
@@ -260,7 +262,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
 
             {/* Total votes & Creator End Poll action */}
             <div className="flex items-center justify-between text-xs text-slate-400 pt-3 mt-2 border-t border-white/10 px-1">
-              <span>Total votes: {totalVotes}</span>
+              <span>{t('Total votes')}: {totalVotes}</span>
               {isCreator && (
                 <button
                   type="button"
@@ -268,7 +270,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                   disabled={endingPollId === poll.id}
                   className="px-3.5 py-1.5 rounded-[14px] text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 active:scale-95 cursor-pointer transition-transform"
                 >
-                  {endingPollId === poll.id ? 'Ending...' : 'End poll'}
+                  {t(endingPollId === poll.id ? 'Ending...' : 'End poll')}
                 </button>
               )}
             </div>

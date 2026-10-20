@@ -31,6 +31,7 @@ import { OnlineTripMember } from './useTripPresence';
 import { GroupCallManager } from './useGroupCall';
 import { useTripLocations } from '../trip/useTripLocations';
 import { DrawGuessGame } from './DrawGuessGame';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan';
@@ -49,6 +50,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   onlineMembers,
   call,
 }) => {
+  const { t } = useLanguage();
   const {
     currentTrip,
     tripMembers,
@@ -130,7 +132,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             },
           ).catch((error: unknown) => {
             console.error('Could not save call message:', error);
-            setComposerError(error instanceof Error ? error.message : 'Could not save the call in chat.');
+            setComposerError(error instanceof Error ? error.message : t('Could not save the call in chat.'));
           });
         }
         return;
@@ -154,7 +156,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           },
         }).catch((error: unknown) => {
           console.error('Could not update call participant history:', error);
-          setComposerError(error instanceof Error ? error.message : 'Could not update call participants.');
+          setComposerError(error instanceof Error ? error.message : t('Could not update call participants.'));
         });
       }
       return;
@@ -195,7 +197,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         },
       }).catch((error: unknown) => {
         console.error('Could not update call status:', error);
-        setComposerError(error instanceof Error ? error.message : 'Could not update the call card.');
+        setComposerError(error instanceof Error ? error.message : t('Could not update the call card.'));
       });
       return;
     }
@@ -213,9 +215,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       },
     }).catch((error: unknown) => {
       console.error('Could not update call status:', error);
-      setComposerError(error instanceof Error ? error.message : 'Could not update the call card.');
+      setComposerError(error instanceof Error ? error.message : t('Could not update the call card.'));
     });
-  }, [call.activeCall, call.lastCallState, call.participants, isFilteredView, messages, sendMessage, updateMessage]);
+  }, [call.activeCall, call.lastCallState, call.participants, isFilteredView, messages, sendMessage, t, updateMessage]);
 
   // Auto-mention if passed from members list or settings
   useEffect(() => {
@@ -356,7 +358,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }, [inputText, composerMode]);
 
   const handleSelectMention = (member: TripMember) => {
-    const name = member.profile?.display_name || 'Member';
+    const name = member.profile?.display_name || t('Member');
     const textarea = textareaRef.current;
     const cursorPos = textarea ? textarea.selectionStart : inputText.length;
     const textBeforeCursor = inputText.slice(0, cursorPos);
@@ -494,7 +496,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       await new Promise<void>((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve();
-        image.onerror = () => reject(new Error('The uploaded photo could not be loaded.'));
+        image.onerror = () => reject(new Error(t('The uploaded photo could not be loaded.')));
         image.src = url;
       });
       const replyId = replyingTo?.id;
@@ -544,7 +546,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       metadata: { ...message.metadata, items: updatedItems },
     }).catch((error: unknown) => {
       console.error('Could not update grocery checklist:', error);
-      setComposerError(error instanceof Error ? error.message : 'Could not update the grocery list.');
+      setComposerError(error instanceof Error ? error.message : t('Could not update the grocery list.'));
     });
   };
 
@@ -561,13 +563,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       metadata: { ...message.metadata, [field]: updated },
     }).catch((error: unknown) => {
       console.error(`Could not update ${action.toLowerCase()} participants:`, error);
-      setComposerError(error instanceof Error ? error.message : `Could not update ${action.toLowerCase()} participants.`);
+      setComposerError(error instanceof Error ? error.message : t(action === 'Cook' ? 'Could not update cook participants.' : 'Could not update contributor participants.'));
     });
   };
 
   const createDrawGame = async () => {
     if (!currentTrip || !user || !supabase) {
-      setComposerError('Draw and Guess needs an online connection.');
+      setComposerError(t('Draw and Guess needs an online connection.'));
       return;
     }
     setIsPlusMenuOpen(false);
@@ -585,12 +587,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     });
     if (error) {
       console.error('Could not create Draw and Guess game:', error);
-      setComposerError('Could not start a game. Please try again.');
+      setComposerError(t('Could not start a game. Please try again.'));
       return;
     }
     try {
       await sendMessage(
-        'Draw and Guess — join the game!',
+        t('Draw and Guess — join the game!'),
         undefined,
         undefined,
         'draw_game',
@@ -599,7 +601,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       setActiveDrawGameId(gameId);
     } catch (sendError) {
       console.error('Could not post Draw and Guess invitation:', sendError);
-      setComposerError('The game was created, but its chat invitation could not be sent.');
+      setComposerError(t('The game was created, but its chat invitation could not be sent.'));
     }
   };
 
@@ -691,20 +693,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             type="button"
             onClick={exitTrip}
             className="flex items-center gap-1 text-[#0A84FF] text-sm font-semibold active:opacity-70 cursor-pointer -ml-1 py-1 px-2 rounded-lg"
-            title="Return to Trips"
+            title={t('Return to Trips')}
           >
             <CaretLeft size={20} weight="bold" />
-            <span>Trips</span>
+            <span>{t('Trips')}</span>
           </button>
 
           <div className="flex flex-col items-center max-w-[200px] truncate text-center">
             <span className="text-base font-bold text-white tracking-tight truncate">
               {isFilteredView
-                ? viewMode === 'grocery_list' ? 'Groceries' : 'Plans'
+                ? viewMode === 'grocery_list' ? t('Groceries') : t('Plans')
                 : currentTrip.name}
             </span>
             <span className="text-[11px] text-slate-400 font-medium -mt-0.5">
-              {tripMembers.length} {tripMembers.length === 1 ? 'member' : 'members'}
+              {tripMembers.length} {tripMembers.length === 1 ? t('Member') : t('members')}
             </span>
           </div>
 
@@ -713,7 +715,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               <button
                 ref={callButtonRef}
                 type="button"
-                aria-label="Start a call"
+                aria-label={t('Start a call')}
                 aria-expanded={isCallMenuOpen}
                 onClick={() => {
                   if (isCallMenuOpen) {
@@ -741,7 +743,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             type="button"
             onClick={call.clearCallError}
             className="shrink-0 font-semibold text-white"
-            aria-label="Dismiss call error"
+            aria-label={t('Dismiss call error')}
           >
             Dismiss
           </button>
@@ -810,11 +812,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               <div className="relative max-w-[78%] overflow-hidden rounded-[22px] bg-[#222226]">
                 <img
                   src={pendingPhoto.previewUrl}
-                  alt="Photo upload preview"
+                  alt={t('Photo upload preview')}
                   className="block max-h-80 w-auto max-w-full animate-pulse object-contain opacity-45"
                 />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-label="Uploading photo" />
+                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-label={t('Uploading photo')} />
                 </div>
               </div>
             </div>
@@ -836,7 +838,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         >
           <div className="min-w-0 flex-1">
             <span className="font-bold text-[#0A84FF] mr-1.5">
-              Replying to {replyingTo.sender?.display_name || 'Member'}:
+              {t('Replying to')} {replyingTo.sender?.display_name || t('Member')}:
             </span>
             <span className="reply-preview-content block text-[11px] leading-snug opacity-80">
               {replyingTo.content}
@@ -866,8 +868,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             role="alert"
             className="absolute bottom-[calc(100%+8px)] left-0 max-w-[85%] rounded-2xl border border-red-300/20 bg-red-950/95 px-3 py-2 text-xs text-red-100 shadow-lg"
           >
-            {composerError}
-            <button type="button" onClick={() => setComposerError('')} className="ml-2 font-bold">Dismiss</button>
+            {t(composerError)}
+            <button type="button" onClick={() => setComposerError('')} className="ml-2 font-bold">{t('Dismiss')}</button>
           </div>
         )}
         <input
@@ -910,7 +912,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   />
                   <div className="truncate">
                     <div className="text-sm font-semibold text-white truncate">
-                      {m.profile?.display_name || 'Member'}
+                      {m.profile?.display_name || t('Member')}
                     </div>
                   </div>
                 </div>
@@ -985,12 +987,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                     <ImageIcon size={16} weight="bold" />
                   </div>
-                  <span>Photo</span>
+                  <span>{t('Photo')}</span>
                 </button>
                 {([
-                  ['grocery_list', 'Grocery list', ShoppingCart],
-                  ['meal', 'Meal', ForkKnife],
-                  ['plan', 'Plan', CalendarBlank],
+                  ['grocery_list', t('Grocery list'), ShoppingCart],
+                  ['meal', t('Meal'), ForkKnife],
+                  ['plan', t('Plan'), CalendarBlank],
                 ] as const).map(([mode, label, Icon]) => (
                   <button
                     key={mode}
@@ -1016,7 +1018,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-300">
                     <GameController size={16} weight="bold" />
                   </div>
-                  <span>Draw and Guess</span>
+                  <span>{t('Draw and Guess')}</span>
                 </button>
                 <button
                   type="button"
@@ -1029,7 +1031,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
                     <ChartBar size={16} weight="bold" />
                   </div>
-                  <span>Poll</span>
+                  <span>{t('Poll')}</span>
                 </button>
               </div>
             </>
@@ -1040,11 +1042,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
                 {composerMode === 'plan' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{planDate ? formatTripDate(planDate) : 'Add date'}</span>
+                    <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
                     <input
                       ref={planDateInputRef}
                       type="date"
-                      aria-label="Plan date"
+                      aria-label={t('Plan date')}
                       value={planDate}
                       onChange={(event) => setPlanDate(event.target.value)}
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
@@ -1053,11 +1055,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 )}
                 {composerMode === 'meal' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{mealTime || 'Add time'}</span>
+                    <span>{mealTime || t('Add time')}</span>
                     <input
                       ref={mealTimeInputRef}
                       type="time"
-                      aria-label="Meal time"
+                      aria-label={t('Meal time')}
                       value={mealTime}
                       onChange={(event) => setMealTime(event.target.value)}
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
@@ -1066,11 +1068,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 )}
                 {composerMode === 'plan' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{planTime || 'Add time'}</span>
+                    <span>{planTime || t('Add time')}</span>
                     <input
                       ref={planTimeInputRef}
                       type="time"
-                      aria-label="Plan time"
+                      aria-label={t('Plan time')}
                       value={planTime}
                       onChange={(event) => setPlanTime(event.target.value)}
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
@@ -1088,7 +1090,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                         key={member.userId}
                         type="button"
                         onClick={() => setSelectedProfileId(member.userId)}
-                        aria-label={`View ${member.profile.display_name} profile`}
+                        aria-label={`${t('View profile')}: ${member.profile.display_name}`}
                         className="relative rounded-full border-2 border-black"
                       >
                         <Avatar
@@ -1118,12 +1120,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               className="relative flex min-w-0 items-start min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
             >
               {composerMode === 'grocery_list' && (
-                <div className="absolute left-3.5 top-[15px] z-10 flex flex-col" aria-label="Draft grocery item checkboxes">
+                <div className="absolute left-3.5 top-[15px] z-10 flex flex-col" aria-label={t('Draft grocery item checkboxes')}>
                   {inputText.split(/\r?\n/).map((_, index) => (
                     <button
                       key={index}
                       type="button"
-                      aria-label={`${draftCheckedItems.includes(index) ? 'Uncheck' : 'Check'} grocery item ${index + 1}`}
+                      aria-label={`${t(draftCheckedItems.includes(index) ? 'Uncheck' : 'Check')} ${t('grocery item')} ${index + 1}`}
                       aria-pressed={draftCheckedItems.includes(index)}
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={() => setDraftCheckedItems((current) => (
@@ -1149,10 +1151,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 spellCheck={true}
                 enterKeyHint={composerMode === 'grocery_list' ? 'enter' : 'send'}
                 placeholder={
-                  composerMode === 'grocery_list' ? 'New grocery list'
+                  t(composerMode === 'grocery_list' ? 'New grocery list'
                     : composerMode === 'meal' ? 'Add new meal'
                       : composerMode === 'plan' ? 'Add new plan'
-                        : 'Message...'
+                        : 'Message...')
                 }
                 value={inputText}
                 onChange={handleTextareaChange}
@@ -1222,7 +1224,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             <>
               <motion.button
                 type="button"
-                aria-label="Close call menu"
+                aria-label={t('Close call menu')}
                 className="fixed inset-0 z-[10000] cursor-default"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -1244,10 +1246,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                 className="fixed z-[10001] w-52 rounded-2xl border border-white/10 bg-[#202024]/90 p-2 shadow-xl"
               >
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400">Start a call</div>
+                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400">{t('Start a call')}</div>
                 {([
-                  ['audio', 'Voice call', PhoneCall],
-                  ['video', 'Video call', VideoCamera],
+                  ['audio', t('Voice call'), PhoneCall],
+                  ['video', t('Video call'), VideoCamera],
                 ] as const).map(([kind, label, Icon]) => (
                   <button
                     key={kind}

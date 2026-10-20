@@ -98,9 +98,7 @@ Deno.serve(async (request) => {
 
   const actorIds = Array.from(new Set(allowedEvents.map((item) => item.actor_id).filter(Boolean))) as string[];
   const [{ data: profiles, error: profileError }, { data: trip, error: tripError }] = await Promise.all([
-    actorIds.length
-      ? admin.from('profiles').select('id, display_name').in('id', actorIds)
-      : Promise.resolve({ data: [], error: null }),
+    admin.from('profiles').select('id, display_name, language').in('id', Array.from(new Set([...actorIds, recipientId]))),
     tripId ? admin.from('trips').select('name').eq('id', tripId).maybeSingle() : Promise.resolve({ data: null, error: null }),
   ]);
   if (profileError) console.error('Could not load notification sender names:', profileError);
@@ -109,10 +107,13 @@ Deno.serve(async (request) => {
   const latestCall = [...allowedEvents].reverse().find((item) => item.category === 'calls');
   const latest = latestCall || allowedEvents[allowedEvents.length - 1];
   const senderName = profiles?.find((profile) => profile.id === latest.actor_id)?.display_name || 'Trip member';
+  const language = profiles?.find((profile) => profile.id === recipientId)?.language === 'fi' ? 'fi' : 'en';
   const isCall = latest.category === 'calls';
   const tripName = trip?.name || 'Trip';
   const title = senderName;
-  const callType = /video/i.test(latest.preview) ? 'Video call' : 'Voice call';
+  const callType = language === 'fi'
+    ? /video/i.test(latest.preview) ? 'Videopuhelu' : 'Äänipuhelu'
+    : /video/i.test(latest.preview) ? 'Video call' : 'Voice call';
   const preview = latest.preview.toLowerCase();
   const isGrocery = /^(sent|updated) (a )?grocery list|^updated the grocery list/.test(preview);
   const isMeal = /^(added|updated) (a )?meal|^added or updated a meal/.test(preview);
@@ -130,14 +131,39 @@ Deno.serve(async (request) => {
             : isPlan
               ? 'Plan'
               : 'Chat';
+  const localizedCategory = language === 'fi'
+    ? ({ Call: 'Puhelu', Poll: 'Kysely', Chat: 'Viesti', Grocery: 'Ostoslista', Meal: 'Ateria', Plan: 'Suunnitelma' } as const)[category]
+    : category;
+  const previewTranslations: Record<string, string> = {
+    'Updated a grocery list': 'Ostoslistaa päivitettiin',
+    'Updated the grocery list': 'Ostoslistaa päivitettiin',
+    'Sent a grocery list': 'Lähetti ostoslistan',
+    'Added a meal': 'Lisäsi aterian',
+    'Updated a meal': 'Päivitti ateriaa',
+    'Added or updated a meal': 'Lisäsi tai päivitti ateriaa',
+    'Added a plan': 'Lisäsi suunnitelman',
+    'Updated a plan': 'Päivitti suunnitelmaa',
+    'Added or updated a plan': 'Lisäsi tai päivitti suunnitelmaa',
+    'Sent a photo': 'Lähetti kuvan',
+    'Poll results are ready': 'Kyselyn tulokset ovat valmiit',
+    'Edited a message': 'Muokkasi viestiä',
+    'Created a poll': 'Loi kyselyn',
+    'Reacted to a message': 'Reagoi viestiin',
+    'Voted in a poll': 'Äänesti kyselyssä',
+    'Liked a meal': 'Tykkäsi ateriasta',
+    'Updated plan attendance': 'Päivitti suunnitelman osallistujia',
+  };
+  const translatedPreview = language === 'fi' ? previewTranslations[latest.preview] || latest.preview : latest.preview;
   const messagePreview = isCall
     ? callType
     : allowedEvents.length > 1
-      ? `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
-      : latest.preview;
+      ? language === 'fi'
+        ? `${translatedPreview} (+${allowedEvents.length - 1} päivitystä)`
+        : `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
+      : translatedPreview;
   const body = isCall
-    ? `From ${tripName}\n${category}\n${callType}`
-    : `From ${tripName}\n${category}\n${messagePreview}`;
+    ? `${language === 'fi' ? 'Matkalta' : 'From'} ${tripName}\n${localizedCategory}\n${callType}`
+    : `${language === 'fi' ? 'Matkalta' : 'From'} ${tripName}\n${localizedCategory}\n${messagePreview}`;
   const appBase = new URL(Deno.env.get('APP_PUBLIC_URL') || supabaseUrl);
   if (!appBase.pathname.endsWith('/')) appBase.pathname += '/';
   const destination = new URL((latest.destination || '/').replace(/^\/+/, ''), appBase).href;
@@ -148,7 +174,7 @@ Deno.serve(async (request) => {
     renotify: false,
     badge: allowedEvents.length,
     url: destination,
-    actions: isCall ? [{ action: 'join', title: 'Join' }] : [],
+    actions: isCall ? [{ action: 'join', title: language === 'fi' ? 'Liity' : 'Join' }] : [],
   });
 
   webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);

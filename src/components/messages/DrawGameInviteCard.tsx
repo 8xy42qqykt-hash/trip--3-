@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 let gameCardSubscriptionSequence = 0;
 
@@ -9,6 +10,7 @@ interface DrawGameInviteCardProps {
 }
 
 export const DrawGameInviteCard: React.FC<DrawGameInviteCardProps> = ({ gameId, onOpen }) => {
+  const { t } = useLanguage();
   const [game, setGame] = useState<{ status: string; players: string[] } | null>(null);
 
   useEffect(() => {
@@ -46,12 +48,12 @@ export const DrawGameInviteCard: React.FC<DrawGameInviteCardProps> = ({ gameId, 
 
   return (
     <div className="min-w-[200px]">
-      <p className="mb-1 text-xs font-semibold text-white/70">Draw and Guess</p>
+      <p className="mb-1 text-xs font-semibold text-white/70">{t('Draw and Guess')}</p>
       <p className="text-sm text-white">
-        {game?.status === 'finished' ? 'Game finished'
+        {t(game?.status === 'finished' ? 'Game finished'
           : game?.status === 'cancelled' ? 'Game cancelled'
             : game?.status === 'playing' ? 'Game in progress'
-              : 'A game is ready to join'}
+              : 'A game is ready to join')}
       </p>
       {game && game.status !== 'finished' && game.status !== 'cancelled' && gameId && (
         <button
@@ -63,7 +65,7 @@ export const DrawGameInviteCard: React.FC<DrawGameInviteCardProps> = ({ gameId, 
           }}
           className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]"
         >
-          {game.status === 'lobby' ? `Join game · ${game.players.length} joined` : 'Open game'}
+          {game.status === 'lobby' ? `${t('Join game')} · ${game.players.length} ${t('joined')}` : t('Open game')}
         </button>
       )}
     </div>

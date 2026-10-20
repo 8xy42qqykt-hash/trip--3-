@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { BottomSheet } from '../common/BottomSheet';
 import { CustomToggle } from '../common/CustomToggle';
 import { Trash, Plus } from '@phosphor-icons/react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface PollSheetProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
   onClose,
   onCreatePoll,
 }) => {
+  const { t } = useLanguage();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState<string[]>(['', '']);
   const [multiple, setMultiple] = useState(false);
@@ -79,7 +81,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
     <BottomSheet isOpen={isOpen} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 py-1">
         <div className="text-lg font-bold text-white px-1">
-          Create a Poll
+          {t('Create a Poll')}
         </div>
 
         <div>
@@ -92,7 +94,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
             autoCapitalize="sentences"
             autoCorrect="on"
             spellCheck={true}
-            placeholder="Ask question..."
+            placeholder={t('Ask question...')}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleQuestionKeyDown}
@@ -115,7 +117,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
                   autoCapitalize="sentences"
                   autoCorrect="on"
                   spellCheck={true}
-                  placeholder={`Option ${idx + 1}`}
+                  placeholder={`${t('Option')} ${idx + 1}`}
                   value={opt}
                   onChange={(e) => handleOptionChange(idx, e.target.value)}
                   onKeyDown={(e) => handleOptionKeyDown(idx, e)}
@@ -142,7 +144,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
             className="text-sm font-semibold text-[#0A84FF] self-start py-1.5 flex items-center gap-1 active-press cursor-pointer"
           >
             <Plus size={16} weight="bold" />
-            <span>Add option</span>
+            <span>{t('Add option')}</span>
           </button>
         )}
 
@@ -150,7 +152,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
           <CustomToggle
             checked={multiple}
             onChange={setMultiple}
-            label="Multiple answers"
+            label={t('Multiple answers')}
           />
         </div>
 
@@ -159,7 +161,7 @@ export const PollSheet: React.FC<PollSheetProps> = ({
           disabled={!canSubmit || loading}
           className="w-full h-13 mt-1 mb-3 rounded-[22px] bg-[#0A84FF] text-white font-bold text-base flex items-center justify-center active-press cursor-pointer disabled:opacity-40 shadow-sm"
         >
-          {loading ? 'Creating...' : 'Create Poll'}
+          {t(loading ? 'Creating...' : 'Create Poll')}
         </button>
       </form>
     </BottomSheet>

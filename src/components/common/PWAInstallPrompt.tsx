@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DownloadSimple, X } from '@phosphor-icons/react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -61,6 +62,7 @@ export function usePWAInstall() {
 }
 
 export const PWAInstallPrompt: React.FC = () => {
+  const { t } = useLanguage();
   const { isInstallable, isInstalled, isMobileDevice, install } = usePWAInstall();
   const [showModal, setShowModal] = useState(false);
 
@@ -74,7 +76,7 @@ export const PWAInstallPrompt: React.FC = () => {
         className="min-h-[48px] px-5 flex items-center gap-2 rounded-full text-sm font-semibold text-[#0A84FF] bg-white/10 active-press cursor-pointer border border-white/10 hover:bg-white/15"
       >
         <DownloadSimple size={18} weight="bold" />
-        <span>Install App</span>
+        <span>{t('Install App')}</span>
       </button>
     );
   }
@@ -88,7 +90,7 @@ export const PWAInstallPrompt: React.FC = () => {
           className="min-h-[48px] px-5 flex items-center gap-2 rounded-full text-sm font-semibold text-[#0A84FF] bg-white/10 active-press cursor-pointer border border-white/10 hover:bg-white/15"
         >
           <DownloadSimple size={18} weight="bold" />
-          <span>Install App</span>
+          <span>{t('Install App')}</span>
         </button>
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -101,7 +103,7 @@ export const PWAInstallPrompt: React.FC = () => {
               className="relative z-10 w-full max-w-xs bg-[#1e1e22] border border-white/10 rounded-[28px] p-6 shadow-2xl animate-calm-fade-in"
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-base font-bold text-white">Install on Mobile</span>
+                <span className="text-base font-bold text-white">{t('Install on Mobile')}</span>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
@@ -111,15 +113,15 @@ export const PWAInstallPrompt: React.FC = () => {
                 </button>
               </div>
               <div className="text-sm text-slate-300 space-y-2 mb-5">
-                <p>1. Tap the Share button in your browser toolbar.</p>
-                <p>2. Select &quot;Add to Home Screen&quot;.</p>
+                <p>{t('1. Tap the Share button in your browser toolbar.')}</p>
+                <p>{t('2. Select "Add to Home Screen".')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
                 className="w-full min-h-[48px] rounded-[20px] bg-[#0A84FF] text-white font-semibold text-sm active-press cursor-pointer"
               >
-                Got it
+                {t('Got it')}
               </button>
             </div>
           </div>

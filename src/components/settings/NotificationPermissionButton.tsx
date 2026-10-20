@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Bell } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 type NotificationCategory = 'messages' | 'calls' | 'polls' | 'reactions' | 'invitations' | 'trip_updates';
 type NotificationPreferences = {
@@ -23,6 +24,7 @@ const decodeVapidKey = (key: string) => {
 };
 
 export const NotificationPermissionButton: React.FC = () => {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [status, setStatus] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -203,14 +205,14 @@ export const NotificationPermissionButton: React.FC = () => {
           <Bell size={18} weight="bold" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white">Notifications</p>
-          <p className="text-xs text-slate-400">{preferences.enabled ? 'On for this device' : 'Off for this device'}</p>
+          <p className="text-sm font-semibold text-white">{t('Notifications')}</p>
+          <p className="text-xs text-slate-400">{t(preferences.enabled ? 'On for this device' : 'Off for this device')}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={preferences.enabled}
-          aria-label="Turn notifications on or off"
+          aria-label={t('Turn notifications on or off')}
           onClick={() => void toggleNotifications()}
           disabled={isLoading || isBusy}
           className={`relative h-8 w-[54px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60 ${
@@ -223,9 +225,9 @@ export const NotificationPermissionButton: React.FC = () => {
           />
         </button>
       </div>
-      {isLoading && <p className="mt-2 text-xs text-slate-400">Loading notification settings…</p>}
-      {isBusy && <p className="mt-2 text-xs text-slate-400">Updating notification settings…</p>}
-      {status && <p role="status" className="mt-3 text-xs text-slate-300">{status}</p>}
+      {isLoading && <p className="mt-2 text-xs text-slate-400">{t('Loading notification settings…')}</p>}
+      {isBusy && <p className="mt-2 text-xs text-slate-400">{t('Updating notification settings…')}</p>}
+      {status && <p role="status" className="mt-3 text-xs text-slate-300">{t(status)}</p>}
     </div>
   );
 };
