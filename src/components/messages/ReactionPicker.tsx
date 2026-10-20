@@ -70,7 +70,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const menuHeight = 104 + (onEdit ? 44 : 0) + (onAction ? 44 : 0) + (isOwnMessage && onDelete ? 44 : 0);
   const menuWidth = 216;
 
-  // Top and bottom clearance from header and input/nav bars
+  // Top and bottom clearance from header and the live composer controls.
   const topMargin = 124;
   const bottomMargin = 96;
 
@@ -88,8 +88,17 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const bubbleWidth = bubbleRect ? Math.min(maxAvailableWidth, Math.ceil(bubbleRect.width)) : 220;
   const originalBubbleTop = bubbleRect ? bubbleRect.top : (windowH - bubbleHeight) / 2;
 
+  const clearanceElements = typeof document !== 'undefined'
+    ? Array.from(document.querySelectorAll<HTMLElement>('[data-reaction-clearance]'))
+    : [];
+  const composerTop = clearanceElements.reduce((top, element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.height > 0 ? Math.min(top, rect.top) : top;
+  }, windowH - bottomMargin);
+  const availableBottom = Math.max(0, Math.min(windowH - bottomMargin, composerTop - gap));
+
   const minBubbleTop = topMargin + reactionBarHeight + gap;
-  const maxBubbleTop = Math.max(minBubbleTop, windowH - bottomMargin - menuHeight - gap - bubbleHeight);
+  const maxBubbleTop = Math.max(minBubbleTop, availableBottom - menuHeight - gap - bubbleHeight);
 
   let targetBubbleTop = originalBubbleTop;
   if (targetBubbleTop < minBubbleTop) {

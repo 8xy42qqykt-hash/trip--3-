@@ -933,8 +933,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             WebkitBackdropFilter: 'blur(24px) saturate(180%)',
             bottom: isKeyboardOpen
               ? `${Math.max(8, keyboardOffset + 6) + 96}px`
-              : 'calc(156px + env(safe-area-inset-bottom, 0px))',
+              : 'calc(144px + env(safe-area-inset-bottom, 0px))',
           }}
+          data-reaction-clearance
           className="absolute left-3.5 right-3.5 z-30 px-4 py-2.5 flex items-center gap-2 bg-[#202024]/90 border border-white/[0.12] rounded-[20px] text-xs text-white shadow-lg animate-spring-in transition-[bottom] duration-150 ease-out"
         >
           <div className="min-w-0 flex-1">
@@ -960,8 +961,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         style={{
           bottom: isKeyboardOpen
             ? `${Math.max(8, keyboardOffset + 6)}px`
-            : 'calc(66px + env(safe-area-inset-bottom, 0px))',
+            : 'calc(54px + env(safe-area-inset-bottom, 0px))',
         }}
+        data-reaction-clearance
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
         {composerError && (
@@ -1047,6 +1049,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   WebkitBackdropFilter: 'blur(30px) saturate(190%)',
                   backgroundColor: 'rgba(28, 28, 32, 0.94)',
                 }}
+                data-reaction-clearance
                 className="absolute left-0 bottom-14 z-40 flex w-48 flex-col border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] origin-bottom-left animate-pop-in"
               >
                 <button
@@ -1110,8 +1113,38 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
+          {onlineMembers.length > 0 && (
+            <div
+              aria-label={`${onlineMembers.length} members currently active`}
+              title={`${onlineMembers.length} members currently active`}
+              className="absolute bottom-[calc(100%+8px)] right-0 flex shrink-0 items-center justify-end -space-x-2"
+            >
+              {onlineMembers.slice(0, 7).map((member) => (
+                <button
+                  key={member.userId}
+                  type="button"
+                  onClick={() => setSelectedProfileId(member.userId)}
+                  aria-label={`${t('View profile')}: ${member.profile.display_name}`}
+                  className="relative rounded-full border-2 border-black"
+                >
+                  <Avatar
+                    name={member.profile.display_name}
+                    avatarUrl={member.profile.avatar_url}
+                    color={member.profile.color}
+                    size={28}
+                  />
+                </button>
+              ))}
+              {onlineMembers.length > 7 && (
+                <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                  +{onlineMembers.length - 7}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="flex min-w-0 flex-1 flex-col">
-            {((composerMode === 'meal' || composerMode === 'plan') || onlineMembers.length > 0) && (
+            {(composerMode === 'meal' || composerMode === 'plan') && (
               <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
                 {composerMode === 'plan' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
@@ -1151,35 +1184,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </label>
-                )}
-                {onlineMembers.length > 0 && (
-                  <div
-                    aria-label={`${onlineMembers.length} members currently active`}
-                    title={`${onlineMembers.length} members currently active`}
-                    className="ml-auto flex shrink-0 items-center justify-end -space-x-2"
-                  >
-                    {onlineMembers.slice(0, 7).map((member) => (
-                      <button
-                        key={member.userId}
-                        type="button"
-                        onClick={() => setSelectedProfileId(member.userId)}
-                        aria-label={`${t('View profile')}: ${member.profile.display_name}`}
-                        className="relative rounded-full border-2 border-black"
-                      >
-                        <Avatar
-                          name={member.profile.display_name}
-                          avatarUrl={member.profile.avatar_url}
-                          color={member.profile.color}
-                          size={28}
-                        />
-                      </button>
-                    ))}
-                    {onlineMembers.length > 7 && (
-                      <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
-                        +{onlineMembers.length - 7}
-                      </span>
-                    )}
-                  </div>
                 )}
               </div>
             )}
