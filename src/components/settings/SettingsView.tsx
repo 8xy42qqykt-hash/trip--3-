@@ -250,7 +250,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
   };
 
   return (
-    <CollapsingHeaderLayout title={t('Settings')}>
+    <CollapsingHeaderLayout title={t('Settings')} showScrolledBorder={false}>
       <div className="space-y-6 pt-2 pb-24">
         <div className="flex flex-col items-center text-center pt-2">
           <div className="relative mb-3">

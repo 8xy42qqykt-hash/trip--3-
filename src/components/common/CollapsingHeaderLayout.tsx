@@ -10,6 +10,7 @@ interface CollapsingHeaderLayoutProps {
   headerSubContent?: React.ReactNode;
   children: React.ReactNode;
   showBackButton?: boolean;
+  showScrolledBorder?: boolean;
 }
 
 export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
@@ -19,6 +20,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
   headerSubContent,
   children,
   showBackButton = true,
+  showScrolledBorder = true,
 }) => {
   const { t } = useLanguage();
   const { exitTrip } = useTrip();
@@ -49,7 +51,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
           }}
         />
         <div className={`relative z-10 h-12 px-4 flex items-center justify-between transition-all duration-200 ${
-          isScrolled ? 'border-b border-white/[0.08]' : 'border-b border-transparent'
+          showScrolledBorder && isScrolled ? 'border-b border-white/[0.08]' : 'border-b border-transparent'
         }`}>
           <div className="w-24 flex items-center">
             {topBarLeft ? (
@@ -69,8 +71,8 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
 
           {/* Small Title on scroll */}
           <h2
-            className={`text-base font-bold text-white transition-all duration-200 truncate ${
-              isScrolled ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1.5 pointer-events-none'
+            className={`max-w-[45%] truncate text-center text-base font-bold text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isScrolled ? 'pointer-events-auto translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
             }`}
           >
             {title}
@@ -95,7 +97,9 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
         <div aria-hidden="true" className="h-[calc(env(safe-area-inset-top,0px)+3rem)]" />
         {/* Large Title Section */}
         <div className="px-5 pt-3 pb-3">
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+          <h1 className={`origin-center text-center text-3xl font-extrabold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isScrolled ? 'pointer-events-none -translate-y-3 scale-[0.96] opacity-0' : 'translate-y-0 scale-100 opacity-100'
+          }`}>
             {title}
           </h1>
           {headerSubContent && <div className="mt-2">{headerSubContent}</div>}

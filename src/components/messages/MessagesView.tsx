@@ -89,6 +89,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string } | null>(null);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
+  const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -102,6 +103,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const planDateInputRef = useRef<HTMLInputElement>(null);
   const planTimeInputRef = useRef<HTMLInputElement>(null);
   const isFilteredView = viewMode !== 'messages';
+  const pageTitle = isFilteredView
+    ? viewMode === 'grocery_list' ? t('Groceries') : t('Plans')
+    : currentTrip?.name || '';
   const seenCallIdsRef = useRef(new Set<string>());
   const trackedCallRef = useRef<{ callId: string; startedAt: number } | null>(null);
 
@@ -661,6 +665,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }
 
   const hasOpenPolls = polls.some((p) => !p.is_closed);
+  const handleChatScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    setIsTitleCollapsed(event.currentTarget.scrollTop > 40);
+  };
 
   // Filter mention candidate members
   const mentionCandidates =
@@ -699,11 +706,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             <span>{t('Trips')}</span>
           </button>
 
-          <div className="flex flex-col items-center max-w-[200px] truncate text-center">
-            <span className="text-base font-bold text-white tracking-tight truncate">
-              {isFilteredView
-                ? viewMode === 'grocery_list' ? t('Groceries') : t('Plans')
-                : currentTrip.name}
+          <div className="flex max-w-[200px] flex-col items-center truncate text-center">
+            <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
+            }`}>
+              {pageTitle}
             </span>
             <span className="text-[11px] text-slate-400 font-medium -mt-0.5">
               {tripMembers.length} {tripMembers.length === 1 ? t('Member') : t('members')}
@@ -760,6 +767,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       <CustomScrollArea
         className="-mt-[calc(3.5rem+env(safe-area-inset-top,0px))] flex-1 overflow-hidden"
         scrollRef={scrollRef}
+        onScroll={handleChatScroll}
       >
         <div
           onClick={handleEmptySpaceTap}
@@ -771,6 +779,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               : '194px',
           }}
         >
+          <h1 className={`mb-4 origin-center text-center text-3xl font-extrabold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            isTitleCollapsed ? 'pointer-events-none -translate-y-3 scale-[0.96] opacity-0' : 'translate-y-0 scale-100 opacity-100'
+          }`}>
+            {pageTitle}
+          </h1>
           {messageGroups.map(({ message, isFirstInGroup, isLastInGroup, showDaySeparator, dayLabel }) => {
             const replyMsg = message.reply_to
               ? visibleMessages.find((m) => m.id === message.reply_to)

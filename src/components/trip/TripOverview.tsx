@@ -139,6 +139,7 @@ export const TripOverview: React.FC = () => {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
 
   const sharedPhotos = useMemo(
@@ -237,7 +238,10 @@ export const TripOverview: React.FC = () => {
   if (!currentTrip) return null;
 
   return (
-    <div className="h-full overflow-y-auto bg-black px-4 pb-32 text-white">
+    <div
+      onScroll={(event) => setIsTitleCollapsed(event.currentTarget.scrollTop > 40)}
+      className="h-full overflow-y-auto bg-black px-4 pb-32 text-white"
+    >
       <header
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         className="sticky top-0 isolate z-20 -mx-4 mb-4 shrink-0 px-4"
@@ -254,12 +258,20 @@ export const TripOverview: React.FC = () => {
             <CaretLeft size={20} weight="bold" /> <span>{t('Trips')}</span>
           </button>
           <div className="flex max-w-[200px] flex-col truncate text-center">
-            <span className="truncate text-base font-bold tracking-tight text-white">{currentTrip.name}</span>
+            <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
+            }`}>{currentTrip.name}</span>
             <span className="-mt-0.5 text-[11px] font-medium text-slate-400">{tripMembers.length} {tripMembers.length === 1 ? 'member' : 'members'}</span>
           </div>
           <div className="w-14" />
         </div>
       </header>
+
+      <h1 className={`mb-5 origin-center text-center text-3xl font-extrabold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        isTitleCollapsed ? 'pointer-events-none -translate-y-3 scale-[0.96] opacity-0' : 'translate-y-0 scale-100 opacity-100'
+      }`}>
+        {currentTrip.name}
+      </h1>
 
       <section className="mb-7">
         <div className="mb-3 flex items-center gap-2">

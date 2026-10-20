@@ -508,7 +508,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                   onPointerMove={onCanvasMove}
                   onPointerUp={() => void onCanvasUp()}
                   onPointerCancel={() => void onCanvasUp()}
-                  className={`block h-full w-full rounded-xl bg-black ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
+                  className={`block h-full w-full rounded-xl bg-white ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
                   aria-label={t('Live drawing canvas')}
                 />
                 {isDrawer && !game.winner_id && (
@@ -552,7 +552,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                     enterKeyHint="send"
                   />
                 </div>
-                <div className={`flex shrink-0 items-center justify-end transition-[width,opacity] duration-200 ease-out ${guessText.trim() ? 'w-10 opacity-100' : 'w-0 opacity-0'}`}>
+                <div className={`flex shrink-0 items-center justify-end overflow-hidden transition-[width,opacity] duration-200 ease-out ${guessText.trim() ? 'w-10 opacity-100' : 'w-0 opacity-0'}`}>
                   <button
                     type="submit"
                     aria-label={t('Send guess')}
@@ -562,7 +562,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                       event.preventDefault();
                       void submitGuess();
                     }}
-                    className={`flex h-10 w-10 origin-right items-center justify-center rounded-full bg-[#0A84FF] transition-transform duration-200 ${guessText.trim() ? 'scale-100' : 'scale-0'}`}
+                    className={`flex h-10 w-10 shrink-0 origin-right items-center justify-center rounded-full bg-[#0A84FF] transition-transform duration-200 ${guessText.trim() ? 'scale-100' : 'scale-0'}`}
                   >
                     <ArrowUp size={17} weight="bold" />
                   </button>
@@ -571,13 +571,11 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             )}
           </>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <div className="w-full max-w-sm space-y-3">
+          <div className="flex flex-1 flex-col items-center justify-center">
+            <div className="w-full max-w-sm space-y-2">
+              <h2 className="mb-4 text-center text-xl font-bold">{t('Draw and Guess')}</h2>
               {(game?.participant_ids || game?.players || []).map((id) => (
-                <div key={id} className="flex items-center gap-3">
-                  <span className="flex-1 text-sm">{memberName(id)}</span>
-                  <span className="text-sm font-semibold">{game?.scores?.[id] || 0} {t('rounds won')}</span>
-                </div>
+                <p key={id} className="text-sm">{memberName(id)}:{game?.scores?.[id] || 0}</p>
               ))}
             </div>
           </div>
