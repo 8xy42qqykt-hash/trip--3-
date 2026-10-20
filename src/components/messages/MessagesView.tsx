@@ -779,7 +779,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         }}
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
-        {onlineMembers.length > 0 && (
+        {onlineMembers.length > 0 && composerMode !== 'meal' && composerMode !== 'plan' && (
           <div
             aria-label={`${onlineMembers.length} members currently active`}
             title={`${onlineMembers.length} members currently active`}
@@ -1006,6 +1006,29 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     />
                   </label>
+                )}
+                {onlineMembers.length > 0 && (
+                  <div
+                    aria-label={`${onlineMembers.length} members currently active`}
+                    title={`${onlineMembers.length} members currently active`}
+                    className="ml-auto flex shrink-0 items-center justify-end -space-x-2"
+                  >
+                    {onlineMembers.slice(0, 7).map((member) => (
+                      <div key={member.userId} className="relative rounded-full border-2 border-black">
+                        <Avatar
+                          name={member.profile.display_name}
+                          avatarUrl={member.profile.avatar_url}
+                          color={member.profile.color}
+                          size={28}
+                        />
+                      </div>
+                    ))}
+                    {onlineMembers.length > 7 && (
+                      <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                        +{onlineMembers.length - 7}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
