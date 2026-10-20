@@ -34,6 +34,7 @@ create table if not exists public.draw_games (
   status text not null default 'lobby'
     check (status in ('lobby', 'playing', 'finished', 'cancelled')),
   players uuid[] not null,
+  participant_ids uuid[] not null default '{}',
   scores jsonb not null default '{}'::jsonb,
   round_number integer not null default 0,
   drawer_id uuid references public.profiles(id) on delete set null,
@@ -42,6 +43,10 @@ create table if not exists public.draw_games (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.draw_games
+  add column if not exists participant_ids uuid[] not null default '{}';
+update public.draw_games set participant_ids = players where cardinality(participant_ids) = 0;
 
 alter table public.draw_games drop column if exists word;
 
@@ -140,6 +145,10 @@ begin
   if g.status not in ('lobby', 'playing') then raise exception 'Game is no longer active'; end if;
   update public.draw_games
     set players = case when auth.uid() = any(g.players) then g.players else array_append(g.players, auth.uid()) end,
+        participant_ids = case
+          when auth.uid() = any(g.participant_ids) then g.participant_ids
+          else array_append(g.participant_ids, auth.uid())
+        end,
         updated_at = now()
     where id = p_game_id;
 end;

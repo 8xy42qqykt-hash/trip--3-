@@ -37,7 +37,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
       {/* Sticky top bar */}
       <header
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        className="relative isolate z-20 shrink-0"
+        className="absolute inset-x-0 top-0 isolate z-20"
       >
         <div
           aria-hidden="true"
@@ -88,12 +88,13 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden"
+        className="absolute inset-0 w-full overflow-y-auto overflow-x-hidden"
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
         }}
       >
+        <div aria-hidden="true" className="h-[calc(env(safe-area-inset-top,0px)+3rem)]" />
         {/* Large Title Section */}
         <div className="px-5 pt-3 pb-3">
           <h1 className="text-3xl font-extrabold tracking-tight text-white">

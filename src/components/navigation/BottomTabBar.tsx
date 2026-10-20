@@ -63,10 +63,6 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         className="pointer-events-none absolute inset-x-0 -top-12 bottom-0"
         style={{
           backgroundImage: 'linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.94) 42%, rgba(0, 0, 0, 0) 100%)',
-          backdropFilter: 'blur(28px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-          maskImage: 'linear-gradient(to top, #000 0%, #000 35%, transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to top, #000 0%, #000 35%, transparent 100%)',
         }}
       />
       {/* Completely flush bar with pure black bg and no empty space under nav buttons */}

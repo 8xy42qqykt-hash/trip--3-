@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, Check, Crown, Palette, Play, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowUp, Check, Play } from '@phosphor-icons/react';
 import { Message, TripMember } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { Avatar } from '../common/Avatar';
@@ -10,6 +10,7 @@ type DrawGame = {
   creator_id: string;
   status: 'lobby' | 'playing' | 'finished' | 'cancelled';
   players: string[];
+  participant_ids: string[];
   scores: Record<string, number>;
   round_number: number;
   drawer_id: string | null;
@@ -61,12 +62,27 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
   const [remoteDraft, setRemoteDraft] = useState<Stroke | null>(null);
   const [error, setError] = useState('');
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const draftRef = useRef<Stroke | null>(null);
   const lastBroadcastRef = useRef(0);
   const nextRoundTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const updateKeyboardOffset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return setKeyboardOffset(0);
+      setKeyboardOffset(Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop)));
+    };
+    window.visualViewport?.addEventListener('resize', updateKeyboardOffset);
+    window.visualViewport?.addEventListener('scroll', updateKeyboardOffset);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateKeyboardOffset);
+      window.visualViewport?.removeEventListener('scroll', updateKeyboardOffset);
+    };
+  }, []);
 
   const memberName = useCallback((id: string) => (
     members.find((member) => member.user_id === id)?.profile?.display_name || 'Member'
@@ -79,7 +95,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     }
     const { data, error: loadError } = await supabase
       .from('draw_games')
-      .select('id, trip_id, creator_id, status, players, scores, round_number, drawer_id, drawing, winner_id')
+      .select('id, trip_id, creator_id, status, players, participant_ids, scores, round_number, drawer_id, drawing, winner_id')
       .eq('id', gameId)
       .maybeSingle();
     if (loadError) {
@@ -210,17 +226,18 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     await loadGame();
   };
 
-  const announceResults = async (scores: Record<string, number>) => {
-    const results = Object.entries(scores)
+  const announceResults = async (scores: Record<string, number>, participants: string[]) => {
+    const results = participants
+      .map((id) => [id, scores[id] || 0] as [string, number])
       .sort((a, b) => b[1] - a[1])
       .map(([id, score]) => `${memberName(id)}: ${score}`)
       .join(' · ');
     await sendMessage(
-      `Draw and Guess finished${results ? ` — ${results}` : ''}`,
+      `Draw and Guess results — ${results}`,
       undefined,
       undefined,
       'text',
-      { gameId, gameSummary: true, scores },
+      { gameId, gameSummary: true, scores, participants },
     );
   };
 
@@ -236,7 +253,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             setError('Could not finish the game.');
             return;
           }
-          await announceResults(game.scores || {});
+          await announceResults(game.scores || {}, game.participant_ids || game.players);
         })();
       } else {
         void startRound();
@@ -287,7 +304,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       return;
     }
     if (finished) {
-      await announceResults(game.scores || {});
+      await announceResults(game.scores || {}, game.participant_ids || game.players);
     }
     onClose();
   };
@@ -372,68 +389,51 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   const playerProfiles = game?.players.map((id) => members.find((member) => member.user_id === id)).filter(Boolean) || [];
 
   return (
-    <div className="fixed inset-0 z-[12000] flex flex-col bg-[#08090c] text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-white/10 px-4">
-        <button type="button" onClick={() => void closeGame()} aria-label="Leave game" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+    <div className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
+        <button type="button" onClick={() => void closeGame()} aria-label="Cancel game or leave game" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
           <ArrowLeft size={21} />
         </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold">Draw and Guess</p>
-          <p className="text-xs text-white/55">{game?.status === 'playing' ? `Round ${game.round_number}` : game?.status || 'Loading'}</p>
-        </div>
+        {game?.status === 'playing' && (
+          <div className="flex min-w-0 flex-1 items-center -space-x-2 overflow-hidden">
+            {playerProfiles.map((member) => member?.profile && (
+              <span key={member.user_id} className="shrink-0 rounded-full border-2 border-black">
+                <Avatar name={member.profile.display_name} avatarUrl={member.profile.avatar_url} color={member.profile.color} size={30} />
+              </span>
+            ))}
+          </div>
+        )}
+        {game?.status === 'lobby' && <div className="flex-1" />}
         {game?.status === 'lobby' && game.creator_id === userId && (
-          <>
-            <button
-              type="button"
-              onClick={() => void closeGame()}
-              className="min-h-10 rounded-full bg-white/10 px-3 text-sm font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={game.players.length < 2}
-              onClick={() => void startRound()}
-              className="flex min-h-10 items-center gap-2 rounded-full bg-[#0A84FF] px-4 text-sm font-bold disabled:opacity-40"
-            >
-              <Play size={17} weight="fill" /> Start
-            </button>
-          </>
+          <button
+            type="button"
+            disabled={game.players.length < 2}
+            onClick={() => void startRound()}
+            aria-label="Start game"
+            className="flex min-h-10 items-center gap-2 rounded-full bg-[#0A84FF] px-4 text-sm font-bold disabled:opacity-40"
+          >
+            <Play size={17} weight="fill" /> Start
+          </button>
         )}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
-        <div className="flex shrink-0 items-center gap-2 overflow-x-auto">
-          {playerProfiles.map((member) => member?.profile && (
-            <div key={member.user_id} className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 py-1 pl-1 pr-3">
-              <Avatar name={member.profile.display_name} avatarUrl={member.profile.avatar_url} color={member.profile.color} size={28} />
-              <span className="max-w-24 truncate text-xs">{member.profile.display_name}</span>
-              {game?.creator_id === member.user_id && <Crown size={13} className="text-amber-300" />}
-              <span className="text-xs text-white/60">{game?.scores?.[member.user_id] || 0}</span>
-            </div>
-          ))}
-          {game?.status === 'lobby' && game.players.length < 2 && (
-            <span className="shrink-0 text-xs text-white/55">Waiting for another player to join</span>
-          )}
-        </div>
-
+      <div
+        className="flex min-h-0 flex-1 flex-col px-4 pt-3"
+        style={{ paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? `${Math.max(62, keyboardOffset + 58)}px` : '12px' }}
+      >
         {game?.status === 'lobby' ? (
-          <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center">
-            <Palette size={42} className="mb-3 text-[#0A84FF]" />
-            <h2 className="text-xl font-bold">Ready to draw?</h2>
-            <p className="mt-2 max-w-xs text-sm text-white/60">
-              {game.creator_id === userId
-                ? 'Wait for friends to join, then start the game.'
-                : 'You joined the lobby. The host will start when everyone is ready.'}
-            </p>
+          <div className="flex flex-col items-start gap-3">
+            {playerProfiles.map((member) => member?.profile && (
+              <div key={member.user_id} className="flex items-center gap-3">
+                <Avatar name={member.profile.display_name} avatarUrl={member.profile.avatar_url} color={member.profile.color} size={38} />
+                <span className="text-sm font-medium">{member.profile.display_name}</span>
+              </div>
+            ))}
           </div>
         ) : game?.status === 'playing' ? (
           <>
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                {isDrawer ? 'Draw this word' : game.drawer_id ? `${memberName(game.drawer_id)} is drawing` : 'Guess the word'}
-              </p>
-              <p className="min-h-8 pt-1 text-xl font-black tracking-wide">{isDrawer ? secretWord : game.winner_id ? `${memberName(game.winner_id)} guessed it!` : '\u00a0'}</p>
+            <div className="shrink-0 py-1 text-center">
+              <p className="min-h-8 text-xl font-black tracking-wide">{isDrawer ? secretWord : game.winner_id ? `${memberName(game.winner_id)} guessed it!` : '\u00a0'}</p>
             </div>
             <canvas
               ref={canvasRef}
@@ -441,8 +441,8 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
               onPointerMove={onCanvasMove}
               onPointerUp={() => void onCanvasUp()}
               onPointerCancel={() => void onCanvasUp()}
-              style={{ width: 'min(100%, 43vh)' }}
-              className={`mx-auto aspect-square max-h-[43vh] shrink-0 rounded-2xl bg-white ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
+              style={{ width: 'min(100%, 40vh)' }}
+              className={`mx-auto aspect-square max-h-[40vh] shrink-0 rounded-xl bg-white ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
               aria-label="Live drawing canvas"
             />
             {isDrawer && !game.winner_id && (
@@ -461,45 +461,49 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                 ))}
               </div>
             )}
-            <div className="flex min-h-24 flex-1 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/[0.05] p-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2">
               {guesses.map((item) => (
                 <p key={item.id} className={`text-sm ${item.correct ? 'font-bold text-emerald-300' : 'text-white/80'}`}>
                   <span className="font-semibold">{memberName(item.user_id)}:</span> {item.guess}
                   {item.correct && ' ✓'}
                 </p>
               ))}
-              {guesses.length === 0 && <p className="text-center text-xs text-white/35">Guesses appear here</p>}
             </div>
             {!isDrawer && !game.winner_id && (
-              <form onSubmit={(event) => void submitGuess(event)} className="flex min-h-12 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-[#1d1e22] px-4">
+              <form
+                onSubmit={(event) => void submitGuess(event)}
+                style={{ bottom: `calc(${Math.max(8, keyboardOffset + 8)}px + env(safe-area-inset-bottom, 0px))` }}
+                className="fixed left-3.5 right-3.5 z-[12001] mx-auto flex min-h-[46px] max-w-2xl items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+              >
                 <input
                   value={guessText}
                   onChange={(event) => setGuessText(event.target.value)}
                   placeholder="Type your guess"
-                  className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-white/40"
+                  className="min-w-0 flex-1 bg-transparent py-2.5 text-base outline-none placeholder:text-white/40"
                   enterKeyHint="send"
                 />
-                <button type="submit" disabled={!guessText.trim()} aria-label="Send guess" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A84FF] disabled:opacity-40">
-                  <ArrowUp size={17} weight="bold" />
-                </button>
+                {guessText.trim() && (
+                  <button type="submit" aria-label="Send guess" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0A84FF]">
+                    <ArrowUp size={17} weight="bold" />
+                  </button>
+                )}
               </form>
             )}
           </>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <h2 className="text-xl font-bold">{game?.status === 'cancelled' ? 'Game cancelled' : 'Game over'}</h2>
-            <p className="mt-2 text-sm text-white/60">
-              {Object.entries(game?.scores || {}).sort((a, b) => b[1] - a[1]).map(([id, score]) => `${memberName(id)} ${score}`).join(' · ') || 'No points scored'}
-            </p>
+            <div className="w-full max-w-sm space-y-3">
+              {(game?.participant_ids || game?.players || []).map((id) => (
+                <div key={id} className="flex items-center gap-3">
+                  <span className="flex-1 text-sm">{memberName(id)}</span>
+                  <span className="text-sm font-semibold">{game?.scores?.[id] || 0} rounds won</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {error && <p role="alert" className="shrink-0 rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</p>}
       </div>
-      {game?.status === 'finished' && (
-        <button type="button" onClick={onClose} className="mx-4 mb-3 flex min-h-12 items-center justify-center gap-2 rounded-full bg-white/10 font-semibold">
-          <X size={18} /> Close
-        </button>
-      )}
     </div>
   );
 };

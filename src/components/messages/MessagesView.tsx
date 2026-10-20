@@ -84,6 +84,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const callButtonRef = useRef<HTMLButtonElement>(null);
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string } | null>(null);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
 
@@ -323,7 +324,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length]);
+  }, [messages.length, pendingPhoto?.id]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -484,18 +485,29 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const previewUrl = URL.createObjectURL(file);
+    setPendingPhoto({ id: `pending-photo-${Date.now()}`, previewUrl });
     setUploadingImage(true);
     setIsPlusMenuOpen(false);
     try {
       const url = await uploadAsset(file, 'chat');
+      await new Promise<void>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('The uploaded photo could not be loaded.'));
+        image.src = url;
+      });
       const replyId = replyingTo?.id;
       setReplyingTo(null);
       await sendMessage('', url, replyId);
+      setPendingPhoto(null);
       setTimeout(scrollToBottom, 50);
     } catch (err) {
       console.warn('Image upload error:', err);
+      setPendingPhoto(null);
       setComposerError(err instanceof Error ? err.message : 'Could not send this photo. Try again.');
     } finally {
+      URL.revokeObjectURL(previewUrl);
       setUploadingImage(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
     }
@@ -567,6 +579,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       creator_id: user.id,
       status: 'lobby',
       players: [user.id],
+      participant_ids: [user.id],
       scores: {},
       drawing: [],
     });
@@ -746,11 +759,15 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       />}
 
       {/* Chat Messages List */}
-      <CustomScrollArea className="flex-1 overflow-hidden" scrollRef={scrollRef}>
+      <CustomScrollArea
+        className="-mt-[calc(3.5rem+env(safe-area-inset-top,0px))] flex-1 overflow-hidden"
+        scrollRef={scrollRef}
+      >
         <div
           onClick={handleEmptySpaceTap}
-          className={`flex flex-col justify-start min-h-full px-4 ${hasOpenPolls ? 'pt-24' : 'pt-3'}`}
+          className="flex min-h-full flex-col justify-start px-4"
           style={{
+            paddingTop: `calc(3.5rem + env(safe-area-inset-top, 0px) + ${hasOpenPolls ? '6rem' : '0.75rem'})`,
             paddingBottom: isKeyboardOpen
               ? `${Math.max(156, keyboardOffset + 146)}px`
               : '194px',
@@ -792,6 +809,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               </React.Fragment>
             );
           })}
+          {pendingPhoto && (
+            <div className="mb-2 flex justify-end" key={pendingPhoto.id} aria-live="polite">
+              <div className="relative max-w-[78%] overflow-hidden rounded-[22px] bg-[#222226]">
+                <img
+                  src={pendingPhoto.previewUrl}
+                  alt="Photo upload preview"
+                  className="block max-h-80 w-auto max-w-full animate-pulse object-contain opacity-45"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                  <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-label="Uploading photo" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </CustomScrollArea>
 
@@ -1088,10 +1119,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 backdropFilter: 'blur(28px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(28px) saturate(180%)',
               }}
-              className="relative flex min-w-0 items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
+              className="relative flex min-w-0 items-start min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
             >
               {composerMode === 'grocery_list' && (
-                <div className="absolute left-3.5 top-[12px] z-10 flex flex-col" aria-label="Draft grocery item checkboxes">
+                <div className="absolute left-3.5 top-[15px] z-10 flex flex-col" aria-label="Draft grocery item checkboxes">
                   {inputText.split(/\r?\n/).map((_, index) => (
                     <button
                       key={index}
@@ -1102,7 +1133,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       onClick={() => setDraftCheckedItems((current) => (
                         current.includes(index) ? current.filter((item) => item !== index) : [...current, index]
                       ))}
-                      className={`mb-[4px] flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-[background-color,border-color,transform] duration-200 ${
+                      className={`mb-[4px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,transform] duration-200 ${
                         draftCheckedItems.includes(index) ? 'border-white bg-white text-[#0A84FF]' : 'border-white/65 bg-transparent'
                       }`}
                     >

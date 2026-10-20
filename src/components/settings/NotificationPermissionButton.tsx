@@ -203,6 +203,7 @@ export const NotificationPermissionButton: React.FC = () => {
           <Bell size={18} weight="bold" />
         </div>
         <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-white">Notifications</p>
           <p className="text-xs text-slate-400">{preferences.enabled ? 'On for this device' : 'Off for this device'}</p>
         </div>
         <button

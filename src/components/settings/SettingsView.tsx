@@ -23,6 +23,7 @@ import { isCloudActive, supabase } from '../../lib/supabase';
 import { PWAInstallPrompt } from '../common/PWAInstallPrompt';
 import { CollapsingHeaderLayout } from '../common/CollapsingHeaderLayout';
 import { NotificationPermissionButton } from './NotificationPermissionButton';
+import { LocationSharingToggle } from './LocationSharingToggle';
 
 interface SettingsViewProps {
   onNavigateToMessages?: (mentionName?: string) => void;
@@ -326,7 +327,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
           </div>
         </div>
 
-        <NotificationPermissionButton />
+        <div className="space-y-4">
+          <NotificationPermissionButton />
+          <LocationSharingToggle tripId={currentTrip.id} userId={user?.id} />
+        </div>
         {isOwner && <section className="space-y-3 border-y border-white/[0.08] py-4">
           <div>
             <h3 className="text-base font-bold text-white">Invite people</h3>
