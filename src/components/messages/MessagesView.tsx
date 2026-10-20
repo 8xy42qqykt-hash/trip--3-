@@ -966,81 +966,83 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
-          {(composerMode === 'meal' || composerMode === 'plan') && (
-            <div className="mb-1.5 flex min-h-8 items-center gap-5 pl-1">
-              {composerMode === 'plan' && (
-                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
-                  <span>{planDate ? formatTripDate(planDate) : 'Add date'}</span>
-                  <input
-                    ref={planDateInputRef}
-                    type="date"
-                    aria-label="Plan date"
-                    value={planDate}
-                    onChange={(event) => setPlanDate(event.target.value)}
-                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                  />
-                </label>
-              )}
-              {composerMode === 'meal' ? (
-                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
-                  <span>{mealTime || 'Add time'}</span>
-                  <input
-                    ref={mealTimeInputRef}
-                    type="time"
-                    aria-label="Meal time"
-                    value={mealTime}
-                    onChange={(event) => setMealTime(event.target.value)}
-                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                  />
-                </label>
-              ) : (
-                <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
-                  <span>{planTime || 'Add time'}</span>
-                  <input
-                    ref={planTimeInputRef}
-                    type="time"
-                    aria-label="Plan time"
-                    value={planTime}
-                    onChange={(event) => setPlanTime(event.target.value)}
-                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                  />
-                </label>
-              )}
-            </div>
-          )}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {(composerMode === 'meal' || composerMode === 'plan') && (
+              <div className="mb-1.5 flex min-h-8 items-center gap-5 pl-1">
+                {composerMode === 'plan' && (
+                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                    <span>{planDate ? formatTripDate(planDate) : 'Add date'}</span>
+                    <input
+                      ref={planDateInputRef}
+                      type="date"
+                      aria-label="Plan date"
+                      value={planDate}
+                      onChange={(event) => setPlanDate(event.target.value)}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                )}
+                {composerMode === 'meal' ? (
+                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                    <span>{mealTime || 'Add time'}</span>
+                    <input
+                      ref={mealTimeInputRef}
+                      type="time"
+                      aria-label="Meal time"
+                      value={mealTime}
+                      onChange={(event) => setMealTime(event.target.value)}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                ) : (
+                  <label className="relative inline-flex min-h-8 cursor-pointer items-center text-sm font-medium text-slate-400 active:text-white">
+                    <span>{planTime || 'Add time'}</span>
+                    <input
+                      ref={planTimeInputRef}
+                      type="time"
+                      aria-label="Plan time"
+                      value={planTime}
+                      onChange={(event) => setPlanTime(event.target.value)}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                )}
+              </div>
+            )}
 
-          {/* Floating Pill Input Box - expands UPWARDS */}
-          <div
-            style={{
-              backdropFilter: 'blur(28px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-            }}
-            className="flex-1 min-w-0 flex items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
-          >
-            <textarea
-              ref={textareaRef}
-              id="chat-message-input"
-              name="message"
-              rows={1}
-              inputMode="text"
-              autoCapitalize="sentences"
-              autoCorrect="on"
-              spellCheck={true}
-              enterKeyHint={composerMode === 'grocery_list' ? 'enter' : 'send'}
-              placeholder={
-                composerMode === 'grocery_list' ? 'New grocery list'
-                  : composerMode === 'meal' ? 'Add new meal'
-                    : composerMode === 'plan' ? 'Add new plan'
-                      : 'Message...'
-              }
-              value={inputText}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-              className="flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] max-h-32 overflow-y-auto"
-              style={{ minHeight: '40px', height: '40px' }}
-            />
+            {/* Floating Pill Input Box - expands UPWARDS */}
+            <div
+              style={{
+                backdropFilter: 'blur(28px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+              }}
+              className="flex min-w-0 items-center min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
+            >
+              <textarea
+                ref={textareaRef}
+                id="chat-message-input"
+                name="message"
+                rows={1}
+                inputMode="text"
+                autoCapitalize="sentences"
+                autoCorrect="on"
+                spellCheck={true}
+                enterKeyHint={composerMode === 'grocery_list' ? 'enter' : 'send'}
+                placeholder={
+                  composerMode === 'grocery_list' ? 'New grocery list'
+                    : composerMode === 'meal' ? 'Add new meal'
+                      : composerMode === 'plan' ? 'Add new plan'
+                        : 'Message...'
+                }
+                value={inputText}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                className="flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] max-h-32 overflow-y-auto"
+                style={{ minHeight: '40px', height: '40px' }}
+              />
+            </div>
           </div>
 
           {/* Send Button - stays anchored at bottom */}
