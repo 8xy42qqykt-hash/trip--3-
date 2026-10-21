@@ -18,6 +18,7 @@ import {
   CircleNotch,
   At,
   Hash,
+  Smiley,
 } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +29,7 @@ import { PollSheet } from './PollSheet';
 import { Avatar } from '../common/Avatar';
 import { TripMemberStack } from '../common/TripMemberStack';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
+import { BottomSheet } from '../common/BottomSheet';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
 import { supabase, uploadAsset } from '../../lib/supabase';
@@ -36,6 +38,7 @@ import { GroupCallManager } from './useGroupCall';
 import { useTripLocations } from '../trip/useTripLocations';
 import { DrawGuessGame } from './DrawGuessGame';
 import { useLanguage } from '../../context/LanguageContext';
+import { CHAT_STICKERS, StickerArtwork } from './StickerArtwork';
 import tripLogo from '../../../trip-logo.png';
 
 interface MessagesViewProps {
@@ -88,6 +91,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [planTime, setPlanTime] = useState('');
   const [draftCheckedItems, setDraftCheckedItems] = useState<number[]>([]);
   const [isPollSheetOpen, setIsPollSheetOpen] = useState(false);
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const callButtonRef = useRef<HTMLButtonElement>(null);
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
@@ -470,6 +474,26 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     window.requestAnimationFrame(() => {
       textarea.setSelectionRange(nextCursor, nextCursor);
     });
+  };
+
+  const openStickerPicker = () => {
+    textareaRef.current?.blur();
+    isInputFocusedRef.current = false;
+    notifyKeyboard(false);
+    setIsKeyboardOpen(false);
+    setKeyboardOffset(0);
+    setMentionQuery(null);
+    setIsStickerPickerOpen(true);
+  };
+
+  const handleSendSticker = async (stickerId: string) => {
+    try {
+      await sendMessage('sticker', undefined, undefined, 'text', { stickerId });
+      setIsStickerPickerOpen(false);
+    } catch (error) {
+      console.error('Could not send sticker:', error);
+      setComposerError(error instanceof Error ? error.message : 'Could not send the sticker. Try again.');
+    }
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -1347,6 +1371,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   ))}
                 </div>
               )}
+              {!isFilteredView && composerMode === 'message' && (
+                <button
+                  type="button"
+                  aria-label={t('Choose a sticker')}
+                  title={t('Choose a sticker')}
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={openStickerPicker}
+                  className="absolute left-2 top-[7px] z-10 flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-colors hover:text-white active:scale-90"
+                >
+                  <Smiley size={21} weight="duotone" />
+                </button>
+              )}
               <textarea
                 ref={textareaRef}
                 id="chat-message-input"
@@ -1374,7 +1410,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 className={`flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden ${
-                  composerMode === 'grocery_list' ? 'pl-8' : ''
+                  composerMode === 'grocery_list' ? 'pl-8' : composerMode === 'message' && !isFilteredView ? 'pl-9' : ''
                 }`}
                 style={{ minHeight: '40px', height: '40px' }}
               />
@@ -1418,6 +1454,28 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         onClose={() => setIsPollSheetOpen(false)}
         onCreatePoll={createPoll}
       />}
+      {!isFilteredView && (
+        <BottomSheet isOpen={isStickerPickerOpen} onClose={() => setIsStickerPickerOpen(false)}>
+          <div className="pb-2 text-center">
+            <h2 className="mb-4 text-center text-lg font-bold text-white">{t('Stickers')}</h2>
+            <div className="grid grid-cols-4 gap-x-3 gap-y-4">
+              {CHAT_STICKERS.map((sticker) => (
+                <button
+                  key={sticker.id}
+                  type="button"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => void handleSendSticker(sticker.id)}
+                  aria-label={`${t('Send sticker')}: ${t(sticker.name)}`}
+                  className="flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1 text-center text-slate-300 transition-colors hover:bg-white/[0.06] active:scale-95"
+                >
+                  <StickerArtwork stickerId={sticker.id} size={66} />
+                  <span className="text-xs font-medium">{t(sticker.name)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </BottomSheet>
+      )}
       <MemberProfileSheet
         profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}
         location={sharedLocations.find((location) => location.user_id === selectedProfileId)}

@@ -17,6 +17,7 @@ import { TripMember } from '../../types';
 import { DrawGameInviteCard } from './DrawGameInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { PhotoLightbox } from '../common/PhotoLightbox';
+import { StickerArtwork } from './StickerArtwork';
 
 interface ChatBubbleProps {
   message: Message;
@@ -276,6 +277,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   const isPollResult = message.type === 'poll_result' && message.metadata;
   const isImageOnly = message.type === 'image' && Boolean(message.image_url);
+  const stickerId = typeof message.metadata?.stickerId === 'string' ? message.metadata.stickerId : null;
+  const isSticker = message.type === 'text' && stickerId !== null;
   const callId = message.metadata?.callId;
 
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
@@ -413,10 +416,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerCancel}
                 onContextMenu={handleContextMenu}
-                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${getBubbleRadiusClasses()} ${
-                  isOwn
-                    ? 'bg-[#0A84FF] text-white shadow-xs'
-                    : 'bg-[#262629] text-white shadow-xs'
+                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${
+                  isSticker
+                    ? 'bg-transparent p-0 shadow-none'
+                    : `px-4 py-2.5 text-[16px] leading-[1.4] ${getBubbleRadiusClasses()} ${
+                      isOwn
+                        ? 'bg-[#0A84FF] text-white shadow-xs'
+                        : 'bg-[#262629] text-white shadow-xs'
+                    }`
                 }`}
               >
                 {/* Reply Preview */}
@@ -438,7 +445,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 )}
 
                 {/* Poll Result Message in Chat Log */}
-                {isPollResult ? (
+                {isSticker ? (
+                  <StickerArtwork
+                    stickerId={stickerId}
+                    size={136}
+                    className="max-w-full drop-shadow-[0_8px_18px_rgba(0,0,0,0.22)]"
+                  />
+                ) : isPollResult ? (
                   <PollResultMessage metadata={message.metadata} isOwn={isOwn} />
                 ) : message.type === 'grocery_list' ? (
                   <div className="min-w-[190px] space-y-2">
