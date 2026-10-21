@@ -1253,7 +1253,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Insert hashtag')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('#')}
-                      className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.72)] transition-colors active:text-white"
+                      className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] transition-colors active:text-white"
                     >
                       #
                       <span>{t('Hashtag')}</span>
@@ -1264,7 +1264,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Mention a member')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('@')}
-                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.72)] transition-colors active:text-white"
+                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] transition-colors active:text-white"
                     >
                       @
                       <span>{t('Mention')}</span>
@@ -1273,7 +1273,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 )}
                 {composerMode === 'plan' && (
                   <>
-                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.72)] active:text-white">
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
                       <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
                       <input
                         ref={planDateInputRef}
@@ -1284,7 +1284,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                         className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                       />
                     </label>
-                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.72)] active:text-white">
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
                       <span>{planTime || t('Add time')}</span>
                       <input
                         ref={planTimeInputRef}
@@ -1298,7 +1298,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   </>
                 )}
                 {composerMode === 'meal' && (
-                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.72)] active:text-white">
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
                     <span>{mealTime || t('Add time')}</span>
                     <input
                       ref={mealTimeInputRef}
