@@ -8,7 +8,7 @@ interface TripMemberStackProps {
 
 export const TripMemberStack: React.FC<TripMemberStackProps> = ({ members }) => (
   <div
-    className="flex shrink-0 -translate-x-[11px] items-center"
+    className="flex shrink-0 items-center"
     aria-label={`${members.length} trip ${members.length === 1 ? 'member' : 'members'}`}
   >
     {members.map((member, index) => (

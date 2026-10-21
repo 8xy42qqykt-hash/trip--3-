@@ -115,6 +115,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     left: number;
     width: number;
     maxHeight: number;
+    composerTop: number;
+    composerBottom: number;
   } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const mealTimeInputRef = useRef<HTMLInputElement>(null);
@@ -796,8 +798,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     let frame = 0;
     let settleTimer = 0;
     const updatePosition = () => {
-      const rect = composerFormRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      const form = composerFormRef.current;
+      if (!form) return;
+      const rect = form.getBoundingClientRect();
+      const composerRect = form.parentElement?.getBoundingClientRect() || rect;
       const viewport = window.visualViewport;
       const viewportTop = viewport?.offsetTop ?? 0;
       const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
@@ -810,6 +814,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         left: rect.left,
         width: rect.width,
         maxHeight: height,
+        composerTop: composerRect.top,
+        composerBottom: composerRect.bottom,
       });
     };
     const schedulePositionUpdate = () => {
@@ -1433,18 +1439,26 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       )}
 
       {mentionQuery !== null && mentionCandidates.length > 0 && mentionListPosition && createPortal(
-        <div className="pointer-events-none fixed inset-0 z-[12002]">
+        <div className="pointer-events-none fixed inset-0 z-[39]">
           <div
             aria-hidden="true"
-            className="mention-autocomplete-backdrop animate-calm-fade-in"
-            style={{ top: `${mentionListPosition.top}px` }}
+            className="mention-autocomplete-backdrop mention-autocomplete-backdrop-top animate-calm-fade-in"
+            style={{
+              top: `${mentionListPosition.top}px`,
+              bottom: `${Math.max(0, window.innerHeight - mentionListPosition.composerTop)}px`,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="mention-autocomplete-backdrop mention-autocomplete-backdrop-bottom animate-calm-fade-in"
+            style={{ top: `${mentionListPosition.composerBottom}px` }}
           />
           <div
             style={{
               top: `${mentionListPosition.top}px`,
               maxHeight: `${mentionListPosition.maxHeight}px`,
             }}
-            className="pointer-events-auto fixed inset-x-0 flex max-h-56 flex-col items-stretch overflow-y-auto px-3 pb-safe animate-calm-fade-in"
+            className="pointer-events-auto fixed inset-x-0 z-[39] flex max-h-56 flex-col items-stretch overflow-y-auto px-3 pb-safe animate-calm-fade-in"
           >
             {mentionCandidates.map((member) => (
               <button

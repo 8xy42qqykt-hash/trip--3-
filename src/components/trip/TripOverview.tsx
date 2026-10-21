@@ -189,6 +189,7 @@ export const TripOverview: React.FC = () => {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
+  const daySwipeStartRef = useRef<number | null>(null);
 
   const sharedPhotos = useMemo(
     () => messages.filter((message) => message.type === 'image' && message.image_url),
@@ -299,7 +300,21 @@ export const TripOverview: React.FC = () => {
         {forecast.length ? (
           <>
             <div
-              className="mb-3 flex gap-2 overflow-x-auto pb-2"
+              onPointerDown={(event) => {
+                daySwipeStartRef.current = event.clientX;
+              }}
+              onPointerUp={(event) => {
+                const startX = daySwipeStartRef.current;
+                daySwipeStartRef.current = null;
+                if (startX === null || Math.abs(event.clientX - startX) < 44 || !selectedForecast) return;
+                const selectedIndex = forecast.findIndex((day) => day.date === selectedForecast.date);
+                const nextIndex = selectedIndex + (event.clientX < startX ? 1 : -1);
+                if (forecast[nextIndex]) setSelectedForecast(forecast[nextIndex]);
+              }}
+              onPointerCancel={() => {
+                daySwipeStartRef.current = null;
+              }}
+              className="mb-4 flex touch-pan-y justify-between gap-1 border-b border-white/[0.08] px-1 pb-2"
               style={{ scrollbarWidth: 'none', touchAction: 'pan-x' }}
             >
               {forecast.map((day) => {
@@ -310,23 +325,14 @@ export const TripOverview: React.FC = () => {
                     type="button"
                     onClick={() => setSelectedForecast(day)}
                     aria-pressed={selected}
-                    className={`flex min-h-[104px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-[20px] border px-2 py-3 text-center transition-[transform,background-color,border-color] duration-200 ${
-                      selected
-                        ? 'scale-[1.03] border-[#0A84FF]/60 bg-gradient-to-b from-[#0A84FF]/25 to-[#0A84FF]/10 text-white shadow-[0_8px_24px_rgba(10,132,255,0.14)]'
-                        : 'border-white/[0.07] bg-white/[0.035] text-slate-400'
+                    className={`flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center text-center transition-[transform,color] duration-200 ${
+                      selected ? 'scale-105 text-white' : 'text-slate-500'
                     }`}
                   >
-                    <span className={`text-xs uppercase leading-none ${selected ? 'font-bold text-white' : 'font-medium'}`}>
+                    <span className={`text-xs uppercase leading-none ${selected ? 'font-bold' : 'font-medium'}`}>
                       {new Date(`${day.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { weekday: 'short' }).slice(0, 3)}
                     </span>
-                    <CloudSun size={20} weight="duotone" className={`my-2 ${selected ? 'text-sky-300' : 'text-slate-500'}`} />
-                    <span className={`text-base leading-none ${selected ? 'font-extrabold text-white' : 'font-semibold text-slate-300'}`}>
-                      {day.maximum}°
-                    </span>
-                    <span className="mt-1 text-[11px] leading-none text-slate-500">
-                      {day.minimum}°
-                    </span>
-                    <span className="sr-only">
+                    <span className={`mt-1.5 leading-none ${selected ? 'text-lg font-extrabold' : 'text-base font-medium'}`}>
                       {new Date(`${day.date}T12:00:00`).getDate()}
                     </span>
                   </button>
@@ -334,37 +340,30 @@ export const TripOverview: React.FC = () => {
               })}
             </div>
             {selectedForecast && (
-              <div className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-gradient-to-br from-[#20232b] via-[#17191f] to-[#111216] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.24)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-bold text-white">
-                      {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-400">{t(weatherDescription(selectedForecast.code))}</p>
-                  </div>
-                  <CloudSun size={34} weight="duotone" className="shrink-0 text-sky-300" />
-                </div>
-                <div className="mt-4 flex items-end justify-between gap-3">
+              <div className="pt-1">
+                <p className="text-lg font-bold text-white">
+                  {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
+                </p>
+                <p className="mt-1 text-sm font-medium text-slate-400">{t(weatherDescription(selectedForecast.code))}</p>
+                <div className="mt-4 flex items-end gap-5">
                   <div>
-                    <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{t('Average')}</span>
-                    <span className="text-5xl font-extrabold leading-none tracking-tight text-white">{selectedForecast.average}°</span>
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('High')}</span>
+                    <span className="text-3xl font-extrabold tracking-tight">{selectedForecast.maximum}°</span>
                   </div>
-                  <div className="flex gap-4 pb-1">
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('High')}</span>
-                      <span className="text-xl font-bold text-white">{selectedForecast.maximum}°</span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Low')}</span>
-                      <span className="text-xl font-bold text-slate-400">{selectedForecast.minimum}°</span>
-                    </div>
+                  <div>
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Low')}</span>
+                    <span className="text-3xl font-extrabold tracking-tight text-slate-400">{selectedForecast.minimum}°</span>
+                  </div>
+                  <div className="ml-auto pb-1 text-right">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Average')}</span>
+                    <span className="text-lg font-bold">{selectedForecast.average}°</span>
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3">
                   {selectedForecast.hours.map((hour) => (
                     <div key={hour.time} className="min-w-0 text-center">
-                      <span className="block text-[11px] font-medium text-slate-500">{hour.time}</span>
-                      <span className="mt-1 block text-sm font-bold text-slate-200">{hour.temperature}°</span>
+                      <span className="block text-[11px] text-slate-400">{hour.time}</span>
+                      <span className="mt-0.5 block text-sm font-semibold text-slate-200">{hour.temperature}°</span>
                     </div>
                   ))}
                 </div>
