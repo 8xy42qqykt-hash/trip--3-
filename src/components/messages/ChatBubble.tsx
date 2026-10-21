@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Heart,
   Check,
@@ -139,14 +139,62 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const lastTapTimeRef = useRef<number>(0);
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const holdPointerIdRef = useRef<number | null>(null);
+  const holdListenersCleanupRef = useRef<(() => void) | null>(null);
   const didLongPressRef = useRef(false);
+  const didMoveDuringPressRef = useRef(false);
+
+  const clearLongPress = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    holdListenersCleanupRef.current?.();
+    holdListenersCleanupRef.current = null;
+    holdPointerIdRef.current = null;
+  };
+
+  useEffect(() => () => {
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    holdListenersCleanupRef.current?.();
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    clearLongPress();
     didLongPressRef.current = false;
+    didMoveDuringPressRef.current = false;
+    holdPointerIdRef.current = e.pointerId;
     startPosRef.current = { x: e.clientX, y: e.clientY };
+
+    const cancelForMovement = (event: PointerEvent) => {
+      if (event.pointerId !== holdPointerIdRef.current || !startPosRef.current) return;
+      const dx = Math.abs(event.clientX - startPosRef.current.x);
+      const dy = Math.abs(event.clientY - startPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        didMoveDuringPressRef.current = true;
+        clearLongPress();
+        startPosRef.current = null;
+      }
+    };
+    const cancelForRelease = (event: PointerEvent) => {
+      if (event.pointerId !== holdPointerIdRef.current) return;
+      if (event.type === 'pointercancel') didMoveDuringPressRef.current = true;
+      clearLongPress();
+      startPosRef.current = null;
+    };
+    window.addEventListener('pointermove', cancelForMovement, true);
+    window.addEventListener('pointerup', cancelForRelease, true);
+    window.addEventListener('pointercancel', cancelForRelease, true);
+    holdListenersCleanupRef.current = () => {
+      window.removeEventListener('pointermove', cancelForMovement, true);
+      window.removeEventListener('pointerup', cancelForRelease, true);
+      window.removeEventListener('pointercancel', cancelForRelease, true);
+    };
+
     pressTimerRef.current = setTimeout(() => {
       didLongPressRef.current = true;
+      clearLongPress();
       if (bubbleRef.current) {
         setBubbleRect(bubbleRef.current.getBoundingClientRect());
       }
@@ -158,22 +206,21 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     if (!startPosRef.current) return;
     const dx = Math.abs(e.clientX - startPosRef.current.x);
     const dy = Math.abs(e.clientY - startPosRef.current.y);
-    if (dx > 10 || dy > 10) {
-      if (pressTimerRef.current) {
-        clearTimeout(pressTimerRef.current);
-        pressTimerRef.current = null;
-      }
+    if (dx > 8 || dy > 8) {
+      didMoveDuringPressRef.current = true;
+      clearLongPress();
       startPosRef.current = null;
     }
   };
 
   const handlePointerUp = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
-    }
+    clearLongPress();
     startPosRef.current = null;
     if (didLongPressRef.current) {
+      return;
+    }
+    if (didMoveDuringPressRef.current) {
+      didMoveDuringPressRef.current = false;
       return;
     }
     const now = Date.now();
@@ -194,10 +241,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   };
 
   const handlePointerCancel = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
-    }
+    didMoveDuringPressRef.current = true;
+    clearLongPress();
     startPosRef.current = null;
   };
 
@@ -336,7 +381,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onClick={() => {
                 if (!didLongPressRef.current) setSelectedImage(message.image_url!);
               }}
-              className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5"
+              className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y]"
             >
               {replyMessage && (
                 <div className="mb-1 max-w-full min-w-0 px-3.5 py-1.5 rounded-[16px] text-xs bg-white/10 text-slate-200">
@@ -368,7 +413,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerCancel}
                 onContextMenu={handleContextMenu}
-                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 [overflow-wrap:anywhere] ${getBubbleRadiusClasses()} ${
+                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full px-4 py-2.5 text-[16px] leading-[1.4] transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${getBubbleRadiusClasses()} ${
                   isOwn
                     ? 'bg-[#0A84FF] text-white shadow-xs'
                     : 'bg-[#262629] text-white shadow-xs'
@@ -516,27 +561,36 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
       {(isLastInGroup || message.type === 'meal' || message.type === 'plan' || message.type === 'call') && (
         <div className={`mt-1 flex flex-col gap-1 text-[11px] font-medium text-slate-500 ${
-          isOwn ? 'mr-1 justify-end' : 'ml-10 justify-start'
+          isOwn ? 'mr-1 items-end text-right' : 'ml-10 items-start text-left'
         }`}>
           {(message.type === 'meal' || message.type === 'plan') ? (
-            <div className="flex min-h-5 items-center gap-2">
-              {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
-              {message.metadata?.time && <span>{message.metadata.time}</span>}
-              {isLastInGroup
-                && !(message.type === 'meal' && message.metadata?.time)
-                && !(message.type === 'plan' && (message.metadata?.date || message.metadata?.time))
-                && (
-                  <span className="flex items-center gap-1">
-                    <span>{message.sender?.display_name || t('Member')}</span>
-                    <span aria-hidden="true">•</span>
-                    <span>{formatMessageTime(message.created_at)}</span>
-                  </span>
-                )}
-            </div>
+            <>
+              {(message.type === 'plan' && message.metadata?.date) || message.metadata?.time ? (
+                <div className="flex min-h-5 items-center gap-2">
+                  {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
+                  {message.metadata?.time && <span>{message.metadata.time}</span>}
+                </div>
+              ) : null}
+              {isLastInGroup && (
+                <span className="flex min-h-5 items-center gap-1">
+                  {!isOwn && (
+                    <>
+                      <span>{message.sender?.display_name || t('Member')}</span>
+                      <span aria-hidden="true">•</span>
+                    </>
+                  )}
+                  <span>{formatMessageTime(message.created_at)}</span>
+                </span>
+              )}
+            </>
           ) : isLastInGroup && (
             <span className="flex min-h-5 items-center gap-1">
-              <span>{message.sender?.display_name || t('Member')}</span>
-              <span aria-hidden="true">•</span>
+              {!isOwn && (
+                <>
+                  <span>{message.sender?.display_name || t('Member')}</span>
+                  <span aria-hidden="true">•</span>
+                </>
+              )}
               <span>{formatMessageTime(message.created_at)}</span>
             </span>
           )}

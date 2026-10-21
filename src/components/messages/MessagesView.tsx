@@ -1140,6 +1140,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       setIsPlusMenuOpen(false);
                       setInputText('');
                       setComposerMode(mode);
+                      window.setTimeout(() => {
+                        const textarea = textareaRef.current;
+                        if (!textarea) return;
+                        textarea.focus({ preventScroll: true });
+                        textarea.setSelectionRange(0, 0);
+                      }, 40);
                     }}
                     className={`${mode === 'plan' ? 'order-1' : mode === 'grocery_list' ? 'order-2' : 'order-3'} w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all`}
                   >
@@ -1352,8 +1358,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         onClose={() => setSelectedProfileId(null)}
         onMention={() => {
           const member = tripMembers.find((candidate) => candidate.user_id === selectedProfileId);
-          if (member) handleSelectMention(member);
           setSelectedProfileId(null);
+          if (member) window.setTimeout(() => handleSelectMention(member), 300);
         }}
       />
       {activeDrawGameId && user && (
