@@ -131,18 +131,29 @@ const MainAppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let lastInputFocusAt = 0;
+    const trackInputFocus = (event: FocusEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        lastInputFocusAt = Date.now();
+      }
+    };
     const dismissEmptyInputOnBackspace = (event: KeyboardEvent) => {
       if (event.key !== 'Backspace' || event.isComposing) return;
       const target = event.target;
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      if (Date.now() - lastInputFocusAt < 600) return;
       if (target.disabled || target.readOnly || target.value.length > 0) return;
 
       event.preventDefault();
       target.blur();
     };
 
+    window.addEventListener('focusin', trackInputFocus, true);
     window.addEventListener('keydown', dismissEmptyInputOnBackspace, true);
-    return () => window.removeEventListener('keydown', dismissEmptyInputOnBackspace, true);
+    return () => {
+      window.removeEventListener('focusin', trackInputFocus, true);
+      window.removeEventListener('keydown', dismissEmptyInputOnBackspace, true);
+    };
   }, []);
 
   // Animate slide when selecting or exiting trips (in opposite direction as requested)
