@@ -1,7 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowsOut, CloudSun, MapTrifold, X } from '@phosphor-icons/react';
+import {
+  ArrowsOut,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  Lightning,
+  MapTrifold,
+  Snowflake,
+  Sun,
+  X,
+} from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
@@ -40,6 +50,18 @@ const weatherDescription = (code: number) => {
   if (code <= 86) return 'Snow showers';
   if (code <= 99) return 'Thunderstorm';
   return 'Weather';
+};
+
+const weatherIcon = (code: number) => {
+  if (code === 0) return Sun;
+  if (code <= 3) return CloudSun;
+  if (code <= 48) return Cloud;
+  if (code <= 67) return CloudRain;
+  if (code <= 77) return Snowflake;
+  if (code <= 82) return CloudRain;
+  if (code <= 86) return Snowflake;
+  if (code <= 99) return Lightning;
+  return CloudSun;
 };
 
 const mapMarker = (profile: Profile, updatedAt: string) => {
@@ -299,6 +321,44 @@ export const TripOverview: React.FC = () => {
         </div>
         {forecast.length ? (
           <>
+            {selectedForecast && (() => {
+              const ConditionIcon = weatherIcon(selectedForecast.code);
+              return (
+                <div className="pt-1">
+                  <div className="flex items-center gap-3">
+                    <ConditionIcon size={36} weight="regular" className="shrink-0 text-white" />
+                    <div className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">
+                      <span className="text-[clamp(2.5rem,12vw,4rem)] font-extrabold leading-none tracking-tight text-white">
+                        {selectedForecast.maximum}°
+                      </span>
+                      <span className="text-3xl font-light text-white/70">/</span>
+                      <span className="text-[clamp(2.5rem,12vw,4rem)] font-extrabold leading-none tracking-tight text-white">
+                        {selectedForecast.minimum}°
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="truncate text-base font-semibold text-white">
+                      {t(weatherDescription(selectedForecast.code))}
+                    </p>
+                    <p className="shrink-0 text-sm font-medium text-slate-400">
+                      {t('Average')} {selectedForecast.average}°
+                    </p>
+                  </div>
+                  <div className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3">
+                    {selectedForecast.hours.map((hour) => (
+                      <div key={hour.time} className="min-w-0 text-center">
+                        <span className="block text-[11px] text-slate-400">{hour.time}</span>
+                        <span className="mt-0.5 block text-sm font-semibold text-slate-200">{hour.temperature}°</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-4 text-center text-sm font-semibold text-slate-400">
+                    {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
+                  </p>
+                </div>
+              );
+            })()}
             <div
               onPointerDown={(event) => {
                 daySwipeStartRef.current = event.clientX;
@@ -314,7 +374,7 @@ export const TripOverview: React.FC = () => {
               onPointerCancel={() => {
                 daySwipeStartRef.current = null;
               }}
-              className="mb-4 flex touch-pan-y justify-between gap-1 border-b border-white/[0.08] px-1 pb-2"
+              className="mt-4 flex touch-pan-y justify-between gap-1 border-t border-white/[0.08] px-1 pt-3"
               style={{ scrollbarWidth: 'none', touchAction: 'pan-x' }}
             >
               {forecast.map((day) => {
@@ -339,36 +399,6 @@ export const TripOverview: React.FC = () => {
                 );
               })}
             </div>
-            {selectedForecast && (
-              <div className="pt-1">
-                <p className="text-lg font-bold text-white">
-                  {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-400">{t(weatherDescription(selectedForecast.code))}</p>
-                <div className="mt-4 flex items-end gap-5">
-                  <div>
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('High')}</span>
-                    <span className="text-3xl font-extrabold tracking-tight">{selectedForecast.maximum}°</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Low')}</span>
-                    <span className="text-3xl font-extrabold tracking-tight text-slate-400">{selectedForecast.minimum}°</span>
-                  </div>
-                  <div className="ml-auto pb-1 text-right">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Average')}</span>
-                    <span className="text-lg font-bold">{selectedForecast.average}°</span>
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3">
-                  {selectedForecast.hours.map((hour) => (
-                    <div key={hour.time} className="min-w-0 text-center">
-                      <span className="block text-[11px] text-slate-400">{hour.time}</span>
-                      <span className="mt-0.5 block text-sm font-semibold text-slate-200">{hour.temperature}°</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <p className="rounded-2xl bg-white/[0.06] p-4 text-sm text-slate-400">
