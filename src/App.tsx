@@ -141,8 +141,16 @@ const MainAppContent: React.FC = () => {
       if (event.key !== 'Backspace' || event.isComposing) return;
       const target = event.target;
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      if (document.activeElement !== target) return;
       if (Date.now() - lastInputFocusAt < 600) return;
       if (target.disabled || target.readOnly || target.value.length > 0) return;
+      if (window.matchMedia('(pointer: coarse)').matches) {
+        const viewport = window.visualViewport;
+        const keyboardHeight = viewport
+          ? window.innerHeight - viewport.height - viewport.offsetTop
+          : 0;
+        if (keyboardHeight < 120) return;
+      }
 
       event.preventDefault();
       target.blur();
