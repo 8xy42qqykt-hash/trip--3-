@@ -130,6 +130,21 @@ const MainAppContent: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const dismissEmptyInputOnBackspace = (event: KeyboardEvent) => {
+      if (event.key !== 'Backspace' || event.isComposing) return;
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      if (target.disabled || target.readOnly || target.value.length > 0) return;
+
+      event.preventDefault();
+      target.blur();
+    };
+
+    window.addEventListener('keydown', dismissEmptyInputOnBackspace, true);
+    return () => window.removeEventListener('keydown', dismissEmptyInputOnBackspace, true);
+  }, []);
+
   // Animate slide when selecting or exiting trips (in opposite direction as requested)
   useEffect(() => {
     const currentTripId = currentTrip?.id || null;
