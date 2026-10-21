@@ -26,6 +26,7 @@ import { ChatBubble } from './ChatBubble';
 import { PinnedPolls } from './PinnedPolls';
 import { PollSheet } from './PollSheet';
 import { Avatar } from '../common/Avatar';
+import { TripMemberStack } from '../common/TripMemberStack';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
@@ -792,33 +793,51 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       setMentionListPosition(null);
       return;
     }
+    let frame = 0;
+    let settleTimer = 0;
     const updatePosition = () => {
       const rect = composerFormRef.current?.getBoundingClientRect();
       if (!rect) return;
       const viewport = window.visualViewport;
       const viewportTop = viewport?.offsetTop ?? 0;
-      const topBoundary = viewportTop + 64;
-      const availableHeight = Math.max(44, rect.top - topBoundary - 8);
-      const height = Math.min(mentionCandidates.length * 44, 224, availableHeight);
+      const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
+      const visibleHeight = mentionCandidates.length * 44;
+      const availableHeight = Math.max(44, rect.top - viewportTop - 72);
+      const height = Math.min(visibleHeight, 224, availableHeight);
+      const top = Math.max(viewportTop + 64, rect.top - height - 8);
       setMentionListPosition({
-        top: rect.top - height - 8,
+        top: Math.min(top, viewportBottom - height - 8),
         left: rect.left,
         width: rect.width,
         maxHeight: height,
       });
     };
+    const schedulePositionUpdate = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updatePosition);
+    };
     updatePosition();
+    schedulePositionUpdate();
+    frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(updatePosition);
+    });
+    settleTimer = window.setTimeout(updatePosition, 350);
+    const resizeObserver = new ResizeObserver(schedulePositionUpdate);
+    if (composerFormRef.current) resizeObserver.observe(composerFormRef.current);
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     window.visualViewport?.addEventListener('resize', updatePosition);
     window.visualViewport?.addEventListener('scroll', updatePosition);
     return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      resizeObserver.disconnect();
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
       window.visualViewport?.removeEventListener('resize', updatePosition);
       window.visualViewport?.removeEventListener('scroll', updatePosition);
     };
-  }, [isMentionListVisible, mentionCandidates.length]);
+  }, [isMentionListVisible, mentionCandidates.length, isKeyboardOpen, keyboardOffset, mentionQuery, inputText]);
 
   if (!currentTrip) {
     return null;
@@ -851,15 +870,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </button>
           ) : <div className="w-14" />}
 
-          <div className="flex max-w-[200px] flex-col items-center truncate text-center">
+          <div className="flex max-w-[220px] flex-col items-center truncate text-center">
             <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
             }`}>
               {pageTitle}
             </span>
-            <span className="text-[11px] text-slate-400 font-medium -mt-0.5">
-              {tripMembers.length} {tripMembers.length === 1 ? t('Member') : t('members')}
-            </span>
+            <TripMemberStack members={tripMembers} />
           </div>
 
           {!isFilteredView ? (

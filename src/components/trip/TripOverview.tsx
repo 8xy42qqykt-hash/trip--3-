@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CaretDown, CloudSun } from '@phosphor-icons/react';
+import { ArrowsOut, CloudSun, X } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
@@ -9,6 +9,7 @@ import { useTripLocations, type SharedTripLocation } from './useTripLocations';
 import { Profile } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
 import { PhotoLightbox } from '../common/PhotoLightbox';
+import { TripMemberStack } from '../common/TripMemberStack';
 
 type ForecastHour = { time: string; temperature: number };
 type ForecastDay = {
@@ -70,15 +71,16 @@ const TripLocationMap: React.FC<{
   onMemberClick: (userId: string) => void;
 }> = ({ locations, members, onMemberClick }) => {
   const { t } = useLanguage();
+  const [isExpanded, setIsExpanded] = useState(false);
   const mapElementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
-    const map = L.map(mapElementRef.current, { zoomControl: false }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
+    const map = L.map(mapElementRef.current, { zoomControl: false, preferCanvas: true }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
       maxZoom: 19,
     }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -96,7 +98,7 @@ const TripLocationMap: React.FC<{
     };
   }, []);
 
-  useEffect(() => {
+  const fitLocations = useCallback(() => {
     const map = mapRef.current;
     const markers = markersRef.current;
     if (!map || !markers) return;
@@ -112,16 +114,60 @@ const TripLocationMap: React.FC<{
         .on('click', () => onMemberClick(profile.id))
         .addTo(markers);
     }
-    if (points.length === 1) map.setView(points[0], 13);
-    if (points.length > 1) map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 13 });
-  }, [locations, members, onMemberClick]);
+    if (points.length === 1) map.setView(points[0], isExpanded ? 14 : 13);
+    if (points.length > 1) map.fitBounds(L.latLngBounds(points).pad(isExpanded ? 0.12 : 0.2), { maxZoom: isExpanded ? 15 : 13 });
+  }, [isExpanded, locations, members, onMemberClick]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      mapRef.current?.invalidateSize({ pan: false });
+      fitLocations();
+    });
+    const resizeTimer = window.setTimeout(() => {
+      mapRef.current?.invalidateSize({ pan: false });
+      fitLocations();
+    }, 250);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(resizeTimer);
+    };
+  }, [fitLocations]);
 
   return (
     <div
-      ref={mapElementRef}
-      className="relative z-0 isolate h-72 w-full rounded-[22px] bg-[#17171a]"
-      aria-label={t('Trip members map')}
-    />
+      data-no-edge-swipe
+      className={isExpanded
+        ? 'fixed inset-0 z-[11000] flex flex-col bg-black p-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]'
+        : 'relative z-0 w-full'}
+    >
+      <div
+        ref={mapElementRef}
+        className={`relative z-0 isolate w-full overflow-hidden bg-[#101116] ${
+          isExpanded ? 'min-h-0 flex-1 rounded-2xl' : 'h-48 rounded-[22px]'
+        }`}
+        aria-label={t('Trip members map')}
+      />
+      <button
+        type="button"
+        aria-label={t(isExpanded ? 'Close map' : 'Expand map')}
+        title={t(isExpanded ? 'Close map' : 'Expand map')}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+        className={`absolute right-3 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white shadow-lg backdrop-blur-xl active:scale-95 ${
+          isExpanded ? 'top-[calc(env(safe-area-inset-top,0px)+0.75rem)]' : 'top-3'
+        }`}
+      >
+        {isExpanded ? <X size={19} weight="bold" /> : <ArrowsOut size={19} weight="bold" />}
+      </button>
+      {isExpanded && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded(false)}
+          className="mt-3 min-h-11 shrink-0 rounded-xl bg-white/10 text-sm font-semibold text-white"
+        >
+          {t('Done')}
+        </button>
+      )}
+    </div>
   );
 };
 
@@ -132,20 +178,20 @@ export const TripOverview: React.FC = () => {
   const locations = useTripLocations(currentTrip?.id);
   const [forecast, setForecast] = useState<ForecastDay[]>([]);
   const [selectedForecast, setSelectedForecast] = useState<ForecastDay | null>(null);
-  const [isWeatherExpanded, setIsWeatherExpanded] = useState(false);
   const [error, setError] = useState('');
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
+  const daySwipeStartRef = useRef<number | null>(null);
 
   const sharedPhotos = useMemo(
     () => messages.filter((message) => message.type === 'image' && message.image_url),
     [messages],
   );
   const ownLocation = locations.find((location) => location.user_id === user?.id);
-  const markerClick = (userId: string) => setSelectedProfileId(userId);
+  const markerClick = useCallback((userId: string) => setSelectedProfileId(userId), []);
 
   const loadWeather = async (latitude: number, longitude: number) => {
     const coordinateKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
@@ -229,7 +275,7 @@ export const TripOverview: React.FC = () => {
             <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
             }`}>{currentTrip.name}</span>
-            <span className="-mt-0.5 text-[11px] font-medium text-slate-400">{tripMembers.length} {tripMembers.length === 1 ? 'member' : 'members'}</span>
+            <TripMemberStack members={tripMembers} />
           </div>
           <div aria-hidden="true" className="w-14" />
         </div>
@@ -241,63 +287,84 @@ export const TripOverview: React.FC = () => {
         {currentTrip.name}
       </h1>
 
-      <section className="mb-7">
+      <section data-no-edge-swipe className="mb-7">
         <div className="mb-3 flex items-center gap-2">
           <CloudSun size={20} className="text-[#0A84FF]" />
           <h2 className="text-lg font-bold">{t('Weather')}</h2>
         </div>
         {forecast.length ? (
           <>
-            <div className="mb-4 grid grid-cols-5 gap-2">
-              {forecast.map((day) => (
-                <button
-                  key={day.date}
-                  type="button"
-                  onClick={() => setSelectedForecast(day)}
-                  className={`mx-auto flex h-14 w-14 min-w-0 flex-col items-center justify-center rounded-full px-2 text-center transition-colors ${
-                    selectedForecast?.date === day.date ? 'bg-[#0A84FF] text-white' : 'text-slate-200'
-                  }`}
-                >
-                  <span className="text-[11px] font-medium uppercase leading-none">
-                    {new Date(`${day.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { weekday: 'short' }).slice(0, 3)}
-                  </span>
-                  <span className="mt-1.5 text-base font-semibold leading-none">{day.currentTemperature ?? day.average}°</span>
-                </button>
-              ))}
-            </div>
             {selectedForecast && (
-              <div className="mt-2 overflow-hidden rounded-2xl bg-white/[0.05]">
-                <button
-                  type="button"
-                  aria-expanded={isWeatherExpanded}
-                  onClick={() => setIsWeatherExpanded((open) => !open)}
-                  className="flex min-h-12 w-full items-center justify-between px-4 text-left"
-                >
-                  <span className="text-sm font-semibold">
-                    {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
-                    <span className="ml-2 font-normal text-slate-400">{t(weatherDescription(selectedForecast.code))}</span>
-                  </span>
-                  <CaretDown size={18} className={`shrink-0 text-slate-400 transition-transform ${isWeatherExpanded ? 'rotate-180' : ''}`} />
-                </button>
-                <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${isWeatherExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                  <div className="min-h-0 overflow-hidden">
-                    <div className="border-t border-white/[0.08] px-4 pb-4 pt-3">
-                      <p className="mb-3 text-xs text-slate-400">
-                        {t('Average')} {selectedForecast.average}°C · {t('High')} {selectedForecast.maximum}°C · {t('Low')} {selectedForecast.minimum}°C
-                      </p>
-                      <div className="grid grid-cols-4 gap-x-2 gap-y-3">
-                        {selectedForecast.hours.map((hour) => (
-                          <div key={hour.time} className="text-center">
-                            <span className="block text-[11px] text-slate-400">{hour.time}</span>
-                            <span className="mt-0.5 block text-sm font-semibold">{hour.temperature}°C</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+              <div className="pt-1">
+                <p className="text-lg font-bold text-white">
+                  {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
+                </p>
+                <p className="mt-1 text-base font-semibold text-white">{t(weatherDescription(selectedForecast.code))}</p>
+                <div className="mt-4 flex items-end gap-5">
+                  <div>
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('High')}</span>
+                    <span className="text-3xl font-extrabold tracking-tight">{selectedForecast.maximum}°</span>
                   </div>
+                  <div>
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Low')}</span>
+                    <span className="text-3xl font-extrabold tracking-tight text-slate-400">{selectedForecast.minimum}°</span>
+                  </div>
+                  <div className="ml-auto pb-1 text-right">
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Average')}</span>
+                    <span className="text-lg font-bold">{selectedForecast.average}°</span>
+                  </div>
+                </div>
+                <div
+                  className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3"
+                >
+                  {selectedForecast.hours.map((hour) => (
+                    <div key={hour.time} className="min-w-12 shrink-0 text-center">
+                      <span className="block text-[11px] text-slate-500">{hour.time}</span>
+                      <span className="mt-1 block text-sm font-semibold text-slate-200">{hour.temperature}°</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
+            <div
+              onPointerDown={(event) => {
+                daySwipeStartRef.current = event.clientX;
+              }}
+              onPointerUp={(event) => {
+                const startX = daySwipeStartRef.current;
+                daySwipeStartRef.current = null;
+                if (startX === null || Math.abs(event.clientX - startX) < 44 || !selectedForecast) return;
+                const selectedIndex = forecast.findIndex((day) => day.date === selectedForecast.date);
+                const nextIndex = selectedIndex + (event.clientX < startX ? 1 : -1);
+                if (forecast[nextIndex]) setSelectedForecast(forecast[nextIndex]);
+              }}
+              onPointerCancel={() => {
+                daySwipeStartRef.current = null;
+              }}
+              className="mt-4 flex touch-pan-y justify-between border-t border-white/[0.08] px-1 pt-3"
+            >
+              {forecast.map((day) => {
+                const selected = selectedForecast?.date === day.date;
+                return (
+                  <button
+                    key={day.date}
+                    type="button"
+                    onClick={() => setSelectedForecast(day)}
+                    aria-pressed={selected}
+                    className={`flex min-h-[58px] min-w-0 flex-1 flex-col items-center justify-center text-center transition-[transform,color] duration-200 ${
+                      selected ? 'scale-105 text-white' : 'text-slate-500'
+                    }`}
+                  >
+                    <span className={`text-xs uppercase leading-none ${selected ? 'font-bold' : 'font-medium'}`}>
+                      {new Date(`${day.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { weekday: 'short' }).slice(0, 3)}
+                    </span>
+                    <span className={`mt-1 text-xl leading-none ${selected ? 'font-extrabold' : 'font-semibold'}`}>
+                      {new Date(`${day.date}T12:00:00`).getDate()}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </>
         ) : (
           <p className="rounded-2xl bg-white/[0.06] p-4 text-sm text-slate-400">
@@ -319,15 +386,19 @@ export const TripOverview: React.FC = () => {
         <h2 className="mb-3 text-lg font-bold">{t('Trip collection')}</h2>
         {sharedPhotos.length ? (
           <div className="columns-2 gap-2">
-            {sharedPhotos.map((photo) => (
+            {sharedPhotos.map((photo, index) => (
               <button
                 key={photo.id}
                 type="button"
                 onClick={() => photo.image_url && setSelectedPhoto(photo.image_url)}
                 aria-label={t('View shared trip photo')}
-                className="mb-2 block w-full break-inside-avoid overflow-hidden rounded-2xl bg-transparent"
+                className="trip-photo-card mb-2 block w-full break-inside-avoid bg-transparent"
+                style={{
+                  '--photo-rotation': `${((index % 5) - 2) * 1.2}deg`,
+                  animationDelay: `${Math.min(index * 45, 450)}ms`,
+                } as React.CSSProperties}
               >
-                <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto w-full rounded-2xl object-contain" />
+                <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto w-full rounded-2xl object-contain shadow-[0_12px_28px_rgba(0,0,0,0.55)]" />
               </button>
             ))}
           </div>

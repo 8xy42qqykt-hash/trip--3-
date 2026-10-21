@@ -29,15 +29,100 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
   settings: 4,
 };
 
+const CountdownUnit: React.FC<{ value: number; label: string }> = ({ value, label }) => (
+  <div className="min-w-0 flex-1 text-center">
+    <div className="relative h-[1.15em] overflow-hidden text-4xl font-extrabold tracking-tight tabular-nums sm:text-5xl">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={value}
+          initial={{ y: '100%', opacity: 0, filter: 'blur(5px)' }}
+          animate={{ y: '0%', opacity: 1, filter: 'blur(0px)' }}
+          exit={{ y: '-100%', opacity: 0, filter: 'blur(5px)' }}
+          transition={{ type: 'spring', stiffness: 260, damping: 24, mass: 0.8 }}
+          className="absolute inset-0 block"
+        >
+          {String(value).padStart(2, '0')}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-widest text-slate-400 sm:text-xs">
+      {label}
+    </span>
+  </div>
+);
+
+const TripCountdownOverlay: React.FC<{
+  tripName: string;
+  startDate: string;
+  onDismiss: () => void;
+  t: (value: string) => string;
+}> = ({ tripName, startDate, onDismiss, t }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const remaining = Math.max(0, new Date(`${startDate}T00:00:00`).getTime() - now);
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return (
+    <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${t('Till')} ${tripName}`}
+      onClick={onDismiss}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') onDismiss();
+      }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="fixed inset-x-0 top-0 z-[39] flex items-center justify-center bg-black/55 px-5 backdrop-blur-2xl"
+      style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+    >
+      <motion.div
+        initial={{ y: 18, scale: 0.97, opacity: 0 }}
+        animate={{ y: 0, scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+        className="w-full max-w-sm text-center"
+      >
+        <p className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">{t('Till')}</p>
+        <div className="mb-6 flex items-start gap-1.5 sm:gap-3">
+          <CountdownUnit value={days} label={t('Days')} />
+          <span className="pt-1 text-3xl font-light text-white/45">:</span>
+          <CountdownUnit value={hours} label={t('Hours')} />
+          <span className="pt-1 text-3xl font-light text-white/45">:</span>
+          <CountdownUnit value={minutes} label={t('Minutes')} />
+          <span className="pt-1 text-3xl font-light text-white/45">:</span>
+          <CountdownUnit value={seconds} label={t('Seconds')} />
+        </div>
+        <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{tripName}</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          {new Date(`${startDate}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })}
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+};
+
 const MainAppContent: React.FC = () => {
-  const { setLanguage } = useLanguage();
+  const { setLanguage, t } = useLanguage();
   const { user, profile, isLoading } = useAuth();
-  const { currentTrip, userTrips, selectTrip, exitTrip } = useTrip();
+  const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
   const [isLaunchAnimationVisible, setIsLaunchAnimationVisible] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [showTripCountdown, setShowTripCountdown] = useState(false);
+  const [countdownShownTripId, setCountdownShownTripId] = useState<string | null>(null);
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
   const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
   const call = useGroupCall(currentTrip?.id, user?.id, profile);
@@ -117,6 +202,32 @@ const MainAppContent: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [isLoading, user?.id]);
 
+  useEffect(() => {
+    if (
+      !currentTrip
+      || isLoading
+      || isLoadingTrips
+      || isLoadingMessages
+      || isLaunchAnimationVisible
+      || countdownShownTripId === currentTrip.id
+      || new Date(`${currentTrip.start_date}T00:00:00`).getTime() <= Date.now()
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCountdownShownTripId(currentTrip.id);
+      setShowTripCountdown(true);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    countdownShownTripId,
+    currentTrip,
+    isLaunchAnimationVisible,
+    isLoading,
+    isLoadingMessages,
+    isLoadingTrips,
+  ]);
+
   // Listen to keyboard toggle events across all views
   useEffect(() => {
     const handleKb = (e: any) => {
@@ -190,6 +301,7 @@ const MainAppContent: React.FC = () => {
   }, [activeView]);
 
   const handleTabChange = (newTab: TabKey) => {
+    if (showTripCountdown) setShowTripCountdown(false);
     if (newTab === activeTab) return;
     const prevIdx = VIEW_INDEX[activeTab];
     const newIdx = VIEW_INDEX[newTab];
@@ -468,6 +580,17 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
       />
+      <AnimatePresence>
+        {showTripCountdown && currentTrip && (
+          <TripCountdownOverlay
+            key={currentTrip.id}
+            tripName={currentTrip.name}
+            startDate={currentTrip.start_date}
+            onDismiss={() => setShowTripCountdown(false)}
+            t={t}
+          />
+        )}
+      </AnimatePresence>
       {isLaunchAnimationVisible && (
         <motion.div
           initial={{ opacity: 1 }}

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { CaretLeft } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { TripMemberStack } from './TripMemberStack';
 
 interface CollapsingHeaderLayoutProps {
   title: string;
@@ -23,7 +24,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
   showScrolledBorder = true,
 }) => {
   const { t } = useLanguage();
-  const { exitTrip } = useTrip();
+  const { exitTrip, tripMembers } = useTrip();
   const [isScrolled, setIsScrolled] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -70,13 +71,16 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
           </div>
 
           {/* Small Title on scroll */}
-          <h2
-            className={`max-w-[45%] truncate text-center text-base font-bold text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              isScrolled ? 'pointer-events-auto translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
-            }`}
+          <div
+            className="absolute left-1/2 flex max-w-[calc(100%-12rem)] -translate-x-1/2 items-center gap-1"
           >
-            {title}
-          </h2>
+            <h2 className={`truncate text-center text-base font-bold text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isScrolled ? 'translate-y-0 opacity-100' : 'pointer-events-none absolute -translate-y-2 opacity-0'
+            }`}>
+              {title}
+            </h2>
+            <TripMemberStack members={tripMembers} />
+          </div>
 
           <div className="w-24 flex items-center justify-end">
             {topBarRight}
