@@ -276,19 +276,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const handleFocus = () => {
     isInputFocusedRef.current = true;
     notifyKeyboard(true);
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    window.requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    });
-    window.setTimeout(() => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    }, 80);
     const offset = calcKeyboardOffset();
     setKeyboardOffset(offset);
     setTimeout(() => {
@@ -457,6 +444,22 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         textareaRef.current.style.height = `${Math.max(40, scrollH)}px`;
       }
     }, 20);
+  };
+
+  const insertComposerToken = (token: '@' | '#') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextText = `${inputText.slice(0, start)}${token}${inputText.slice(end)}`;
+    const nextCursor = start + token.length;
+    setInputText(nextText);
+    const hasMentionBoundary = start === 0 || /\s/.test(inputText[start - 1]);
+    setMentionQuery(token === '@' && hasMentionBoundary ? '' : null);
+    textarea.focus({ preventScroll: true });
+    window.requestAnimationFrame(() => {
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -1209,8 +1212,32 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            {(composerMode === 'meal' || composerMode === 'plan') && (
+            {(composerMode === 'meal' || composerMode === 'plan'
+              || (!isFilteredView && composerMode === 'message'
+                && !(mentionQuery !== null && mentionCandidates.length > 0))) && (
               <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
+                {!isFilteredView && composerMode === 'message' && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t('Insert hashtag')}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => insertComposerToken('#')}
+                      className="min-h-8 px-1 text-sm font-medium text-slate-400 active:text-white"
+                    >
+                      #
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t('Mention a member')}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => insertComposerToken('@')}
+                      className="min-h-8 px-1 text-sm font-medium text-slate-400 active:text-white"
+                    >
+                      @
+                    </button>
+                  </>
+                )}
                 {composerMode === 'plan' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
                     <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
