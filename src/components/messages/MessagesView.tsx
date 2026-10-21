@@ -16,6 +16,8 @@ import {
   CalendarBlank,
   GameController,
   CircleNotch,
+  At,
+  Hash,
 } from '@phosphor-icons/react';
 import { useTrip } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -107,7 +109,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
-  const [mentionListPosition, setMentionListPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [mentionListPosition, setMentionListPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const mealTimeInputRef = useRef<HTMLInputElement>(null);
   const planDateInputRef = useRef<HTMLInputElement>(null);
@@ -276,9 +283,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const handleFocus = () => {
     isInputFocusedRef.current = true;
     notifyKeyboard(true);
+    const keepAppAtTop = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
+      if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
+    };
+    keepAppAtTop();
+    window.requestAnimationFrame(keepAppAtTop);
     const offset = calcKeyboardOffset();
     setKeyboardOffset(offset);
-    setTimeout(() => {
+    window.setTimeout(() => {
+      keepAppAtTop();
       setKeyboardOffset(calcKeyboardOffset());
     }, 60);
   };
@@ -303,6 +318,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (typeof window === 'undefined') return;
 
     const handleViewportChange = () => {
+      if (isInputFocusedRef.current && window.scrollY !== 0) window.scrollTo(0, 0);
       const offset = calcKeyboardOffset();
       const isFocused = document.activeElement === textareaRef.current || isInputFocusedRef.current;
       const isOpen = isFocused || offset > 30;
@@ -778,20 +794,26 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             return name.toLowerCase().includes(mentionQuery.toLowerCase());
           })
       : [];
+  const isMentionListVisible = mentionQuery !== null && mentionCandidates.length > 0;
 
   useEffect(() => {
-    if (mentionQuery === null || mentionCandidates.length === 0) {
+    if (!isMentionListVisible) {
       setMentionListPosition(null);
       return;
     }
     const updatePosition = () => {
       const rect = composerFormRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const height = Math.min(mentionCandidates.length * 44, 224);
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const topBoundary = viewportTop + 64;
+      const availableHeight = Math.max(44, rect.top - topBoundary - 8);
+      const height = Math.min(mentionCandidates.length * 44, 224, availableHeight);
       setMentionListPosition({
-        top: Math.max(8, rect.top - height - 8),
+        top: rect.top - height - 8,
         left: rect.left,
         width: rect.width,
+        maxHeight: height,
       });
     };
     updatePosition();
@@ -805,7 +827,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       window.visualViewport?.removeEventListener('resize', updatePosition);
       window.visualViewport?.removeEventListener('scroll', updatePosition);
     };
-  }, [mentionCandidates.length, mentionQuery]);
+  }, [isMentionListVisible, mentionCandidates.length]);
 
   if (!currentTrip) {
     return null;
@@ -1181,63 +1203,68 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
-          {onlineMembers.length > 0 && (
-            <div
-              aria-label={`${onlineMembers.length} members currently active`}
-              title={`${onlineMembers.length} members currently active`}
-              className="absolute bottom-[calc(100%+8px)] right-0 flex shrink-0 items-center justify-end -space-x-2"
-            >
-              {onlineMembers.slice(0, 7).map((member) => (
-                <button
-                  key={member.userId}
-                  type="button"
-                  onClick={() => setSelectedProfileId(member.userId)}
-                  aria-label={`${t('View profile')}: ${member.profile.display_name}`}
-                  className="relative rounded-full border-2 border-black"
+          {((!isFilteredView && composerMode === 'message' && !isMentionListVisible)
+            || (onlineMembers.length > 0 && !isMentionListVisible)) && (
+            <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-between">
+              {!isFilteredView && composerMode === 'message' && !isMentionListVisible ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={t('Insert hashtag')}
+                    title={t('Insert hashtag')}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => insertComposerToken('#')}
+                    className="flex h-8 min-w-8 items-center justify-center rounded-full border border-white/10 bg-[#222226]/90 px-2.5 text-sm font-semibold text-slate-300 shadow-[0_2px_10px_rgba(0,0,0,0.25)] transition-colors active:bg-white/15 active:text-white"
+                  >
+                    <Hash size={16} weight="bold" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t('Mention a member')}
+                    title={t('Mention a member')}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => insertComposerToken('@')}
+                    className="flex h-8 min-w-8 items-center justify-center rounded-full border border-white/10 bg-[#222226]/90 px-2.5 text-sm font-semibold text-slate-300 shadow-[0_2px_10px_rgba(0,0,0,0.25)] transition-colors active:bg-white/15 active:text-white"
+                  >
+                    <At size={16} weight="bold" />
+                  </button>
+                </div>
+              ) : <div />}
+              {onlineMembers.length > 0 && (
+                <div
+                  aria-label={`${onlineMembers.length} members currently active`}
+                  title={`${onlineMembers.length} members currently active`}
+                  className="flex shrink-0 items-center justify-end -space-x-2"
                 >
-                  <Avatar
-                    name={member.profile.display_name}
-                    avatarUrl={member.profile.avatar_url}
-                    color={member.profile.color}
-                    size={28}
-                  />
-                </button>
-              ))}
-              {onlineMembers.length > 7 && (
-                <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
-                  +{onlineMembers.length - 7}
-                </span>
+                  {onlineMembers.slice(0, 7).map((member) => (
+                    <button
+                      key={member.userId}
+                      type="button"
+                      onClick={() => setSelectedProfileId(member.userId)}
+                      aria-label={`${t('View profile')}: ${member.profile.display_name}`}
+                      className="relative rounded-full border-2 border-black"
+                    >
+                      <Avatar
+                        name={member.profile.display_name}
+                        avatarUrl={member.profile.avatar_url}
+                        color={member.profile.color}
+                        size={28}
+                      />
+                    </button>
+                  ))}
+                  {onlineMembers.length > 7 && (
+                    <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                      +{onlineMembers.length - 7}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            {(composerMode === 'meal' || composerMode === 'plan'
-              || (!isFilteredView && composerMode === 'message'
-                && !(mentionQuery !== null && mentionCandidates.length > 0))) && (
+            {(composerMode === 'meal' || composerMode === 'plan') && (
               <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
-                {!isFilteredView && composerMode === 'message' && (
-                  <>
-                    <button
-                      type="button"
-                      aria-label={t('Insert hashtag')}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => insertComposerToken('#')}
-                      className="min-h-8 px-1 text-sm font-medium text-slate-400 active:text-white"
-                    >
-                      #
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t('Mention a member')}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => insertComposerToken('@')}
-                      className="min-h-8 px-1 text-sm font-medium text-slate-400 active:text-white"
-                    >
-                      @
-                    </button>
-                  </>
-                )}
                 {composerMode === 'plan' && (
                   <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
                     <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
@@ -1401,6 +1428,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             top: `${mentionListPosition.top}px`,
             left: `${mentionListPosition.left}px`,
             width: `${mentionListPosition.width}px`,
+            maxHeight: `${mentionListPosition.maxHeight}px`,
           }}
           className="fixed z-[12002] flex max-h-56 flex-col items-start overflow-y-auto animate-calm-fade-in"
         >
