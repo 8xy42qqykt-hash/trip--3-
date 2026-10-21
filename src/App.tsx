@@ -29,26 +29,29 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
   settings: 4,
 };
 
-const CountdownUnit: React.FC<{ value: number; label: string }> = ({ value, label }) => (
-  <div className="min-w-0 flex-1 text-center">
-    <div className="relative h-[1.15em] overflow-hidden text-4xl font-extrabold tracking-tight tabular-nums sm:text-5xl">
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={value}
-          initial={{ y: '100%', opacity: 0, filter: 'blur(5px)' }}
-          animate={{ y: '0%', opacity: 1, filter: 'blur(0px)' }}
-          exit={{ y: '-100%', opacity: 0, filter: 'blur(5px)' }}
-          transition={{ type: 'spring', stiffness: 260, damping: 24, mass: 0.8 }}
-          className="absolute inset-0 block"
-        >
-          {String(value).padStart(2, '0')}
-        </motion.span>
-      </AnimatePresence>
-    </div>
-    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-widest text-slate-400 sm:text-xs">
-      {label}
-    </span>
-  </div>
+const CountdownDigit: React.FC<{ digit: string }> = ({ digit }) => (
+  <span className="relative inline-block h-[1.1em] w-[0.62em] overflow-hidden">
+    <AnimatePresence initial={false} mode="popLayout">
+      <motion.span
+        key={digit}
+        initial={{ y: '105%', opacity: 0, filter: 'blur(6px)' }}
+        animate={{ y: '0%', opacity: 1, filter: 'blur(0px)' }}
+        exit={{ y: '-105%', opacity: 0, filter: 'blur(6px)' }}
+        transition={{ type: 'spring', stiffness: 240, damping: 22, mass: 0.75 }}
+        className="absolute inset-0 block"
+      >
+        {digit}
+      </motion.span>
+    </AnimatePresence>
+  </span>
+);
+
+const CountdownValue: React.FC<{ value: number }> = ({ value }) => (
+  <span className="inline-flex justify-center text-[clamp(2.6rem,11vw,5.5rem)] font-black leading-none tracking-[-0.075em] tabular-nums">
+    {String(value).padStart(2, '0').split('').map((digit, index) => (
+      <CountdownDigit key={index} digit={digit} />
+    ))}
+  </span>
 );
 
 const TripCountdownOverlay: React.FC<{
@@ -75,7 +78,7 @@ const TripCountdownOverlay: React.FC<{
     <motion.div
       role="dialog"
       aria-modal="true"
-      aria-label={`${t('Till')} ${tripName}`}
+      aria-label={`${tripName}: ${days} ${t('Days')}, ${hours} ${t('Hours')}, ${minutes} ${t('Minutes')}, ${seconds} ${t('Seconds')}`}
       onClick={onDismiss}
       onKeyDown={(event) => {
         if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') onDismiss();
@@ -84,8 +87,7 @@ const TripCountdownOverlay: React.FC<{
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="fixed inset-x-0 top-0 z-[39] flex items-center justify-center bg-black/55 px-5 backdrop-blur-2xl"
-      style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+      className="countdown-backdrop fixed inset-0 z-[10000] flex items-center justify-center px-4 pb-safe"
     >
       <motion.div
         initial={{ y: 18, scale: 0.97, opacity: 0 }}
@@ -93,15 +95,14 @@ const TripCountdownOverlay: React.FC<{
         transition={{ type: 'spring', stiffness: 180, damping: 22 }}
         className="w-full max-w-sm text-center"
       >
-        <p className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">{t('Till')}</p>
-        <div className="mb-6 flex items-start gap-1.5 sm:gap-3">
-          <CountdownUnit value={days} label={t('Days')} />
-          <span className="pt-1 text-3xl font-light text-white/45">:</span>
-          <CountdownUnit value={hours} label={t('Hours')} />
-          <span className="pt-1 text-3xl font-light text-white/45">:</span>
-          <CountdownUnit value={minutes} label={t('Minutes')} />
-          <span className="pt-1 text-3xl font-light text-white/45">:</span>
-          <CountdownUnit value={seconds} label={t('Seconds')} />
+        <div className="mb-7 flex items-center justify-center gap-1 text-white sm:gap-2" aria-hidden="true">
+          <CountdownValue value={days} />
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <CountdownValue value={hours} />
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <CountdownValue value={minutes} />
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <CountdownValue value={seconds} />
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{tripName}</h2>
         <p className="mt-2 text-sm text-slate-400">

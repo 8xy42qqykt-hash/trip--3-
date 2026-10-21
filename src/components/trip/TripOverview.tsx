@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowsOut, CloudSun, X } from '@phosphor-icons/react';
+import { ArrowsOut, CloudSun, MapTrifold, X } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrip } from '../../context/TripContext';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
@@ -77,10 +77,10 @@ const TripLocationMap: React.FC<{
   const markersRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
-    if (!mapElementRef.current || mapRef.current) return;
+    if (!isExpanded || !mapElementRef.current || mapRef.current) return;
     const map = L.map(mapElementRef.current, { zoomControl: false, preferCanvas: true }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -96,7 +96,7 @@ const TripLocationMap: React.FC<{
       mapRef.current = null;
       markersRef.current = null;
     };
-  }, []);
+  }, [isExpanded]);
 
   const fitLocations = useCallback(() => {
     const map = mapRef.current;
@@ -134,31 +134,25 @@ const TripLocationMap: React.FC<{
   }, [fitLocations]);
 
   return (
-    <div
-      data-no-edge-swipe
-      className={isExpanded
-        ? 'fixed inset-0 z-[11000] flex flex-col bg-black p-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]'
-        : 'relative z-0 w-full'}
-    >
+    isExpanded ? (
       <div
-        ref={mapElementRef}
-        className={`relative z-0 isolate w-full overflow-hidden bg-[#101116] ${
-          isExpanded ? 'min-h-0 flex-1 rounded-2xl' : 'h-48 rounded-[22px]'
-        }`}
-        aria-label={t('Trip members map')}
-      />
-      <button
-        type="button"
-        aria-label={t(isExpanded ? 'Close map' : 'Expand map')}
-        title={t(isExpanded ? 'Close map' : 'Expand map')}
-        onClick={() => setIsExpanded((expanded) => !expanded)}
-        className={`absolute right-3 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white shadow-lg backdrop-blur-xl active:scale-95 ${
-          isExpanded ? 'top-[calc(env(safe-area-inset-top,0px)+0.75rem)]' : 'top-3'
-        }`}
+        data-no-edge-swipe
+        className="fixed inset-0 z-[11000] flex flex-col bg-black p-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]"
       >
-        {isExpanded ? <X size={19} weight="bold" /> : <ArrowsOut size={19} weight="bold" />}
-      </button>
-      {isExpanded && (
+        <div
+          ref={mapElementRef}
+          className="relative z-0 min-h-0 flex-1 isolate w-full overflow-hidden rounded-2xl bg-[#101116]"
+          aria-label={t('Trip members map')}
+        />
+        <button
+          type="button"
+          aria-label={t('Close map')}
+          title={t('Close map')}
+          onClick={() => setIsExpanded(false)}
+          className="absolute right-6 top-[calc(env(safe-area-inset-top,0px)+1.5rem)] z-[1200] flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/80 text-white shadow-lg backdrop-blur-xl active:scale-95"
+        >
+          <X size={19} weight="bold" />
+        </button>
         <button
           type="button"
           onClick={() => setIsExpanded(false)}
@@ -166,8 +160,19 @@ const TripLocationMap: React.FC<{
         >
           {t('Done')}
         </button>
-      )}
-    </div>
+      </div>
+    ) : (
+      <button
+        type="button"
+        data-no-edge-swipe
+        onClick={() => setIsExpanded(true)}
+        className="flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 active:scale-[0.98]"
+      >
+        <MapTrifold size={17} weight="duotone" className="text-[#0A84FF]" />
+        <span>{t('Expand map')}</span>
+        <ArrowsOut size={15} className="ml-1 text-slate-500" />
+      </button>
+    )
   );
 };
 
@@ -184,7 +189,6 @@ export const TripOverview: React.FC = () => {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
-  const daySwipeStartRef = useRef<number | null>(null);
 
   const sharedPhotos = useMemo(
     () => messages.filter((message) => message.type === 'image' && message.image_url),
@@ -294,54 +298,9 @@ export const TripOverview: React.FC = () => {
         </div>
         {forecast.length ? (
           <>
-            {selectedForecast && (
-              <div className="pt-1">
-                <p className="text-lg font-bold text-white">
-                  {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
-                </p>
-                <p className="mt-1 text-base font-semibold text-white">{t(weatherDescription(selectedForecast.code))}</p>
-                <div className="mt-4 flex items-end gap-5">
-                  <div>
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('High')}</span>
-                    <span className="text-3xl font-extrabold tracking-tight">{selectedForecast.maximum}°</span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Low')}</span>
-                    <span className="text-3xl font-extrabold tracking-tight text-slate-400">{selectedForecast.minimum}°</span>
-                  </div>
-                  <div className="ml-auto pb-1 text-right">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t('Average')}</span>
-                    <span className="text-lg font-bold">{selectedForecast.average}°</span>
-                  </div>
-                </div>
-                <div
-                  className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3"
-                >
-                  {selectedForecast.hours.map((hour) => (
-                    <div key={hour.time} className="min-w-12 shrink-0 text-center">
-                      <span className="block text-[11px] text-slate-500">{hour.time}</span>
-                      <span className="mt-1 block text-sm font-semibold text-slate-200">{hour.temperature}°</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             <div
-              onPointerDown={(event) => {
-                daySwipeStartRef.current = event.clientX;
-              }}
-              onPointerUp={(event) => {
-                const startX = daySwipeStartRef.current;
-                daySwipeStartRef.current = null;
-                if (startX === null || Math.abs(event.clientX - startX) < 44 || !selectedForecast) return;
-                const selectedIndex = forecast.findIndex((day) => day.date === selectedForecast.date);
-                const nextIndex = selectedIndex + (event.clientX < startX ? 1 : -1);
-                if (forecast[nextIndex]) setSelectedForecast(forecast[nextIndex]);
-              }}
-              onPointerCancel={() => {
-                daySwipeStartRef.current = null;
-              }}
-              className="mt-4 flex touch-pan-y justify-between border-t border-white/[0.08] px-1 pt-3"
+              className="mb-3 flex gap-2 overflow-x-auto pb-2"
+              style={{ scrollbarWidth: 'none', touchAction: 'pan-x' }}
             >
               {forecast.map((day) => {
                 const selected = selectedForecast?.date === day.date;
@@ -351,20 +310,66 @@ export const TripOverview: React.FC = () => {
                     type="button"
                     onClick={() => setSelectedForecast(day)}
                     aria-pressed={selected}
-                    className={`flex min-h-[58px] min-w-0 flex-1 flex-col items-center justify-center text-center transition-[transform,color] duration-200 ${
-                      selected ? 'scale-105 text-white' : 'text-slate-500'
+                    className={`flex min-h-[104px] min-w-[72px] shrink-0 flex-col items-center justify-center rounded-[20px] border px-2 py-3 text-center transition-[transform,background-color,border-color] duration-200 ${
+                      selected
+                        ? 'scale-[1.03] border-[#0A84FF]/60 bg-gradient-to-b from-[#0A84FF]/25 to-[#0A84FF]/10 text-white shadow-[0_8px_24px_rgba(10,132,255,0.14)]'
+                        : 'border-white/[0.07] bg-white/[0.035] text-slate-400'
                     }`}
                   >
-                    <span className={`text-xs uppercase leading-none ${selected ? 'font-bold' : 'font-medium'}`}>
+                    <span className={`text-xs uppercase leading-none ${selected ? 'font-bold text-white' : 'font-medium'}`}>
                       {new Date(`${day.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { weekday: 'short' }).slice(0, 3)}
                     </span>
-                    <span className={`mt-1 text-xl leading-none ${selected ? 'font-extrabold' : 'font-semibold'}`}>
+                    <CloudSun size={20} weight="duotone" className={`my-2 ${selected ? 'text-sky-300' : 'text-slate-500'}`} />
+                    <span className={`text-base leading-none ${selected ? 'font-extrabold text-white' : 'font-semibold text-slate-300'}`}>
+                      {day.maximum}°
+                    </span>
+                    <span className="mt-1 text-[11px] leading-none text-slate-500">
+                      {day.minimum}°
+                    </span>
+                    <span className="sr-only">
                       {new Date(`${day.date}T12:00:00`).getDate()}
                     </span>
                   </button>
                 );
               })}
             </div>
+            {selectedForecast && (
+              <div className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-gradient-to-br from-[#20232b] via-[#17191f] to-[#111216] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.24)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-bold text-white">
+                      {new Date(`${selectedForecast.date}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-400">{t(weatherDescription(selectedForecast.code))}</p>
+                  </div>
+                  <CloudSun size={34} weight="duotone" className="shrink-0 text-sky-300" />
+                </div>
+                <div className="mt-4 flex items-end justify-between gap-3">
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{t('Average')}</span>
+                    <span className="text-5xl font-extrabold leading-none tracking-tight text-white">{selectedForecast.average}°</span>
+                  </div>
+                  <div className="flex gap-4 pb-1">
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('High')}</span>
+                      <span className="text-xl font-bold text-white">{selectedForecast.maximum}°</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">{t('Low')}</span>
+                      <span className="text-xl font-bold text-slate-400">{selectedForecast.minimum}°</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-4 gap-x-2 gap-y-3 border-t border-white/[0.08] pt-3">
+                  {selectedForecast.hours.map((hour) => (
+                    <div key={hour.time} className="min-w-0 text-center">
+                      <span className="block text-[11px] font-medium text-slate-500">{hour.time}</span>
+                      <span className="mt-1 block text-sm font-bold text-slate-200">{hour.temperature}°</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <p className="rounded-2xl bg-white/[0.06] p-4 text-sm text-slate-400">
@@ -385,20 +390,31 @@ export const TripOverview: React.FC = () => {
       <section className="mb-7">
         <h2 className="mb-3 text-lg font-bold">{t('Trip collection')}</h2>
         {sharedPhotos.length ? (
-          <div className="columns-2 gap-2">
+          <div className="-mx-4 grid auto-rows-[72px] grid-cols-2 gap-x-1 gap-y-1 px-4">
             {sharedPhotos.map((photo, index) => (
               <button
                 key={photo.id}
                 type="button"
                 onClick={() => photo.image_url && setSelectedPhoto(photo.image_url)}
                 aria-label={t('View shared trip photo')}
-                className="trip-photo-card mb-2 block w-full break-inside-avoid bg-transparent"
+                className={`trip-photo-card min-h-0 min-w-0 overflow-visible bg-transparent ${
+                  sharedPhotos.length === 1 || (sharedPhotos.length > 3 && index % 5 === 0)
+                    ? 'col-span-2 row-span-3'
+                    : sharedPhotos.length === 2 ? 'row-span-3' : 'row-span-2'
+                }`}
                 style={{
                   '--photo-rotation': `${((index % 5) - 2) * 1.2}deg`,
+                  '--photo-scale': index % 4 === 0 ? 0.94 : index % 4 === 2 ? 1.02 : 1,
                   animationDelay: `${Math.min(index * 45, 450)}ms`,
+                  zIndex: index % 3,
                 } as React.CSSProperties}
               >
-                <img src={photo.image_url || ''} alt="Shared trip photo" loading="lazy" className="mx-auto h-auto w-full rounded-2xl object-contain shadow-[0_12px_28px_rgba(0,0,0,0.55)]" />
+                <img
+                  src={photo.image_url || ''}
+                  alt="Shared trip photo"
+                  loading="lazy"
+                  className="h-full w-full rounded-[20px] object-cover shadow-[0_12px_28px_rgba(0,0,0,0.62)]"
+                />
               </button>
             ))}
           </div>
