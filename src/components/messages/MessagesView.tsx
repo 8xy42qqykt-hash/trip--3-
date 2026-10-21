@@ -283,17 +283,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const handleFocus = () => {
     isInputFocusedRef.current = true;
     notifyKeyboard(true);
-    const keepAppAtTop = () => {
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
-      if (document.documentElement.scrollTop !== 0) document.documentElement.scrollTop = 0;
-      if (document.body.scrollTop !== 0) document.body.scrollTop = 0;
-    };
-    keepAppAtTop();
-    window.requestAnimationFrame(keepAppAtTop);
     const offset = calcKeyboardOffset();
     setKeyboardOffset(offset);
     window.setTimeout(() => {
-      keepAppAtTop();
       setKeyboardOffset(calcKeyboardOffset());
     }, 60);
   };
@@ -318,7 +310,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (typeof window === 'undefined') return;
 
     const handleViewportChange = () => {
-      if (isInputFocusedRef.current && window.scrollY !== 0) window.scrollTo(0, 0);
       const offset = calcKeyboardOffset();
       const isFocused = document.activeElement === textareaRef.current || isInputFocusedRef.current;
       const isOpen = isFocused || offset > 30;
@@ -1203,33 +1194,74 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
-          {((!isFilteredView && composerMode === 'message' && !isMentionListVisible)
+          {((!isFilteredView && composerMode !== 'grocery_list' && !isMentionListVisible)
             || (onlineMembers.length > 0 && !isMentionListVisible)) && (
             <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-between">
-              {!isFilteredView && composerMode === 'message' && !isMentionListVisible ? (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-label={t('Insert hashtag')}
-                    title={t('Insert hashtag')}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => insertComposerToken('#')}
-                    className="flex h-8 min-w-8 items-center justify-center rounded-full border border-white/10 bg-[#222226]/90 px-2.5 text-sm font-semibold text-slate-300 shadow-[0_2px_10px_rgba(0,0,0,0.25)] transition-colors active:bg-white/15 active:text-white"
-                  >
-                    <Hash size={16} weight="bold" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('Mention a member')}
-                    title={t('Mention a member')}
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => insertComposerToken('@')}
-                    className="flex h-8 min-w-8 items-center justify-center rounded-full border border-white/10 bg-[#222226]/90 px-2.5 text-sm font-semibold text-slate-300 shadow-[0_2px_10px_rgba(0,0,0,0.25)] transition-colors active:bg-white/15 active:text-white"
-                  >
-                    <At size={16} weight="bold" />
-                  </button>
-                </div>
-              ) : <div />}
+              <div className="flex min-w-0 items-center gap-3 pl-1">
+                {!isFilteredView && composerMode === 'message' && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t('Insert hashtag')}
+                      title={t('Insert hashtag')}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => insertComposerToken('#')}
+                      className="min-h-8 px-1 text-[15px] font-semibold text-slate-300 transition-colors active:text-white"
+                    >
+                      #
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t('Mention a member')}
+                      title={t('Mention a member')}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => insertComposerToken('@')}
+                      className="min-h-8 px-1 text-[15px] font-semibold text-slate-300 transition-colors active:text-white"
+                    >
+                      @
+                    </button>
+                  </>
+                )}
+                {composerMode === 'plan' && (
+                  <>
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
+                      <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
+                      <input
+                        ref={planDateInputRef}
+                        type="date"
+                        aria-label={t('Plan date')}
+                        value={planDate}
+                        onChange={(event) => setPlanDate(event.target.value)}
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                      />
+                    </label>
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
+                      <span>{planTime || t('Add time')}</span>
+                      <input
+                        ref={planTimeInputRef}
+                        type="time"
+                        aria-label={t('Plan time')}
+                        value={planTime}
+                        onChange={(event) => setPlanTime(event.target.value)}
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                      />
+                    </label>
+                  </>
+                )}
+                {composerMode === 'meal' && (
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
+                    <span>{mealTime || t('Add time')}</span>
+                    <input
+                      ref={mealTimeInputRef}
+                      type="time"
+                      aria-label={t('Meal time')}
+                      value={mealTime}
+                      onChange={(event) => setMealTime(event.target.value)}
+                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                )}
+              </div>
               {onlineMembers.length > 0 && (
                 <div
                   aria-label={`${onlineMembers.length} members currently active`}
@@ -1263,50 +1295,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           )}
 
           <div className="flex min-w-0 flex-1 flex-col">
-            {(composerMode === 'meal' || composerMode === 'plan') && (
-              <div className="mb-1.5 flex min-h-8 min-w-0 items-center gap-3 pl-1">
-                {composerMode === 'plan' && (
-                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
-                    <input
-                      ref={planDateInputRef}
-                      type="date"
-                      aria-label={t('Plan date')}
-                      value={planDate}
-                      onChange={(event) => setPlanDate(event.target.value)}
-                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    />
-                  </label>
-                )}
-                {composerMode === 'meal' && (
-                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{mealTime || t('Add time')}</span>
-                    <input
-                      ref={mealTimeInputRef}
-                      type="time"
-                      aria-label={t('Meal time')}
-                      value={mealTime}
-                      onChange={(event) => setMealTime(event.target.value)}
-                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    />
-                  </label>
-                )}
-                {composerMode === 'plan' && (
-                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-medium text-slate-400 active:text-white">
-                    <span>{planTime || t('Add time')}</span>
-                    <input
-                      ref={planTimeInputRef}
-                      type="time"
-                      aria-label={t('Plan time')}
-                      value={planTime}
-                      onChange={(event) => setPlanTime(event.target.value)}
-                      className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                    />
-                  </label>
-                )}
-              </div>
-            )}
-
             {/* Floating Pill Input Box - expands UPWARDS */}
             <div
               style={{
@@ -1355,6 +1343,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 value={inputText}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
+                onPointerDown={(event) => {
+                  if (event.pointerType !== 'mouse') {
+                    event.currentTarget.focus({ preventScroll: true });
+                  }
+                }}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 className={`flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden ${
