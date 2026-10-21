@@ -1433,32 +1433,37 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       )}
 
       {mentionQuery !== null && mentionCandidates.length > 0 && mentionListPosition && createPortal(
-        <div
-          style={{
-            top: `${mentionListPosition.top}px`,
-            left: `${mentionListPosition.left}px`,
-            width: `${mentionListPosition.width}px`,
-            maxHeight: `${mentionListPosition.maxHeight}px`,
-          }}
-          className="fixed z-[12002] flex max-h-56 flex-col items-start overflow-y-auto animate-calm-fade-in"
-        >
-          {mentionCandidates.map((member) => (
-            <button
-              key={member.user_id}
-              type="button"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => handleSelectMention(member)}
-              className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
-            >
-              <Avatar
-                name={member.profile?.display_name}
-                avatarUrl={member.profile?.avatar_url}
-                color={member.profile?.color}
-                size={30}
-              />
-              <span className="truncate text-sm font-semibold text-white">{member.profile?.display_name}</span>
-            </button>
-          ))}
+        <div className="pointer-events-none fixed inset-0 z-[12002]">
+          <div
+            aria-hidden="true"
+            className="mention-autocomplete-backdrop animate-calm-fade-in"
+            style={{ top: `${mentionListPosition.top}px` }}
+          />
+          <div
+            style={{
+              top: `${mentionListPosition.top}px`,
+              maxHeight: `${mentionListPosition.maxHeight}px`,
+            }}
+            className="pointer-events-auto fixed inset-x-0 flex max-h-56 flex-col items-stretch overflow-y-auto px-3 pb-safe animate-calm-fade-in"
+          >
+            {mentionCandidates.map((member) => (
+              <button
+                key={member.user_id}
+                type="button"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => handleSelectMention(member)}
+                className="mention-autocomplete-item flex min-h-11 w-full items-center gap-2.5 border-b border-white/[0.06] px-3 py-1 text-left transition-colors hover:text-sky-200 active:text-sky-200"
+              >
+                <Avatar
+                  name={member.profile?.display_name}
+                  avatarUrl={member.profile?.avatar_url}
+                  color={member.profile?.color}
+                  size={30}
+                />
+                <span className="truncate text-sm font-semibold text-white">{member.profile?.display_name}</span>
+              </button>
+            ))}
+          </div>
         </div>,
         document.body,
       )}

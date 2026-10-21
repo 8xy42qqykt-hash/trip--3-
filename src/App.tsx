@@ -97,11 +97,11 @@ const TripCountdownOverlay: React.FC<{
       >
         <div className="mb-7 flex items-center justify-center gap-1 text-white sm:gap-2" aria-hidden="true">
           <CountdownValue value={days} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
           <CountdownValue value={hours} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
           <CountdownValue value={minutes} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white/60">.</span>
+          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
           <CountdownValue value={seconds} />
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{tripName}</h2>
