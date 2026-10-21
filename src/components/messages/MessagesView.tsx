@@ -1206,7 +1206,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Insert hashtag')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('#')}
-                      className="min-h-8 px-1 text-[15px] font-semibold text-slate-300 transition-colors active:text-white"
+                      className="min-h-8 translate-y-0.5 px-1 text-base font-bold leading-none text-slate-300 transition-colors active:text-white"
                     >
                       #
                     </button>
@@ -1216,7 +1216,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Mention a member')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('@')}
-                      className="min-h-8 px-1 text-[15px] font-semibold text-slate-300 transition-colors active:text-white"
+                      className="min-h-8 px-1 text-base font-bold leading-none text-slate-300 transition-colors active:text-white"
                     >
                       @
                     </button>
