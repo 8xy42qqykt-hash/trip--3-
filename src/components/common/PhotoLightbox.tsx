@@ -1,102 +1,234 @@
-import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
-import { Download, X } from '@phosphor-icons/react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { DownloadSimple, X } from '@phosphor-icons/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useLanguage } from '../../context/LanguageContext';
 
-let photoDownloadSequence = 0;
-
-interface PhotoLightboxProps {
-  imageUrl: string;
-  onClose: () => void;
+export interface LightboxPhoto {
+  id: string;
+  url: string;
 }
 
-export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ imageUrl, onClose }) => {
-  const { t } = useLanguage();
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState('');
-  const [isOpen, setIsOpen] = useState(true);
+interface PhotoLightboxProps {
+  photos?: LightboxPhoto[];
+  selectedPhotoId?: string;
+  onSelectPhoto?: (photoId: string) => void;
+  imageUrl?: string;
+  onClose: () => void;
+  showCloseButton?: boolean;
+}
 
-  const requestClose = () => setIsOpen(false);
+export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
+  photos: providedPhotos,
+  selectedPhotoId,
+  onSelectPhoto,
+  imageUrl,
+  onClose,
+  showCloseButton = true,
+}) => {
+  const { t } = useLanguage();
+  const fallbackPhotos = imageUrl ? [{ id: imageUrl, url: imageUrl }] : [];
+  const photos = providedPhotos?.length ? providedPhotos : fallbackPhotos;
+  const activePhoto = photos.find((photo) => photo.id === selectedPhotoId) || photos[0];
+  const [downloading, setDownloading] = useState(false);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+  const stripScrollTimer = useRef<number | null>(null);
+  const programmaticScrollTimer = useRef<number | null>(null);
+  const isStripScrollingRef = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!selectedPhotoId || !stripRef.current || isStripScrollingRef.current) return;
+    const selected = Array.from(stripRef.current.querySelectorAll<HTMLElement>('[data-photo-id]'))
+      .find((photo) => photo.dataset.photoId === selectedPhotoId);
+    if (!selected) return;
+    const strip = stripRef.current;
+    const targetLeft = selected.offsetLeft + selected.offsetWidth / 2 - strip.clientWidth / 2;
+    isProgrammaticScrollRef.current = true;
+    strip.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
+    programmaticScrollTimer.current = window.setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 450);
+  }, [selectedPhotoId, photos.length]);
+
+  useEffect(() => () => {
+    if (stripScrollTimer.current !== null) window.clearTimeout(stripScrollTimer.current);
+    if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (!onSelectPhoto || photos.length < 2 || !activePhoto) return;
+      const index = photos.findIndex((photo) => photo.id === activePhoto.id);
+      if (event.key === 'ArrowLeft') onSelectPhoto(photos[(index - 1 + photos.length) % photos.length].id);
+      if (event.key === 'ArrowRight') onSelectPhoto(photos[(index + 1) % photos.length].id);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activePhoto, onClose, onSelectPhoto, photos]);
 
   const downloadPhoto = async () => {
-    setIsDownloading(true);
-    setDownloadError('');
+    if (!activePhoto || downloading) return;
+    setDownloading(true);
     try {
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error(`Could not download photo (${response.status}).`);
+      const response = await fetch(activePhoto.url);
+      if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
       const blob = await response.blob();
-      const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-      const filename = `trip-photo-${++photoDownloadSequence}.${extension}`;
-      const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        await navigator.share({ files: [file], title: t('Save photo') });
-        return;
-      }
       const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = filename;
-      link.click();
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `trip-photo-${activePhoto.id}.jpg`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      console.error('Could not download photo:', error);
-      setDownloadError(error instanceof Error ? error.message : t('Could not download this photo.'));
+      console.error('Could not download trip photo:', error);
+      window.open(activePhoto.url, '_blank', 'noopener,noreferrer');
     } finally {
-      setIsDownloading(false);
+      setDownloading(false);
     }
   };
 
-  return createPortal((
+  const stepPhoto = (direction: number) => {
+    if (!onSelectPhoto || !activePhoto || photos.length < 2) return;
+    const index = photos.findIndex((photo) => photo.id === activePhoto.id);
+    onSelectPhoto(photos[(index + direction + photos.length) % photos.length].id);
+  };
+
+  const handleStripScroll = () => {
+    const strip = stripRef.current;
+    if (!strip || !onSelectPhoto || isProgrammaticScrollRef.current) return;
+    isStripScrollingRef.current = true;
+    if (stripScrollTimer.current !== null) window.clearTimeout(stripScrollTimer.current);
+    stripScrollTimer.current = window.setTimeout(() => {
+      isStripScrollingRef.current = false;
+      const stripCenter = strip.getBoundingClientRect().left + strip.clientWidth / 2;
+      const nearest = Array.from(strip.querySelectorAll<HTMLElement>('[data-photo-id]'))
+        .reduce<HTMLElement | null>((current, candidate) => {
+          if (!current) return candidate;
+          const currentDistance = Math.abs(current.getBoundingClientRect().left + current.offsetWidth / 2 - stripCenter);
+          const candidateDistance = Math.abs(candidate.getBoundingClientRect().left + candidate.offsetWidth / 2 - stripCenter);
+          return candidateDistance < currentDistance ? candidate : current;
+        }, null);
+      const photoId = nearest?.dataset.photoId;
+      if (photoId && photoId !== activePhoto?.id) onSelectPhoto(photoId);
+    }, 140);
+  };
+
+  if (!activePhoto) return null;
+
+  return (
     <motion.div
+      data-no-edge-swipe
+      className="fixed inset-0 z-[11000] overflow-hidden bg-black"
       initial={{ opacity: 0 }}
-      animate={{ opacity: isOpen ? 1 : 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      onAnimationComplete={() => {
-        if (!isOpen) onClose();
-      }}
-      className="fixed inset-0 z-[11000] flex flex-col items-center justify-center bg-black/95 p-4"
-      style={{
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-      }}
-      onClick={requestClose}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.24, ease: 'easeOut' }}
     >
-      <div className="flex w-full max-w-3xl items-center justify-end gap-2 pb-3" onClick={(event) => event.stopPropagation()}>
-        <button
-          type="button"
-          onClick={() => void downloadPhoto()}
-          disabled={isDownloading}
-          style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
-          className="flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <Download size={18} /> {t(isDownloading ? 'Saving…' : 'Save photo')}
-        </button>
-        <button
-          type="button"
-          onClick={requestClose}
-          aria-label={t('Close photo')}
-          style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white"
-        >
-          <X size={20} />
-        </button>
-      </div>
-      {downloadError && (
-        <p role="alert" className="mb-3 max-w-3xl text-center text-sm text-red-200">
-          {t(downloadError)}
-        </p>
-      )}
       <motion.img
-        src={imageUrl}
-        alt={t('Shared trip photo')}
-        onClick={(event) => event.stopPropagation()}
-        initial={{ opacity: 0, scale: 0.88, y: 12 }}
-        animate={isOpen ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.92, y: 8 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-        className="max-h-[82dvh] max-w-full object-contain"
+        key={`backdrop-${activePhoto.id}`}
+        src={activePhoto.url}
+        alt=""
+        aria-hidden="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.68 }}
+        transition={{ duration: 0.3 }}
+        className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[40px]"
       />
+      <div className="pointer-events-none absolute inset-0 bg-black/45" />
+
+      {showCloseButton && (
+        <button
+          type="button"
+          aria-label={t('Close photo')}
+          onClick={onClose}
+          className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+4rem)] z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-xl"
+        >
+          <X size={21} weight="bold" />
+        </button>
+      )}
+
+      <div
+        className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}
+      >
+        <div
+          className="relative flex min-h-0 flex-1 items-center justify-center px-2 py-3"
+          onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
+          onTouchEnd={(event) => {
+            if (touchStartX.current === null) return;
+            const delta = event.changedTouches[0].clientX - touchStartX.current;
+            touchStartX.current = null;
+            if (Math.abs(delta) > 55) stepPhoto(delta < 0 ? 1 : -1);
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activePhoto.id}
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              className="relative flex max-h-full max-w-full items-center justify-center"
+            >
+              <img
+                src={activePhoto.url}
+                alt={t('Shared trip photo')}
+                className="block max-h-full max-w-full select-none object-contain"
+                draggable={false}
+              />
+              <button
+                type="button"
+                aria-label={t('Download photo')}
+                onClick={() => void downloadPhoto()}
+                disabled={downloading}
+                className="absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
+              >
+                <DownloadSimple size={21} weight="bold" />
+              </button>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {photos.length > 0 && (
+          <div
+            ref={stripRef}
+            onScroll={handleStripScroll}
+            className="photo-filmstrip flex h-[calc(76px+env(safe-area-inset-bottom,0px))] shrink-0 snap-x snap-mandatory items-center gap-2 overflow-x-auto px-[calc(50vw-27px)] pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-1"
+            style={{
+              scrollbarWidth: 'none',
+            }}
+          >
+            {photos.map((photo) => (
+              <button
+                key={photo.id}
+                data-photo-id={photo.id}
+                type="button"
+                aria-label={t('View shared trip photo')}
+                aria-current={photo.id === activePhoto.id}
+                onClick={() => onSelectPhoto?.(photo.id)}
+                className="h-14 w-14 shrink-0 snap-center overflow-hidden rounded-xl"
+              >
+                <motion.img
+                  src={photo.url}
+                  alt=""
+                  loading="lazy"
+                  animate={{
+                    scale: photo.id === activePhoto.id ? 1.12 : 0.94,
+                    opacity: photo.id === activePhoto.id ? 1 : 0.58,
+                  }}
+                  transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                  className="h-full w-full rounded-xl object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </motion.div>
-  ), document.body);
+  );
 };

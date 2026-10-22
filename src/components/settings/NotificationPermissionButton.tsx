@@ -30,6 +30,7 @@ export const NotificationPermissionButton: React.FC = () => {
   const [isBusy, setIsBusy] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [preferences, setPreferences] = useState(defaultPreferences);
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   React.useEffect(() => {
     if (!user || !supabase) {
@@ -109,6 +110,7 @@ export const NotificationPermissionButton: React.FC = () => {
 
   const toggleNotifications = async () => {
     if (!user || isBusy) return;
+    setHasInteracted(true);
     setIsBusy(true);
     setStatus('');
     try {
@@ -215,12 +217,16 @@ export const NotificationPermissionButton: React.FC = () => {
           aria-label={t('Turn notifications on or off')}
           onClick={() => void toggleNotifications()}
           disabled={isLoading || isBusy}
-          className={`relative h-8 w-[54px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60 ${
+          className={`relative h-8 w-[54px] shrink-0 rounded-full disabled:opacity-60 ${
+            hasInteracted ? 'transition-colors duration-200' : ''
+          } ${
             preferences.enabled ? 'bg-[#0A84FF]' : 'bg-white/20'
           }`}
         >
           <span
-            className="absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-[left] duration-200"
+            className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow ${
+              hasInteracted ? 'transition-[left] duration-200' : ''
+            }`}
             style={{ left: preferences.enabled ? 26 : 4 }}
           />
         </button>

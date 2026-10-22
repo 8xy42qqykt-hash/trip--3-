@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
 import {
   Heart,
-  Check,
   ThumbsUp,
   ThumbsDown,
   Smiley,
@@ -16,14 +16,13 @@ import {
   HandHeart,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
-import { PollResultMessage } from './PollResultMessage';
 import { useLanguage } from '../../context/LanguageContext';
 
 interface ReactionPickerProps {
   message: Message;
   isOwnMessage: boolean;
   bubbleRect: DOMRect | null;
-  bubbleRadiusClasses?: string;
+  bubbleElement: HTMLElement | null;
   currentReaction?: Reaction['kind'] | null;
   onReact: (kind: Reaction['kind']) => void;
   onReply: () => void;
@@ -47,7 +46,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   message,
   isOwnMessage,
   bubbleRect,
-  bubbleRadiusClasses,
+  bubbleElement,
   currentReaction,
   onReact,
   onReply,
@@ -58,8 +57,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   onClose,
 }) => {
   const { t } = useLanguage();
-  const isPollResult = message.type === 'poll_result' && message.metadata;
-  const isImageOnly = message.type === 'image' && Boolean(message.image_url);
+  const liftedBubbleRef = useRef<HTMLDivElement>(null);
 
   const windowH = typeof window !== 'undefined' ? window.innerHeight : 800;
   const windowW = typeof window !== 'undefined' ? window.innerWidth : 400;
@@ -108,8 +106,6 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     targetBubbleTop = maxBubbleTop;
   }
 
-  const verticalShift = targetBubbleTop - originalBubbleTop;
-
   // Clamp bubble horizontally strictly within [containerLeft, containerRight - bubbleWidth]
   const originalBubbleLeft = bubbleRect ? bubbleRect.left : (containerLeft + containerRight - bubbleWidth) / 2;
   const targetBubbleLeft = Math.max(containerLeft, Math.min(containerRight - bubbleWidth, originalBubbleLeft));
@@ -130,24 +126,41 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   actionMenuLeft = Math.max(containerLeft, Math.min(containerRight - actualMenuWidth, actionMenuLeft));
   const actionMenuTop = targetBubbleTop + bubbleHeight + gap;
 
-  const defaultRadius = bubbleRadiusClasses || (isOwnMessage ? 'rounded-[22px] rounded-br-[6px]' : 'rounded-[22px] rounded-bl-[6px]');
+  useLayoutEffect(() => {
+    const container = liftedBubbleRef.current;
+    if (!container || !bubbleElement) return;
+    const clone = bubbleElement.cloneNode(true);
+    if (!(clone instanceof HTMLElement)) return;
+    clone.style.width = '100%';
+    clone.style.maxWidth = 'none';
+    clone.style.maxHeight = 'none';
+    clone.style.overflow = 'visible';
+    clone.style.pointerEvents = 'none';
+    container.replaceChildren(clone);
+  }, [bubbleElement, message.id]);
 
   const content = (
     <div className="fixed inset-0 z-[12010] select-none">
       {/* Blurred & dimmed backdrop */}
-      <div
+      <motion.div
         onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         style={{
           top: 0,
           backdropFilter: 'blur(28px) saturate(180%)',
           WebkitBackdropFilter: 'blur(28px) saturate(180%)',
           backgroundImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.08) 48%, rgba(0, 0, 0, 0.94) 100%)',
         }}
-        className="fixed inset-0 animate-backdrop-in"
+        className="fixed inset-0"
       />
 
       {/* Floating container with smooth slide */}
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 14, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 30 }}
         style={{
           transform: 'translateY(0)',
           transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -155,7 +168,10 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
         className="fixed inset-0 pointer-events-none z-[9999]"
       >
         {/* Reaction Bar: Clamped strictly within screen boundaries */}
-        <div
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
           style={{
             top: `${reactionBarTop}px`,
             left: `${reactionBarLeft}px`,
@@ -186,116 +202,29 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
               </button>
             );
           })}
-        </div>
+        </motion.div>
 
-        {/* Keep the lifted copy at the measured dimensions so long-press cannot reflow the message. */}
-        <div
+        {/* Clone the rendered bubble so every message type keeps its exact chat appearance. */}
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
           style={{
             top: `${targetBubbleTop}px`,
             left: `${targetBubbleLeft}px`,
             width: `${bubbleWidth}px`,
-            height: `${bubbleHeight}px`,
-            overflow: 'hidden',
             boxSizing: 'border-box',
           }}
           className="absolute pointer-events-none"
         >
-          {isImageOnly ? (
-            <div className="flex flex-col items-center gap-2">
-              <img
-                src={message.image_url!}
-                alt="Attachment"
-                style={{
-                  width: `${bubbleWidth}px`,
-                  maxHeight: '75vh',
-                }}
-                className="rounded-[22px] object-cover shadow-2xl block"
-              />
-              {message.content && (
-                <p className="text-base px-2 text-white whitespace-pre-wrap break-words">
-                  {message.content}
-                </p>
-              )}
-            </div>
-          ) : isPollResult ? (
-            <div
-              className={`p-4 shadow-2xl text-white ${defaultRadius} ${
-                isOwnMessage ? 'bg-[#0A84FF]' : 'bg-[#262629]'
-              }`}
-            >
-              <PollResultMessage metadata={message.metadata} isOwn={isOwnMessage} />
-            </div>
-          ) : message.type === 'grocery_list' ? (
-            <div
-              className={`min-w-[190px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl text-white ${defaultRadius} ${
-                isOwnMessage ? 'bg-[#0A84FF]' : 'bg-[#262629]'
-              }`}
-              style={{ width: '100%', height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}
-            >
-              <div className="space-y-2">
-                <div className="text-xs font-semibold tracking-wide text-white/70">{t('Grocery list')}</div>
-                <div className="space-y-1.5">
-                  {(message.metadata?.items || message.content.split(/\r?\n/).map((text: string) => ({ text, checked: false }))).map((item: { text: string; checked?: boolean }, index: number) => (
-                    <div key={`${item.text}-${index}`} className="flex min-h-8 items-center gap-2 text-sm">
-                      <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border ${
-                        item.checked ? 'border-white bg-white text-[#0A84FF]' : 'border-white/75'
-                      }`}>
-                        {item.checked && <Check size={12} weight="bold" />}
-                      </span>
-                      <span className={item.checked ? 'text-white/50 line-through' : ''}>{item.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : message.type === 'meal' || message.type === 'plan' ? (
-            <div
-              className={`min-w-[170px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl whitespace-pre-wrap break-words ${defaultRadius} ${
-                isOwnMessage ? 'bg-[#0A84FF] text-white' : 'bg-[#262629] text-white'
-              }`}
-              style={{
-                width: '100%',
-                height: '100%',
-                boxSizing: 'border-box',
-                overflow: 'hidden',
-              }}
-            >
-              {message.content}
-            </div>
-          ) : message.type === 'call' ? (
-            <div
-              className={`min-w-[200px] px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl ${defaultRadius} ${
-                isOwnMessage ? 'bg-[#0A84FF] text-white' : 'bg-[#262629] text-white'
-              }`}
-            >
-              <div className="mb-1 text-xs font-semibold tracking-wide text-white/70">
-                {message.metadata?.kind === 'video' ? 'Video call' : 'Voice call'}
-              </div>
-              <p className="font-semibold">
-                {message.metadata?.status === 'ended' ? 'Call ended' : 'Call in progress'}
-              </p>
-            </div>
-          ) : (
-            <div
-              className={`px-4 py-2.5 text-[16px] leading-[1.4] shadow-2xl whitespace-pre-wrap break-words ${defaultRadius} ${
-                isOwnMessage
-                  ? 'bg-[#0A84FF] text-white'
-                  : 'bg-[#262629] text-white'
-              }`}
-              style={{
-                width: '100%',
-                height: '100%',
-                boxSizing: 'border-box',
-                overflow: 'hidden',
-              }}
-            >
-              {message.content}
-            </div>
-          )}
-        </div>
+          <div ref={liftedBubbleRef} className="w-full" />
+        </motion.div>
 
         {/* Action Menu: Clamped strictly within screen boundaries */}
-        <div
+        <motion.div
+          initial={{ opacity: 0, y: 10, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 360, damping: 30, delay: 0.025 }}
           style={{
             top: `${actionMenuTop}px`,
             left: `${actionMenuLeft}px`,
@@ -304,7 +233,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             WebkitBackdropFilter: 'blur(32px) saturate(190%)',
             backgroundColor: 'rgba(28, 28, 32, 0.94)',
           }}
-          className="absolute border border-white/[0.14] rounded-[22px] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.6)] flex flex-col pointer-events-auto animate-pop-in"
+          className="absolute border border-white/[0.14] rounded-[22px] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.6)] flex flex-col pointer-events-auto"
         >
           <button
             type="button"
@@ -379,8 +308,8 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
               </button>
             </>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 

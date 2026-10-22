@@ -30,6 +30,7 @@ import { Avatar } from '../common/Avatar';
 import { TripMemberStack } from '../common/TripMemberStack';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { BottomSheet } from '../common/BottomSheet';
+import { PhotoLightbox } from '../common/PhotoLightbox';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
 import { supabase, uploadAsset } from '../../lib/supabase';
@@ -44,6 +45,7 @@ import tripLogo from '../../../trip-logo.png';
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan';
   onKeyboardStateChange?: (isOpen: boolean) => void;
+  onPhotoViewerChange?: (isOpen: boolean) => void;
   initialMention?: string;
   onClearInitialMention?: () => void;
   onlineMembers: OnlineTripMember[];
@@ -53,6 +55,7 @@ interface MessagesViewProps {
 export const MessagesView: React.FC<MessagesViewProps> = ({
   viewMode = 'messages',
   onKeyboardStateChange,
+  onPhotoViewerChange,
   initialMention,
   onClearInitialMention,
   onlineMembers,
@@ -92,6 +95,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [draftCheckedItems, setDraftCheckedItems] = useState<number[]>([]);
   const [isPollSheetOpen, setIsPollSheetOpen] = useState(false);
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const callButtonRef = useRef<HTMLButtonElement>(null);
   const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
@@ -304,6 +308,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         return;
       }
       isInputFocusedRef.current = false;
+      setMentionQuery(null);
       const offset = calcKeyboardOffset();
       if (offset <= 20) {
         notifyKeyboard(false);
@@ -813,6 +818,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           })
       : [];
   const isMentionListVisible = mentionQuery !== null && mentionCandidates.length > 0;
+  const tripPhotos = messages
+    .filter((message) => message.type === 'image' && message.image_url)
+    .map((message) => ({ id: message.id, url: message.image_url! }));
+  const selectedPhoto = tripPhotos.find((photo) => photo.id === selectedPhotoId) || null;
+
+  useEffect(() => {
+    onPhotoViewerChange?.(Boolean(selectedPhoto));
+  }, [onPhotoViewerChange, selectedPhotoId]);
+
+  useEffect(() => () => {
+    onPhotoViewerChange?.(false);
+  }, [onPhotoViewerChange]);
 
   useEffect(() => {
     if (!isMentionListVisible) {
@@ -878,7 +895,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       {/* Top Header - Trip Title & Exit Button (Extended cleanly through top danger zone) */}
       <div
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        className="relative isolate z-20 w-full shrink-0"
+        className={`relative isolate w-full shrink-0 ${selectedPhoto ? 'z-[11010]' : 'z-20'}`}
       >
         <div
           aria-hidden="true"
@@ -914,9 +931,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               <button
                 ref={callButtonRef}
                 type="button"
-                aria-label={t('Start a call')}
-                aria-expanded={isCallMenuOpen}
+                aria-label={selectedPhoto ? t('Close photo') : t('Start a call')}
+                aria-expanded={selectedPhoto ? undefined : isCallMenuOpen}
                 onClick={() => {
+                  if (selectedPhoto) {
+                    setSelectedPhotoId(null);
+                    return;
+                  }
                   if (isCallMenuOpen) {
                     setIsCallMenuOpen(false);
                     return;
@@ -927,7 +948,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg active:scale-95"
               >
-                <Phone size={20} weight="fill" />
+                {selectedPhoto ? <X size={20} weight="bold" /> : <Phone size={20} weight="fill" />}
               </button>
             </div>
           ) : <div className="w-14" />}
@@ -1022,6 +1043,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onJoinCall={(callId) => void call.joinCall(callId)}
                   onProfileClick={setSelectedProfileId}
                   onOpenDrawGame={setActiveDrawGameId}
+                  onOpenImage={(url) => {
+                    const photo = tripPhotos.find((item) => item.url === url);
+                    setSelectedPhotoId(photo?.id || null);
+                  }}
                 />
               </motion.div>
             );
@@ -1253,7 +1278,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Insert hashtag')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('#')}
-                      className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] transition-colors active:text-white"
+                      className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       #
                       <span>{t('Hashtag')}</span>
@@ -1264,7 +1289,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Mention a member')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('@')}
-                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] transition-colors active:text-white"
+                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       @
                       <span>{t('Mention')}</span>
@@ -1273,7 +1298,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 )}
                 {composerMode === 'plan' && (
                   <>
-                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] active:text-white">
                       <span>{planDate ? formatTripDate(planDate) : t('Add date')}</span>
                       <input
                         ref={planDateInputRef}
@@ -1284,7 +1309,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                         className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                       />
                     </label>
-                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
+                    <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] active:text-white">
                       <span>{planTime || t('Add time')}</span>
                       <input
                         ref={planTimeInputRef}
@@ -1298,7 +1323,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   </>
                 )}
                 {composerMode === 'meal' && (
-                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.9)] active:text-white">
+                  <label className="relative inline-flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] active:text-white">
                     <span>{mealTime || t('Add time')}</span>
                     <input
                       ref={mealTimeInputRef}
@@ -1497,6 +1522,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           sendMessage={sendMessage}
         />
       )}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <PhotoLightbox
+            key="message-photo-viewer"
+            photos={tripPhotos}
+            selectedPhotoId={selectedPhoto.id}
+            onSelectPhoto={setSelectedPhotoId}
+            onClose={() => setSelectedPhotoId(null)}
+            showCloseButton={false}
+          />
+        )}
+      </AnimatePresence>
 
       {mentionQuery !== null && mentionCandidates.length > 0 && mentionListPosition && createPortal(
         <div className="pointer-events-none fixed inset-0 z-[39]">

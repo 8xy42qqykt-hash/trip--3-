@@ -16,7 +16,6 @@ import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
 import { DrawGameInviteCard } from './DrawGameInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
-import { PhotoLightbox } from '../common/PhotoLightbox';
 import { StickerArtwork } from './StickerArtwork';
 
 interface ChatBubbleProps {
@@ -37,6 +36,7 @@ interface ChatBubbleProps {
   onJoinCall?: (callId: string) => void;
   onProfileClick?: (userId: string) => void;
   onOpenDrawGame?: (gameId: string) => void;
+  onOpenImage?: (imageUrl: string) => void;
 }
 
 const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
@@ -128,12 +128,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onJoinCall,
   onProfileClick,
   onOpenDrawGame,
+  onOpenImage,
 }) => {
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [reactionBurst, setReactionBurst] = useState(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -302,28 +302,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       } select-none`}
     >
       {/* Row containing avatar NEXT to bubble */}
-      <div className={`relative flex items-end gap-2.5 max-w-[85%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-        {!isOwn && (
-          <div className="w-8 h-8 shrink-0 flex items-end">
-            {isLastInGroup ? (
-              <button
-                type="button"
-                onClick={() => message.sender?.id && onProfileClick?.(message.sender.id)}
-                aria-label={`View ${message.sender?.display_name || 'member'} profile`}
-                className="rounded-full"
-              >
-                <Avatar
-                  name={message.sender?.display_name}
-                  avatarUrl={message.sender?.avatar_url}
-                  color={message.sender?.color}
-                  size={32}
-                />
-              </button>
-            ) : (
-              <div className="w-8 h-8" />
-            )}
-          </div>
-        )}
+      <div className={`relative flex max-w-[85%] ${isOwn ? 'flex-row-reverse items-end' : 'flex-col items-start'}`}>
 
         <div className={`relative flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
           {/* Reaction Picker overlay */}
@@ -332,7 +311,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               message={message}
               isOwnMessage={isOwn}
               bubbleRect={bubbleRect}
-              bubbleRadiusClasses={getBubbleRadiusClasses()}
+              bubbleElement={bubbleRef.current}
               currentReaction={userCurrentReaction}
               onReact={(kind) => {
                 onReact(message.id, kind);
@@ -382,7 +361,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onPointerCancel={handlePointerCancel}
               onContextMenu={handleContextMenu}
               onClick={() => {
-                if (!didLongPressRef.current) setSelectedImage(message.image_url!);
+                if (!didLongPressRef.current) onOpenImage?.(message.image_url!);
               }}
               className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y]"
             >
@@ -574,7 +553,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
       {(isLastInGroup || message.type === 'meal' || message.type === 'plan' || message.type === 'call') && (
         <div className={`mt-1 flex flex-col gap-1 text-[11px] font-medium text-slate-500 ${
-          isOwn ? 'mr-1 items-end text-right' : 'ml-10 items-start text-left'
+          isOwn ? 'mr-1 items-end text-right' : 'items-start text-left'
         }`}>
           {(message.type === 'meal' || message.type === 'plan') ? (
             <>
@@ -585,26 +564,60 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 </div>
               ) : null}
               {isLastInGroup && (
-                <span className="flex min-h-5 items-center gap-1">
+                <span className="flex min-h-6 items-center gap-1.5">
                   {!isOwn && (
-                    <>
-                      <span>{message.sender?.display_name || t('Member')}</span>
-                      <span aria-hidden="true">•</span>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => message.sender?.id && onProfileClick?.(message.sender.id)}
+                      aria-label={`View ${message.sender?.display_name || 'member'} profile`}
+                      className="shrink-0 rounded-full"
+                    >
+                      <Avatar
+                        name={message.sender?.display_name}
+                        avatarUrl={message.sender?.avatar_url}
+                        color={message.sender?.color}
+                        size={24}
+                      />
+                    </button>
                   )}
-                  <span>{formatMessageTime(message.created_at)}</span>
+                  <span className="flex items-center gap-1">
+                    {!isOwn && (
+                      <>
+                        <span>{message.sender?.display_name || t('Member')}</span>
+                        <span aria-hidden="true">•</span>
+                      </>
+                    )}
+                    <span>{formatMessageTime(message.created_at)}</span>
+                  </span>
                 </span>
               )}
             </>
           ) : isLastInGroup && (
-            <span className="flex min-h-5 items-center gap-1">
+            <span className="flex min-h-6 items-center gap-1.5">
               {!isOwn && (
-                <>
-                  <span>{message.sender?.display_name || t('Member')}</span>
-                  <span aria-hidden="true">•</span>
-                </>
+                <button
+                  type="button"
+                  onClick={() => message.sender?.id && onProfileClick?.(message.sender.id)}
+                  aria-label={`View ${message.sender?.display_name || 'member'} profile`}
+                  className="shrink-0 rounded-full"
+                >
+                  <Avatar
+                    name={message.sender?.display_name}
+                    avatarUrl={message.sender?.avatar_url}
+                    color={message.sender?.color}
+                    size={24}
+                  />
+                </button>
               )}
-              <span>{formatMessageTime(message.created_at)}</span>
+              <span className="flex items-center gap-1">
+                {!isOwn && (
+                  <>
+                    <span>{message.sender?.display_name || t('Member')}</span>
+                    <span aria-hidden="true">•</span>
+                  </>
+                )}
+                <span>{formatMessageTime(message.created_at)}</span>
+              </span>
             </span>
           )}
           {message.type === 'meal' && (
@@ -619,9 +632,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         </div>
       )}
 
-      {selectedImage && (
-        <PhotoLightbox imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
-      )}
     </div>
   );
 };

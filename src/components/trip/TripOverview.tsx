@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -31,6 +32,8 @@ type ForecastDay = {
   code: number;
   hours: ForecastHour[];
 };
+type CachedForecast = { cachedAt: number; days: ForecastDay[] };
+const forecastCache = new Map<string, CachedForecast>();
 
 const timeAgo = (timestamp: string) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
@@ -198,7 +201,7 @@ const TripLocationMap: React.FC<{
   );
 };
 
-export const TripOverview: React.FC = () => {
+export const TripOverview: React.FC<{ onPhotoViewerChange?: (isOpen: boolean) => void }> = ({ onPhotoViewerChange }) => {
   const { language, t } = useLanguage();
   const { user } = useAuth();
   const { currentTrip, tripMembers, messages } = useTrip();
@@ -208,7 +211,7 @@ export const TripOverview: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const lastWeatherCoordsRef = useRef('');
   const daySwipeStartRef = useRef<number | null>(null);
@@ -217,6 +220,15 @@ export const TripOverview: React.FC = () => {
     () => messages.filter((message) => message.type === 'image' && message.image_url),
     [messages],
   );
+  const lightboxPhotos = useMemo(
+    () => sharedPhotos.map((photo) => ({ id: photo.id, url: photo.image_url! })),
+    [sharedPhotos],
+  );
+  const selectedPhoto = lightboxPhotos.find((photo) => photo.id === selectedPhotoId) || null;
+  useEffect(() => {
+    onPhotoViewerChange?.(Boolean(selectedPhoto));
+  }, [onPhotoViewerChange, selectedPhotoId]);
+  useEffect(() => () => onPhotoViewerChange?.(false), [onPhotoViewerChange]);
   const ownLocation = locations.find((location) => location.user_id === user?.id);
   const markerClick = useCallback((userId: string) => setSelectedProfileId(userId), []);
 
@@ -224,7 +236,7 @@ export const TripOverview: React.FC = () => {
     const coordinateKey = `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
     if (lastWeatherCoordsRef.current === coordinateKey) return;
     lastWeatherCoordsRef.current = coordinateKey;
-    setIsLoadingWeather(true);
+    setIsLoadingWeather(!forecastCache.has(coordinateKey));
     try {
       const params = new URLSearchParams({
         latitude: String(latitude),
@@ -260,8 +272,10 @@ export const TripOverview: React.FC = () => {
           hours,
         };
       });
+      forecastCache.set(coordinateKey, { cachedAt: Date.now(), days });
       setForecast(days);
       setSelectedForecast((selected) => days.find((day) => day.date === selected?.date) || days[0] || null);
+      setError('');
     } catch (fetchError) {
       console.error('Could not load trip weather:', fetchError);
       lastWeatherCoordsRef.current = '';
@@ -274,6 +288,12 @@ export const TripOverview: React.FC = () => {
   useEffect(() => {
     const location = ownLocation || locations.find((item) => item.latitude !== null && item.longitude !== null);
     if (location && location.latitude !== null && location.longitude !== null) {
+      const coordinateKey = `${location.latitude.toFixed(2)},${location.longitude.toFixed(2)}`;
+      const cached = forecastCache.get(coordinateKey);
+      if (cached) {
+        setForecast(cached.days);
+        setSelectedForecast((selected) => cached.days.find((day) => day.date === selected?.date) || cached.days[0] || null);
+      }
       void loadWeather(location.latitude, location.longitude);
     }
   }, [locations, ownLocation]);
@@ -283,11 +303,11 @@ export const TripOverview: React.FC = () => {
   return (
     <div
       onScroll={(event) => setIsTitleCollapsed(event.currentTarget.scrollTop > 40)}
-      className="h-full overflow-y-auto bg-black px-4 pb-32 text-white"
+      className="page-content-enter h-full overflow-y-auto bg-black px-4 pb-32 text-white"
     >
       <header
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        className="sticky top-0 isolate z-20 -mx-4 mb-4 shrink-0 px-4"
+        className={`sticky top-0 isolate -mx-4 mb-4 shrink-0 px-4 ${selectedPhoto ? 'z-[11010]' : 'z-20'}`}
       >
         <div
           aria-hidden="true"
@@ -316,7 +336,6 @@ export const TripOverview: React.FC = () => {
 
       <section data-no-edge-swipe className="mb-7">
         <div className="mb-3 flex items-center gap-2">
-          <CloudSun size={20} className="text-[#0A84FF]" />
           <h2 className="text-lg font-bold">{t('Weather')}</h2>
         </div>
         {forecast.length ? (
@@ -424,7 +443,7 @@ export const TripOverview: React.FC = () => {
               <button
                 key={photo.id}
                 type="button"
-                onClick={() => photo.image_url && setSelectedPhoto(photo.image_url)}
+                onClick={() => setSelectedPhotoId(photo.id)}
                 aria-label={t('View shared trip photo')}
                 className={`trip-photo-card min-h-0 min-w-0 overflow-visible bg-transparent ${
                   sharedPhotos.length === 1 || (sharedPhotos.length > 3 && index % 5 === 0)
@@ -458,7 +477,18 @@ export const TripOverview: React.FC = () => {
         onClose={() => setSelectedProfileId(null)}
       />
 
-      {selectedPhoto && <PhotoLightbox imageUrl={selectedPhoto} onClose={() => setSelectedPhoto(null)} />}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <PhotoLightbox
+            key="trip-photo-viewer"
+            photos={lightboxPhotos}
+            selectedPhotoId={selectedPhoto.id}
+            onSelectPhoto={setSelectedPhotoId}
+            onClose={() => setSelectedPhotoId(null)}
+            showCloseButton
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

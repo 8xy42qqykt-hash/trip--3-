@@ -12,6 +12,7 @@ interface CollapsingHeaderLayoutProps {
   children: React.ReactNode;
   showBackButton?: boolean;
   showScrolledBorder?: boolean;
+  animateContentEntrance?: boolean;
 }
 
 export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
@@ -22,6 +23,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
   children,
   showBackButton = false,
   showScrolledBorder = true,
+  animateContentEntrance = false,
 }) => {
   const { t } = useLanguage();
   const { exitTrip, tripMembers } = useTrip();
@@ -110,7 +112,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
         </div>
 
         {/* Content with comfortable clearance above bottom nav bar */}
-        <div className="px-5 pb-20">
+        <div className={`px-5 pb-20 ${animateContentEntrance ? 'staggered-page-enter' : ''}`}>
           {children}
         </div>
       </div>

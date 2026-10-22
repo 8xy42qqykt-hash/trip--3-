@@ -15,11 +15,13 @@ export const LocationSharingToggle: React.FC<LocationSharingToggleProps> = ({ tr
   const isSharing = locations.some((location) => location.user_id === userId && location.sharing);
   const [isBusy, setIsBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => setStatus(''), [isSharing]);
 
   const toggleSharing = async () => {
     if (!tripId || !userId || !supabase || isBusy) return;
+    setHasInteracted(true);
     const client = supabase;
     setIsBusy(true);
     setStatus('');
@@ -88,11 +90,18 @@ export const LocationSharingToggle: React.FC<LocationSharingToggleProps> = ({ tr
           aria-label={t('Share my location with trip members')}
           onClick={() => void toggleSharing()}
           disabled={isBusy || !tripId || !userId}
-          className={`relative h-8 w-[54px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60 ${
+          className={`relative h-8 w-[54px] shrink-0 rounded-full disabled:opacity-60 ${
+            hasInteracted ? 'transition-colors duration-200' : ''
+          } ${
             isSharing ? 'bg-[#0A84FF]' : 'bg-white/20'
           }`}
         >
-          <span className="absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-[left] duration-200" style={{ left: isSharing ? 26 : 4 }} />
+          <span
+            className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow ${
+              hasInteracted ? 'transition-[left] duration-200' : ''
+            }`}
+            style={{ left: isSharing ? 26 : 4 }}
+          />
         </button>
       </div>
       {isBusy && <p className="mt-2 text-xs text-slate-400">{t('Updating location sharing…')}</p>}

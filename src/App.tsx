@@ -61,10 +61,15 @@ const TripCountdownOverlay: React.FC<{
   t: (value: string) => string;
 }> = ({ tripName, startDate, onDismiss, t }) => {
   const [now, setNow] = useState(Date.now());
+  const [showEntryHint, setShowEntryHint] = useState(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
+    const hintTimer = window.setTimeout(() => setShowEntryHint(true), 1000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(hintTimer);
+    };
   }, []);
 
   const remaining = Math.max(0, new Date(`${startDate}T00:00:00`).getTime() - now);
@@ -108,6 +113,20 @@ const TripCountdownOverlay: React.FC<{
         <p className="mt-2 text-sm text-slate-400">
           {new Date(`${startDate}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })}
         </p>
+        <AnimatePresence>
+          {showEntryHint && (
+            <motion.p
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 2rem)' }}
+              className="fixed left-0 right-0 text-center text-sm font-medium text-white/70"
+            >
+              {t('Click anywhere to enter')}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
@@ -123,6 +142,7 @@ const MainAppContent: React.FC = () => {
   const [isLaunchAnimationVisible, setIsLaunchAnimationVisible] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showTripCountdown, setShowTripCountdown] = useState(false);
+  const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
   const [countdownShownTripId, setCountdownShownTripId] = useState<string | null>(null);
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
   const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
@@ -548,6 +568,7 @@ const MainAppContent: React.FC = () => {
             {activeView === 'messages' && (
               <MessagesView
                 onKeyboardStateChange={setIsKeyboardOpen}
+                onPhotoViewerChange={setIsPhotoViewerOpen}
                 initialMention={targetMention}
                 onClearInitialMention={() => setTargetMention(undefined)}
                 onlineMembers={onlineMembers}
@@ -561,7 +582,7 @@ const MainAppContent: React.FC = () => {
               <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
             )}
             {activeView === 'my_trip' && (
-              <TripOverview />
+              <TripOverview onPhotoViewerChange={setIsPhotoViewerOpen} />
             )}
             {activeView === 'settings' && (
               <SettingsView onNavigateToMessages={handleNavigateToMessages} />
@@ -578,8 +599,8 @@ const MainAppContent: React.FC = () => {
       <BottomTabBar
         activeTab={activeTab}
         onChangeTab={handleTabChange}
-        isHidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
-        hidden={!currentTrip || (isKeyboardOpen && activeTab === 'messages')}
+        isHidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
+        hidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
       />
       <AnimatePresence>
         {showTripCountdown && currentTrip && (

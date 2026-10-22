@@ -179,6 +179,23 @@
   backdrop-filter: blur(28px) saturate(125%);
 }
 
+.page-content-enter {
+  animation: page-content-fade 420ms ease-out both;
+}
+
+.staggered-page-enter > * {
+  animation: page-content-fade 420ms ease-out both;
+}
+
+@keyframes page-content-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .mention-autocomplete-backdrop {
   position: fixed;
   right: 0;
