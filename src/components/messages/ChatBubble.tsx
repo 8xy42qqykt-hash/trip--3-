@@ -15,6 +15,7 @@ import { PollResultMessage } from './PollResultMessage';
 import { formatMessageTime, formatTripDate } from '../../utils/date';
 import { TripMember } from '../../types';
 import { DrawGameInviteCard } from './DrawGameInviteCard';
+import { GameSessionInviteCard } from './GameSessionInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { StickerArtwork } from './StickerArtwork';
 
@@ -36,6 +37,7 @@ interface ChatBubbleProps {
   onJoinCall?: (callId: string) => void;
   onProfileClick?: (userId: string) => void;
   onOpenDrawGame?: (gameId: string) => void;
+  onOpenGameSession?: (gameId: string) => void;
   onOpenImage?: (imageUrl: string) => void;
 }
 
@@ -128,6 +130,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onJoinCall,
   onProfileClick,
   onOpenDrawGame,
+  onOpenGameSession,
   onOpenImage,
 }) => {
   const { t } = useLanguage();
@@ -472,7 +475,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 ) : message.type === 'draw_game' ? (
                   <DrawGameInviteCard
                     gameId={message.metadata?.gameId}
+                    members={members}
                     onOpen={onOpenDrawGame}
+                  />
+                ) : message.type === 'game_session' ? (
+                  <GameSessionInviteCard
+                    gameId={message.metadata?.gameSessionId}
+                    members={members}
+                    currentUserId={currentUserId}
+                    onOpen={onOpenGameSession}
                   />
                 ) : message.type === 'call' ? (
                   <div className="min-w-[200px]">

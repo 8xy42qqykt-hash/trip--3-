@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowCounterClockwise, ArrowLeft, Check, Play } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowLeft, Check, GameController } from '@phosphor-icons/react';
 import { Message, TripMember } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { Avatar } from '../common/Avatar';
 import { useLanguage } from '../../context/LanguageContext';
 import { getDrawGameWordLabel } from '../../utils/drawGameWords';
+import { GameLobby } from './GameLobby';
 
 type DrawGame = {
   id: string;
@@ -453,17 +454,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
           </div>
         )}
         {game?.status === 'lobby' && <div className="flex-1" />}
-        {game?.status === 'lobby' && game.creator_id === userId && (
-          <button
-            type="button"
-            disabled={game.players.length < 2}
-            onClick={() => void startRound()}
-            aria-label={t('Start game')}
-            className="flex min-h-10 items-center gap-2 rounded-full bg-[#0A84FF] px-4 text-sm font-bold disabled:opacity-40"
-          >
-            <Play size={17} weight="fill" /> {t('Start')}
-          </button>
-        )}
       </header>
 
       <div
@@ -475,14 +465,18 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
         }}
       >
         {game?.status === 'lobby' ? (
-          <div className="flex flex-col items-start gap-3">
-            {playerProfiles.map((member) => member?.profile && (
-              <div key={member.user_id} className="flex items-center gap-3">
-                <Avatar name={member.profile.display_name} avatarUrl={member.profile.avatar_url} color={member.profile.color} size={38} />
-                <span className="text-sm font-medium">{member.profile.display_name}</span>
-              </div>
-            ))}
-          </div>
+          <GameLobby
+            title={t('Draw and Guess')}
+            icon={<GameController size={20} weight="fill" />}
+            players={game.players}
+            hostId={game.creator_id}
+            userId={userId}
+            members={members}
+            minPlayers={2}
+            onStart={() => void startRound()}
+            onJoin={() => void openGame()}
+            onLeave={() => void closeGame()}
+          />
         ) : game?.status === 'playing' ? (
           <>
             <div className="shrink-0 py-1 text-center">

@@ -38,12 +38,13 @@ import { OnlineTripMember } from './useTripPresence';
 import { GroupCallManager } from './useGroupCall';
 import { useTripLocations } from '../trip/useTripLocations';
 import { DrawGuessGame } from './DrawGuessGame';
+import { TripGameSession } from './TripGameSession';
 import { useLanguage } from '../../context/LanguageContext';
 import { CHAT_STICKERS, StickerArtwork } from './StickerArtwork';
 import tripLogo from '../../../trip-logo.png';
 
 interface MessagesViewProps {
-  viewMode?: 'messages' | 'grocery_list' | 'plan';
+  viewMode?: 'messages' | 'grocery_list' | 'plan' | 'games';
   onKeyboardStateChange?: (isOpen: boolean) => void;
   onPhotoViewerChange?: (isOpen: boolean) => void;
   initialMention?: string;
@@ -86,7 +87,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
   const [composerMode, setComposerMode] = useState<'message' | 'grocery_list' | 'meal' | 'plan'>(
-    viewMode === 'messages' ? 'message' : viewMode,
+    viewMode === 'messages' || viewMode === 'games' ? 'message' : viewMode,
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [mealTime, setMealTime] = useState('');
@@ -106,6 +107,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string; file: File } | null>(null);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
+  const [activeGameSessionId, setActiveGameSessionId] = useState<string | null>(null);
+  const [isGamesMenuOpen, setIsGamesMenuOpen] = useState(false);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
@@ -130,15 +133,31 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const mealTimeInputRef = useRef<HTMLInputElement>(null);
   const planDateInputRef = useRef<HTMLInputElement>(null);
   const planTimeInputRef = useRef<HTMLInputElement>(null);
-  const isFilteredView = viewMode !== 'messages';
+  const isFilteredView = viewMode !== 'messages' && viewMode !== 'games';
+  const isGamesView = viewMode === 'games';
   const pageTitle = isFilteredView
     ? viewMode === 'grocery_list' ? t('Groceries') : t('Plans')
-    : currentTrip?.name || '';
+    : isGamesView ? t('Games') : currentTrip?.name || '';
   const seenCallIdsRef = useRef(new Set<string>());
   const trackedCallRef = useRef<{ callId: string; startedAt: number } | null>(null);
 
   useEffect(() => {
-    if (isFilteredView) return;
+    if (!isGamesView || !currentTrip) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('trip') !== currentTrip.id || url.searchParams.get('view') !== 'games') return;
+    const sessionId = url.searchParams.get('gameSessionId');
+    const drawId = url.searchParams.get('drawGameId');
+    if (sessionId) setActiveGameSessionId(sessionId);
+    if (drawId) setActiveDrawGameId(drawId);
+    if (sessionId || drawId) {
+      url.searchParams.delete('gameSessionId');
+      url.searchParams.delete('drawGameId');
+      window.history.replaceState(window.history.state, '', url);
+    }
+  }, [currentTrip?.id, isGamesView]);
+
+  useEffect(() => {
+    if (isFilteredView || isGamesView) return;
     const activeCall = call.activeCall;
     if (activeCall) {
       trackedCallRef.current = { callId: activeCall.callId, startedAt: activeCall.startedAt };
@@ -249,7 +268,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       console.error('Could not update call status:', error);
       setComposerError(error instanceof Error ? error.message : t('Could not update the call card.'));
     });
-  }, [call.activeCall, call.lastCallState, call.participants, isFilteredView, messages, sendMessage, t, updateMessage]);
+  }, [call.activeCall, call.lastCallState, call.participants, isFilteredView, isGamesView, messages, sendMessage, t, updateMessage]);
 
   // Auto-mention if passed from members list or settings
   useEffect(() => {
@@ -719,18 +738,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
     setIsPlusMenuOpen(false);
     setComposerError('');
-    const gameId = crypto.randomUUID();
-    const { error } = await supabase.from('draw_games').insert({
-      id: gameId,
-      trip_id: currentTrip.id,
-      creator_id: user.id,
-      status: 'lobby',
-      players: [user.id],
-      participant_ids: [user.id],
-      scores: {},
-      drawing: [],
+    const { data: gameId, error } = await supabase.rpc('create_trip_draw_game', {
+      p_trip_id: currentTrip.id,
     });
-    if (error) {
+    if (error || !gameId) {
       console.error('Could not create Draw and Guess game:', error);
       setComposerError(t('Could not start a game. Please try again.'));
       return;
@@ -750,9 +761,48 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const visibleMessages = isFilteredView
+  const createTripGame = async (gameType: 'movie_trivia' | 'connect_four' | 'tic_tac_toe') => {
+    if (!currentTrip || !user || !supabase) {
+      setComposerError(t('Games require an online connection.'));
+      return;
+    }
+    setIsGamesMenuOpen(false);
+    setComposerError('');
+    const config = gameType === 'movie_trivia' ? { rounds: 5, timeLimit: 30 }
+      : gameType === 'tic_tac_toe' ? { bestOf: 1 } : {};
+    const { data: gameId, error } = await supabase.rpc('create_trip_game_session', {
+      p_trip_id: currentTrip.id,
+      p_game_type: gameType,
+      p_config: config,
+    });
+    if (error || !gameId) {
+      console.error('Could not create game session:', error);
+      setComposerError(error?.message.includes('already in another active game')
+        ? t('You are already in another active game')
+        : t('Could not start a game. Please try again.'));
+      return;
+    }
+    try {
+      await sendMessage(
+        `${t(gameType === 'movie_trivia' ? 'Movie Trivia' : gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe')} — ${t('join the game!')}`,
+        undefined,
+        undefined,
+        'game_session',
+        { gameSessionId: gameId, gameType },
+      );
+      setActiveGameSessionId(gameId);
+    } catch (sendError) {
+      console.error('Could not post game invitation:', sendError);
+      setComposerError(t('The game was created, but its chat invitation could not be sent.'));
+    }
+  };
+
+  const visibleMessages = isGamesView
+    ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session')
+    : isFilteredView
     ? messages.filter((message) => message.type === viewMode)
-    : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan');
+    : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan'
+      && message.type !== 'draw_game' && message.type !== 'game_session');
 
   // Calculate day separators & consecutive grouping
   const messageGroups: Array<{
@@ -931,7 +981,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             <TripMemberStack members={tripMembers} />
           </div>
 
-          {!isFilteredView ? (
+          {!isFilteredView && !isGamesView ? (
             <div className="w-14 flex justify-end">
               <button
                 ref={callButtonRef}
@@ -961,7 +1011,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       </div>
 
       {/* Pinned Polls Banner */}
-      {!isFilteredView && !call.activeCall && !call.incomingCall && call.callError && (
+      {!isFilteredView && !isGamesView && !call.activeCall && !call.incomingCall && call.callError && (
         <div role="alert" className="mx-3 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-[#202024]/95 px-4 py-3 text-sm text-red-200">
           <span>{call.callError}</span>
           <button
@@ -975,7 +1025,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         </div>
       )}
 
-      {!isFilteredView && <PinnedPolls
+      {!isFilteredView && !isGamesView && <PinnedPolls
         polls={polls}
         onVote={votePoll}
         onEndPoll={endPoll}
@@ -1048,6 +1098,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onJoinCall={(callId) => void call.joinCall(callId)}
                   onProfileClick={setSelectedProfileId}
                   onOpenDrawGame={setActiveDrawGameId}
+                  onOpenGameSession={setActiveGameSessionId}
                   onOpenImage={(url) => {
                     const photo = tripPhotos.find((item) => item.url === url);
                     setSelectedPhotoId(photo?.id || null);
@@ -1082,7 +1133,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       )}
 
       {/* Reply Banner */}
-      {replyingTo && !isFilteredView && (
+      {replyingTo && !isFilteredView && !isGamesView && (
         <div
           style={{
             backdropFilter: 'blur(24px) saturate(180%)',
@@ -1122,6 +1173,38 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         data-reaction-clearance
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
+        {isGamesView && (
+          <div className="relative mb-2">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={isGamesMenuOpen}
+              onClick={() => setIsGamesMenuOpen((open) => !open)}
+              className="flex min-h-[48px] w-full items-center justify-between rounded-full border border-white/[0.12] bg-[#222226]/95 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+            >
+              <span className="flex items-center gap-2"><GameController size={19} weight="fill" />{t('Choose a game')}</span>
+              <CaretLeft size={16} className={`-rotate-90 transition-transform ${isGamesMenuOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {isGamesMenuOpen && (
+              <>
+                <button type="button" aria-label={t('Close game menu')} onClick={() => setIsGamesMenuOpen(false)} className="fixed inset-0 z-30 cursor-default" />
+                <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 rounded-[24px] border border-white/[0.14] bg-[#202024]/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl animate-pop-in">
+                  {([
+                    ['Draw and Guess', () => void createDrawGame()],
+                    ['Movie Trivia', () => void createTripGame('movie_trivia')],
+                    ['Connect Four', () => void createTripGame('connect_four')],
+                    ['Tic-Tac-Toe', () => void createTripGame('tic_tac_toe')],
+                  ] as const).map(([name, create]) => (
+                    <button key={name} type="button" role="menuitem" onClick={create} className="flex min-h-12 w-full items-center gap-3 rounded-[18px] px-3.5 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0A84FF]/15 text-[#0A84FF]"><GameController size={17} weight="fill" /></span>
+                      {t(name)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {composerError && (
           <div
             role="alert"
@@ -1153,9 +1236,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         )}
 
         {/* items-end: The + button and send button stay anchored at the bottom line when textarea expands */}
-        <form ref={composerFormRef} onSubmit={handleSend} className="relative flex items-end gap-2">
+        <form ref={composerFormRef} onSubmit={handleSend} className={`relative flex items-end gap-2 ${isGamesView ? 'hidden' : ''}`}>
           {/* Type-specific tabs have a fixed composer mode and do not show mode toggles. */}
-          {!isFilteredView && <button
+          {!isFilteredView && !isGamesView && <button
             type="button"
             disabled={uploadingImage}
             onClick={() => {
@@ -1193,7 +1276,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           </button>}
 
           {/* Plus Menu Popup */}
-          {!isFilteredView && isPlusMenuOpen && (
+          {!isFilteredView && !isGamesView && isPlusMenuOpen && (
             <>
               <div
                 onClick={() => setIsPlusMenuOpen(false)}
@@ -1246,16 +1329,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 ))}
                 <button
                   type="button"
-                  onClick={() => void createDrawGame()}
-                  className="order-4 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
-                >
-                  <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-300">
-                    <GameController size={16} weight="bold" />
-                  </div>
-                  <span>{t('Draw and Guess')}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     setIsPlusMenuOpen(false);
                     setIsPollSheetOpen(true);
@@ -1271,11 +1344,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </>
           )}
 
-          {((!isFilteredView && composerMode !== 'grocery_list' && !isMentionListVisible)
+          {((!isFilteredView && !isGamesView && composerMode !== 'grocery_list' && !isMentionListVisible)
             || (onlineMembers.length > 0 && !isMentionListVisible)) && (
             <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-between">
               <div className="flex min-w-0 items-center gap-3 pl-1">
-                {!isFilteredView && composerMode === 'message' && (
+                {!isFilteredView && !isGamesView && composerMode === 'message' && (
                   <>
                     <button
                       type="button"
@@ -1403,7 +1476,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   ))}
                 </div>
               )}
-              {!isFilteredView && composerMode === 'message' && (
+              {!isFilteredView && !isGamesView && composerMode === 'message' && (
                 <button
                   type="button"
                   aria-label={t('Choose a sticker')}
@@ -1419,6 +1492,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 ref={textareaRef}
                 id="chat-message-input"
                 name="message"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  textareaRef.current?.focus({ preventScroll: true });
+                }}
                 rows={1}
                 inputMode="text"
                 autoCapitalize="sentences"
@@ -1476,12 +1553,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       </div>
 
       {/* Poll Creation Bottom Sheet */}
-      {!isFilteredView && <PollSheet
+      {!isFilteredView && !isGamesView && <PollSheet
         isOpen={isPollSheetOpen}
         onClose={() => setIsPollSheetOpen(false)}
         onCreatePoll={createPoll}
       />}
-      {!isFilteredView && (
+      {!isFilteredView && !isGamesView && (
         <BottomSheet isOpen={isStickerPickerOpen} onClose={() => setIsStickerPickerOpen(false)}>
           <div className="pb-2 text-center">
             <h2 className="mb-4 text-center text-lg font-bold text-white">{t('Stickers')}</h2>
@@ -1519,6 +1596,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           userId={user.id}
           members={tripMembers}
           onClose={() => setActiveDrawGameId(null)}
+          sendMessage={sendMessage}
+        />
+      )}
+      {activeGameSessionId && user && (
+        <TripGameSession
+          gameId={activeGameSessionId}
+          userId={user.id}
+          members={tripMembers}
+          onClose={() => setActiveGameSessionId(null)}
+          onOpenGame={setActiveGameSessionId}
           sendMessage={sendMessage}
         />
       )}

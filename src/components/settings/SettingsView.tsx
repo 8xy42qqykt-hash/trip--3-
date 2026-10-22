@@ -30,9 +30,15 @@ import { useLanguage } from '../../context/LanguageContext';
 
 interface SettingsViewProps {
   onNavigateToMessages?: (mentionName?: string) => void;
+  secondaryTab?: 'groceries' | 'games';
+  onSecondaryTabChange?: (tab: 'groceries' | 'games') => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  onNavigateToMessages,
+  secondaryTab = 'games',
+  onSecondaryTabChange,
+}) => {
   const { language, setLanguage, t } = useLanguage();
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
@@ -432,6 +438,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToMessages
         <div className="space-y-4">
           <NotificationPermissionButton />
           <LocationSharingToggle tripId={currentTrip.id} userId={user?.id} />
+          <section className="space-y-2">
+            <h3 className="text-base font-bold text-white">{t('Second navigation tab')}</h3>
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/[0.1] bg-[#1c1c1e] p-1.5">
+              {([
+                { value: 'games', label: t('Games') },
+                { value: 'groceries', label: t('Groceries') },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={secondaryTab === option.value}
+                  onClick={() => onSecondaryTabChange?.(option.value)}
+                  className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition-colors ${
+                    secondaryTab === option.value ? 'bg-[#0A84FF] text-white' : 'text-slate-300 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
           <section className="space-y-2">
             <h3 className="text-base font-bold text-white">{t('Language')}</h3>
             <div className="relative">

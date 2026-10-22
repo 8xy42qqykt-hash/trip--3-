@@ -67,7 +67,7 @@ Deno.serve(async (request) => {
   }
   const settings = preferences || {
     enabled: true,
-    categories: { messages: true, calls: true, polls: true, reactions: true, invitations: true, trip_updates: true },
+    categories: { messages: true, calls: true, polls: true, games: true, reactions: true, invitations: true, trip_updates: true },
     muted_trip_ids: [],
   };
 
@@ -122,8 +122,10 @@ Deno.serve(async (request) => {
     ? 'Call'
     : latest.category === 'polls'
       ? 'Poll'
-      : latest.category === 'reactions'
-        ? 'Chat'
+      : latest.category === 'games'
+        ? 'Game'
+        : latest.category === 'reactions'
+          ? 'Chat'
         : isGrocery
           ? 'Grocery'
           : isMeal
@@ -132,9 +134,11 @@ Deno.serve(async (request) => {
               ? 'Plan'
               : 'Chat';
   const localizedCategory = language === 'fi'
-    ? ({ Call: 'Puhelu', Poll: 'Kysely', Chat: 'Viesti', Grocery: 'Ostoslista', Meal: 'Ateria', Plan: 'Suunnitelma' } as const)[category]
+    ? ({ Call: 'Puhelu', Poll: 'Kysely', Game: 'Peli', Chat: 'Viesti', Grocery: 'Ostoslista', Meal: 'Ateria', Plan: 'Suunnitelma' } as const)[category]
     : category;
   const previewTranslations: Record<string, string> = {
+    'Started a game': 'Aloitti pelin',
+    'Started Draw and Guess': 'Aloitti Piirrä ja arvaa -pelin',
     'Updated a grocery list': 'Ostoslistaa päivitettiin',
     'Updated the grocery list': 'Ostoslistaa päivitettiin',
     'Sent a grocery list': 'Lähetti ostoslistan',

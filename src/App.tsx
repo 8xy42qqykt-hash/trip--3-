@@ -24,6 +24,7 @@ const VIEW_INDEX: Record<AppViewKey, number> = {
   trips: -1,
   messages: 0,
   groceries: 1,
+  games: 1,
   schedule: 2,
   my_trip: 3,
   settings: 4,
@@ -137,6 +138,10 @@ const MainAppContent: React.FC = () => {
   const { user, profile, isLoading } = useAuth();
   const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
+  const [secondaryTab, setSecondaryTab] = useState<'groceries' | 'games'>(() => {
+    const saved = window.localStorage.getItem(`trip:secondary-tab:${user?.id || 'guest'}`);
+    return saved === 'groceries' ? 'groceries' : 'games';
+  });
   const [slideDirection, setSlideDirection] = useState<number>(0);
   const [isForcedReady, setIsForcedReady] = useState(false);
   const [isLaunchAnimationVisible, setIsLaunchAnimationVisible] = useState(false);
@@ -147,6 +152,19 @@ const MainAppContent: React.FC = () => {
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
   const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
   const call = useGroupCall(currentTrip?.id, user?.id, profile);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(`trip:secondary-tab:${user?.id || 'guest'}`);
+    setSecondaryTab(saved === 'groceries' ? 'groceries' : 'games');
+  }, [user?.id]);
+
+  const handleSecondaryTabChange = (nextTab: 'groceries' | 'games') => {
+    setSecondaryTab(nextTab);
+    window.localStorage.setItem(`trip:secondary-tab:${user?.id || 'guest'}`, nextTab);
+    if (activeTab === 'groceries' || activeTab === 'games') {
+      setActiveTab(nextTab);
+    }
+  };
 
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
@@ -197,6 +215,7 @@ const MainAppContent: React.FC = () => {
     }
     if (currentTrip?.id !== targetTrip.id) selectTrip(targetTrip);
     const targetTab: TabKey = view === 'groceries' ? 'groceries'
+      : view === 'games' ? 'games'
       : view === 'schedule' ? 'schedule'
         : view === 'my_trip' ? 'my_trip'
           : view === 'settings' ? 'settings'
@@ -388,7 +407,7 @@ const MainAppContent: React.FC = () => {
     event.preventDefault();
     setEdgeSwipeSide(side);
     const isValidDirection = side === 'left'
-      ? (activeTab === 'messages' || ['groceries', 'schedule', 'my_trip', 'settings'].includes(activeTab))
+      ? (activeTab === 'messages' || ['groceries', 'games', 'schedule', 'my_trip', 'settings'].includes(activeTab))
       : activeTab !== 'settings';
     const hasReachedThreshold = Math.abs(deltaX) >= threshold && isValidDirection;
     if (hasReachedThreshold) {
@@ -428,7 +447,7 @@ const MainAppContent: React.FC = () => {
       const isCommitGesture = wasArmed
         && currentTrip
         && activeTab !== 'trips';
-      const tabs = ['messages', 'groceries', 'schedule', 'my_trip', 'settings'] as const;
+      const tabs = ['messages', secondaryTab, 'schedule', 'my_trip', 'settings'] as const;
       let transitionDirection = 0;
       let commitTransition: (() => void) | null = null;
 
@@ -579,6 +598,9 @@ const MainAppContent: React.FC = () => {
             {activeView === 'groceries' && (
               <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />
             )}
+            {activeView === 'games' && (
+              <MessagesView viewMode="games" onlineMembers={onlineMembers} call={call} />
+            )}
             {activeView === 'schedule' && (
               <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
             )}
@@ -586,7 +608,11 @@ const MainAppContent: React.FC = () => {
               <TripOverview onPhotoViewerChange={setIsPhotoViewerOpen} />
             )}
             {activeView === 'settings' && (
-              <SettingsView onNavigateToMessages={handleNavigateToMessages} />
+              <SettingsView
+                onNavigateToMessages={handleNavigateToMessages}
+                secondaryTab={secondaryTab}
+                onSecondaryTabChange={handleSecondaryTabChange}
+              />
             )}
           </motion.div>
         </AnimatePresence>
@@ -600,6 +626,7 @@ const MainAppContent: React.FC = () => {
       <BottomTabBar
         activeTab={activeTab}
         onChangeTab={handleTabChange}
+        secondaryTab={secondaryTab}
         isHidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
       />
@@ -636,7 +663,7 @@ const MainAppContent: React.FC = () => {
           />
         </motion.div>
       )}
-      {(call.activeCall || call.incomingCall) && (
+      {activeTab === 'messages' && (call.activeCall || call.incomingCall) && (
         <CallOverlay call={call} userId={user?.id} />
       )}
       {edgeSwipeSide && (

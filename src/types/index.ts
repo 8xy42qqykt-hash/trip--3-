@@ -50,7 +50,7 @@ export interface Message {
   id: string;
   trip_id: string;
   user_id: string;
-  type: 'text' | 'image' | 'poll_result' | 'grocery_list' | 'meal' | 'plan' | 'call' | 'draw_game';
+  type: 'text' | 'image' | 'poll_result' | 'grocery_list' | 'meal' | 'plan' | 'call' | 'draw_game' | 'game_session';
   content: string;
   image_url?: string | null;
   reply_to?: string | null;

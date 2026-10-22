@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useLanguage } from '../../context/LanguageContext';
 
-type NotificationCategory = 'messages' | 'calls' | 'polls' | 'reactions' | 'invitations' | 'trip_updates';
+type NotificationCategory = 'messages' | 'calls' | 'polls' | 'games' | 'reactions' | 'invitations' | 'trip_updates';
 type NotificationPreferences = {
   enabled: boolean;
   categories: Record<NotificationCategory, boolean>;
@@ -13,7 +13,7 @@ type NotificationPreferences = {
 
 const defaultPreferences: NotificationPreferences = {
   enabled: false,
-  categories: { messages: true, calls: true, polls: true, reactions: true, invitations: true, trip_updates: true },
+  categories: { messages: true, calls: true, polls: true, games: true, reactions: true, invitations: true, trip_updates: true },
   muted_trip_ids: [],
 };
 

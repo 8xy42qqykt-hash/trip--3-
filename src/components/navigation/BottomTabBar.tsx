@@ -2,19 +2,21 @@ import React, { useEffect, useState } from 'react';
 import {
   PaperPlaneTilt,
   ShoppingCart,
+  GameController,
   CalendarBlank,
   MapTrifold,
   Gear,
 } from '@phosphor-icons/react';
 import { useLanguage } from '../../context/LanguageContext';
 
-export type TabKey = 'trips' | 'messages' | 'groceries' | 'schedule' | 'my_trip' | 'settings';
+export type TabKey = 'trips' | 'messages' | 'groceries' | 'games' | 'schedule' | 'my_trip' | 'settings';
 
 interface BottomTabBarProps {
   activeTab: TabKey;
   onChangeTab: (tab: TabKey) => void;
   isHidden?: boolean;
   hidden?: boolean;
+  secondaryTab?: 'groceries' | 'games';
 }
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({
@@ -22,6 +24,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   onChangeTab,
   isHidden = false,
   hidden = false,
+  secondaryTab = 'games',
 }) => {
   const { t } = useLanguage();
   // Listen directly to keyboard/input-focus events to guarantee closing on every device immediately
@@ -45,7 +48,9 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
 
   const tabs: { key: TabKey; label: string; Icon: React.ComponentType<any> }[] = [
     { key: 'messages', label: t('Messages'), Icon: PaperPlaneTilt },
-    { key: 'groceries', label: t('Groceries'), Icon: ShoppingCart },
+    secondaryTab === 'games'
+      ? { key: 'games', label: t('Games'), Icon: GameController }
+      : { key: 'groceries', label: t('Groceries'), Icon: ShoppingCart },
     { key: 'schedule', label: t('Plans'), Icon: CalendarBlank },
     { key: 'my_trip', label: t('My Trip'), Icon: MapTrifold },
     { key: 'settings', label: t('Settings'), Icon: Gear },
