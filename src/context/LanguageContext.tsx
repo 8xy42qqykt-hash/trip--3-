@@ -292,6 +292,8 @@ const translations: Record<string, string> = {
   'Hours': 'Tuntia',
   'Minutes': 'Minuuttia',
   'Seconds': 'Sekuntia',
+  'Game lobby started by': 'Pelin aloitti',
+  'Tap to join': 'Liity napauttamalla',
   'Remove': 'Poista',
   'from this trip? They will lose access to all trip data.': 'tältä matkalta? Hän menettää pääsyn kaikkiin matkan tietoihin.',
   'Could not update the grocery list.': 'Ostoslistan päivittäminen epäonnistui.',

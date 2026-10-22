@@ -46,6 +46,8 @@ import tripLogo from '../../../trip-logo.png';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan' | 'games';
+  gameOpenRequest?: { id: string; type: 'draw_game' | 'game_session'; requestId: number } | null;
+  onGameOpenRequestHandled?: () => void;
   onKeyboardStateChange?: (isOpen: boolean) => void;
   onPhotoViewerChange?: (isOpen: boolean) => void;
   initialMention?: string;
@@ -84,6 +86,8 @@ const AnimatedScore: React.FC<{ score: number }> = ({ score }) => {
 
 export const MessagesView: React.FC<MessagesViewProps> = ({
   viewMode = 'messages',
+  gameOpenRequest,
+  onGameOpenRequestHandled,
   onKeyboardStateChange,
   onPhotoViewerChange,
   initialMention,
@@ -192,6 +196,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       window.history.replaceState(window.history.state, '', url);
     }
   }, [currentTrip?.id, isGamesView]);
+
+  useEffect(() => {
+    if (!isGamesView || !gameOpenRequest) return;
+    if (gameOpenRequest.type === 'draw_game') setActiveDrawGameId(gameOpenRequest.id);
+    else setActiveGameSessionId(gameOpenRequest.id);
+    onGameOpenRequestHandled?.();
+  }, [gameOpenRequest, isGamesView, onGameOpenRequestHandled]);
 
   useEffect(() => {
     if (isFilteredView || isGamesView) return;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, animate, useMotionValue } from 'motion/react';
-import { ArrowLeft, ArrowRight } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, GameController, X } from '@phosphor-icons/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -19,6 +19,12 @@ import { LanguageProvider } from './context/LanguageContext';
 import { useLanguage } from './context/LanguageContext';
 
 type AppViewKey = 'trips' | TabKey;
+type GameLobbyNotice = {
+  id: string;
+  type: 'draw_game' | 'game_session';
+  title: string;
+  sender: string;
+};
 
 const VIEW_INDEX: Record<AppViewKey, number> = {
   trips: -1,
@@ -147,7 +153,7 @@ const TripCountdownOverlay: React.FC<{
 const MainAppContent: React.FC = () => {
   const { setLanguage, t, language } = useLanguage();
   const { user, profile, isLoading } = useAuth();
-  const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages } = useTrip();
+  const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages, messages, tripMembers } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [secondaryTab, setSecondaryTab] = useState<'groceries' | 'games'>(() => {
     const saved = window.localStorage.getItem(`trip:secondary-tab:${user?.id || 'guest'}`);
@@ -161,8 +167,74 @@ const MainAppContent: React.FC = () => {
   const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
   const [countdownShownTripId, setCountdownShownTripId] = useState<string | null>(null);
   const [targetMention, setTargetMention] = useState<string | undefined>(undefined);
+  const [gameLobbyNotice, setGameLobbyNotice] = useState<GameLobbyNotice | null>(null);
+  const [gameOpenRequest, setGameOpenRequest] = useState<(GameLobbyNotice & { requestId: number }) | null>(null);
+  const seenGameMessagesRef = useRef(new Set<string>());
+  const gameMessageBaselineTripRef = useRef<string | null>(null);
+  const gameMessageBaselineReadyRef = useRef(false);
+  const gameOpenRequestSequenceRef = useRef(0);
   const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
   const call = useGroupCall(currentTrip?.id, user?.id, profile);
+
+  useEffect(() => {
+    if (!currentTrip) {
+      gameMessageBaselineTripRef.current = null;
+      gameMessageBaselineReadyRef.current = false;
+      seenGameMessagesRef.current.clear();
+      setGameLobbyNotice(null);
+      return;
+    }
+    if (gameMessageBaselineTripRef.current !== currentTrip.id) {
+      gameMessageBaselineTripRef.current = currentTrip.id;
+      gameMessageBaselineReadyRef.current = false;
+      seenGameMessagesRef.current.clear();
+    }
+    if (isLoadingMessages) return;
+
+    const gameMessages = messages.filter((message) => (
+      (message.type === 'draw_game' || message.type === 'game_session')
+      && message.trip_id === currentTrip.id
+    ));
+    if (!gameMessageBaselineReadyRef.current) {
+      gameMessages.forEach((message) => seenGameMessagesRef.current.add(message.id));
+      gameMessageBaselineReadyRef.current = true;
+      return;
+    }
+
+    const newInvitations = gameMessages.filter((message) => (
+      !seenGameMessagesRef.current.has(message.id) && message.user_id !== user?.id
+    ));
+    gameMessages.forEach((message) => seenGameMessagesRef.current.add(message.id));
+    const invitation = newInvitations[newInvitations.length - 1];
+    if (!invitation) return;
+    const isDrawGame = invitation.type === 'draw_game';
+    const invitationType = isDrawGame ? 'draw_game' : 'game_session';
+    const gameId = isDrawGame
+      ? invitation.metadata?.gameId
+      : invitation.metadata?.gameSessionId;
+    if (typeof gameId !== 'string' || !gameId) return;
+    const gameType = invitation.metadata?.gameType;
+    const titleKey = isDrawGame
+      ? 'Draw and Guess'
+      : gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe';
+    const sender = tripMembers.find((member) => member.user_id === invitation.user_id)?.profile?.display_name
+      || t('Member');
+    setGameLobbyNotice({ id: gameId, type: invitationType, title: t(titleKey), sender });
+  }, [currentTrip?.id, isLoadingMessages, messages, tripMembers, user?.id, t]);
+
+  useEffect(() => {
+    if (!gameLobbyNotice) return;
+    const timer = window.setTimeout(() => setGameLobbyNotice(null), 9000);
+    return () => window.clearTimeout(timer);
+  }, [gameLobbyNotice]);
+
+  const openGameLobbyNotice = (notice: GameLobbyNotice) => {
+    setSecondaryTab('games');
+    window.localStorage.setItem(`trip:secondary-tab:${user?.id || 'guest'}`, 'games');
+    setGameOpenRequest({ ...notice, requestId: ++gameOpenRequestSequenceRef.current });
+    setGameLobbyNotice(null);
+    if (activeTab !== 'games') handleTabChange('games');
+  };
 
   useEffect(() => {
     const saved = window.localStorage.getItem(`trip:secondary-tab:${user?.id || 'guest'}`);
@@ -610,7 +682,13 @@ const MainAppContent: React.FC = () => {
               <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />
             )}
             {activeView === 'games' && (
-              <MessagesView viewMode="games" onlineMembers={onlineMembers} call={call} />
+              <MessagesView
+                viewMode="games"
+                onlineMembers={onlineMembers}
+                call={call}
+                gameOpenRequest={gameOpenRequest}
+                onGameOpenRequestHandled={() => setGameOpenRequest(null)}
+              />
             )}
             {activeView === 'schedule' && (
               <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
@@ -641,6 +719,36 @@ const MainAppContent: React.FC = () => {
         isHidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
         hidden={!currentTrip || isPhotoViewerOpen || (isKeyboardOpen && activeTab === 'messages')}
       />
+      <AnimatePresence>
+        {gameLobbyNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            role="status"
+            className="fixed left-3 right-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-[14000] mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-white/10 bg-[#202024]/95 p-3.5 text-white shadow-2xl backdrop-blur-xl"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0A84FF]/15 text-[#0A84FF]">
+              <GameController size={22} weight="fill" />
+            </span>
+            <button type="button" onClick={() => openGameLobbyNotice(gameLobbyNotice)} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-bold">{gameLobbyNotice.title}</span>
+              <span className="mt-0.5 block truncate text-xs text-white/65">
+                {t('Game lobby started by')} {gameLobbyNotice.sender} · {t('Tap to join')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setGameLobbyNotice(null)}
+              aria-label={t('Dismiss')}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10"
+            >
+              <X size={18} weight="bold" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showTripCountdown && currentTrip && (
           <TripCountdownOverlay

@@ -322,12 +322,12 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                       {cell && (
                         <motion.span
                           animate={winningLine.some(([row, column]) => row * 3 + column === index)
-                            ? { scale: [1, 1.34, 0.96, 1] }
+                            ? { scale: [1, 1.28, 1] }
                             : { scale: 1 }}
                           transition={{
-                            duration: 0.56,
-                            delay: Math.max(0, winningLine.findIndex(([row, column]) => row * 3 + column === index)) * 0.2,
-                            ease: 'easeInOut',
+                            duration: 0.34,
+                            delay: Math.max(0, winningLine.findIndex(([row, column]) => row * 3 + column === index)) * 0.045,
+                            ease: [0.22, 0.8, 0.24, 1],
                           }}
                           className="flex items-center justify-center"
                         >
@@ -357,10 +357,10 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                               animate={{
                                 y: 0,
                                 opacity: 1,
-                                scale: winningOrder >= 0 ? [1, 1.34, 0.96, 1] : 1,
+                                scale: winningOrder >= 0 ? [1, 1.28, 1] : 1,
                               }}
                               transition={winningOrder >= 0
-                                ? { duration: 0.56, delay: winningOrder * 0.2, ease: 'easeInOut' }
+                                ? { duration: 0.34, delay: winningOrder * 0.045, ease: [0.22, 0.8, 0.24, 1] }
                                 : { type: 'spring', stiffness: 320, damping: 22 }}
                               className={`pointer-events-none absolute inset-1 rounded-full ${cell === 'X' ? 'bg-[#0A84FF]' : 'bg-[#FF453A]'}`}
                             />
