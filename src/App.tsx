@@ -153,7 +153,7 @@ const TripCountdownOverlay: React.FC<{
 const MainAppContent: React.FC = () => {
   const { setLanguage, t, language } = useLanguage();
   const { user, profile, isLoading } = useAuth();
-  const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages, messages, tripMembers } = useTrip();
+  const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages, hasLoadedMessages, messages, tripMembers } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
   const [secondaryTab, setSecondaryTab] = useState<'groceries' | 'games'>(() => {
     const saved = window.localStorage.getItem(`trip:secondary-tab:${user?.id || 'guest'}`);
@@ -173,7 +173,12 @@ const MainAppContent: React.FC = () => {
   const gameMessageBaselineTripRef = useRef<string | null>(null);
   const gameMessageBaselineReadyRef = useRef(false);
   const gameOpenRequestSequenceRef = useRef(0);
-  const onlineMembers = useTripPresence(currentTrip?.id, user?.id, profile, activeTab === 'messages');
+  const onlineMembers = useTripPresence(
+    currentTrip?.id,
+    user?.id,
+    profile,
+    activeTab === 'messages' || activeTab === 'games',
+  );
   const call = useGroupCall(currentTrip?.id, user?.id, profile);
 
   useEffect(() => {
@@ -189,7 +194,7 @@ const MainAppContent: React.FC = () => {
       gameMessageBaselineReadyRef.current = false;
       seenGameMessagesRef.current.clear();
     }
-    if (isLoadingMessages) return;
+    if (isLoadingMessages || !hasLoadedMessages) return;
 
     const gameMessages = messages.filter((message) => (
       (message.type === 'draw_game' || message.type === 'game_session')
@@ -207,6 +212,7 @@ const MainAppContent: React.FC = () => {
     gameMessages.forEach((message) => seenGameMessagesRef.current.add(message.id));
     const invitation = newInvitations[newInvitations.length - 1];
     if (!invitation) return;
+    if (!onlineMembers.some((member) => member.userId !== user?.id)) return;
     const isDrawGame = invitation.type === 'draw_game';
     const invitationType = isDrawGame ? 'draw_game' : 'game_session';
     const gameId = isDrawGame
@@ -220,7 +226,7 @@ const MainAppContent: React.FC = () => {
     const sender = tripMembers.find((member) => member.user_id === invitation.user_id)?.profile?.display_name
       || t('Member');
     setGameLobbyNotice({ id: gameId, type: invitationType, title: t(titleKey), sender });
-  }, [currentTrip?.id, isLoadingMessages, messages, tripMembers, user?.id, t]);
+  }, [currentTrip?.id, hasLoadedMessages, isLoadingMessages, messages, onlineMembers, tripMembers, user?.id, t]);
 
   useEffect(() => {
     if (!gameLobbyNotice) return;

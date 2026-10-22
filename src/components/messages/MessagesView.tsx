@@ -1318,13 +1318,35 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         style={{
           bottom: isKeyboardOpen
             ? `${Math.max(8, keyboardOffset + 6)}px`
-            : 'calc(42px + env(safe-area-inset-bottom, 0px))',
+            : `calc(${isGamesView ? '32px' : '42px'} + env(safe-area-inset-bottom, 0px))`,
         }}
         data-reaction-clearance
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
         {isGamesView && (
-          <div className="mb-2 flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
+            {onlineMembers.length > 0 && (
+              <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#202024]/90 px-3 py-2 shadow-lg backdrop-blur-xl">
+                <span className="shrink-0 text-xs font-semibold text-white/55">{t('Active now')}</span>
+                {onlineMembers.map((member) => (
+                  <button
+                    key={member.userId}
+                    type="button"
+                    onClick={() => setSelectedProfileId(member.userId)}
+                    aria-label={`${t('View profile')}: ${member.profile.display_name}`}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full pr-2 text-xs font-medium text-white/85 hover:bg-white/[0.08]"
+                  >
+                    <Avatar
+                      name={member.profile.display_name}
+                      avatarUrl={member.profile.avatar_url}
+                      color={member.profile.color}
+                      size={24}
+                    />
+                    <span className="max-w-24 truncate">{member.profile.display_name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               type="button"
               aria-label={t('Game leaderboard')}

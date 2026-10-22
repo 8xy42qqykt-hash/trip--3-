@@ -13,6 +13,7 @@ interface TripContextType {
   isOwner: boolean;
   isLoadingTrips: boolean;
   isLoadingMessages: boolean;
+  hasLoadedMessages: boolean;
   pendingInvitations: TripInvitation[];
   loadInvitations: () => Promise<void>;
   createTripInvitations: (emails: string[]) => Promise<{ error?: string; warning?: string }>;
@@ -1633,6 +1634,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isOwner,
         isLoadingTrips,
         isLoadingMessages,
+        hasLoadedMessages: Boolean(currentTrip && loadedMessagesTripIdsRef.current.has(currentTrip.id)),
         pendingInvitations,
         loadInvitations,
         createTripInvitations,
