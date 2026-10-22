@@ -15,7 +15,7 @@ type SessionSummary = {
 };
 
 const GAME_LABELS: Record<SessionSummary['game_type'], string> = {
-  movie_trivia: 'Movie Trivia',
+  movie_trivia: 'Movie Emoji',
   connect_four: 'Connect Four',
   tic_tac_toe: 'Tic-Tac-Toe',
 };

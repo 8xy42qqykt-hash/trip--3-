@@ -6,6 +6,7 @@ import { Avatar } from '../common/Avatar';
 import { useLanguage } from '../../context/LanguageContext';
 import { getDrawGameWordLabel } from '../../utils/drawGameWords';
 import { GameLobby } from './GameLobby';
+import { GameConfetti } from './GameConfetti';
 
 type DrawGame = {
   id: string;
@@ -16,6 +17,8 @@ type DrawGame = {
   participant_ids: string[];
   scores: Record<string, number>;
   round_number: number;
+  round_limit: number;
+  results_announced: boolean;
   drawer_id: string | null;
   drawing: Stroke[];
   winner_id: string | null;
@@ -66,6 +69,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   const [draftStroke, setDraftStroke] = useState<Stroke | null>(null);
   const [remoteDraft, setRemoteDraft] = useState<Stroke | null>(null);
   const [error, setError] = useState('');
+  const [roundLimit, setRoundLimit] = useState(5);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guessInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +105,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     }
     const { data, error: loadError } = await supabase
       .from('draw_games')
-      .select('id, trip_id, creator_id, status, players, participant_ids, scores, round_number, drawer_id, drawing, winner_id')
+      .select('id, trip_id, creator_id, status, players, participant_ids, scores, round_number, round_limit, results_announced, drawer_id, drawing, winner_id')
       .eq('id', gameId)
       .maybeSingle();
     if (loadError) {
@@ -115,6 +119,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     }
     const loaded = data as DrawGame;
     setGame(loaded);
+    setRoundLimit(loaded.round_limit || 5);
     strokesRef.current = loaded.drawing || [];
     if (loaded.drawer_id === userId && loaded.status === 'playing') {
       const { data: secret, error: secretError } = await supabase
@@ -237,18 +242,56 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     await loadGame();
   };
 
-  const announceResults = async (scores: Record<string, number>, participants: string[]) => {
+  const changeRoundLimit = async (value: number) => {
+    if (!game || !supabase) return;
+    setRoundLimit(value);
+    const { error: updateError } = await supabase.rpc('update_draw_game_round_limit', {
+      p_game_id: game.id,
+      p_round_limit: value,
+    });
+    if (updateError) {
+      console.error('Could not update Draw and Guess round count:', updateError);
+      setRoundLimit(game.round_limit || 5);
+      setError(t('Could not update the round count.'));
+    }
+  };
+
+  const announceResults = useCallback(async (scores: Record<string, number>, participants: string[]) => {
+    if (!supabase) return;
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_draw_game_results_announcement', {
+      p_game_id: gameId,
+    });
+    if (claimError) {
+      console.error('Could not claim Draw and Guess results announcement:', claimError);
+      setError(t('Could not post the final game results.'));
+      return;
+    }
+    if (!claimed) return;
+    const scoreEntries = Object.entries(scores);
+    const highestScore = Math.max(0, ...scoreEntries.map(([, score]) => score));
+    const leaders = scoreEntries.filter(([, score]) => score === highestScore);
+    const winnerId = leaders.length === 1 && highestScore > 0 ? leaders[0][0] : null;
     const results = participants
       .map((id) => `${memberName(id)}: ${scores[id] || 0}`)
       .join('\n');
-    await sendMessage(
-      `${t('Draw and Guess')}\n${results}`,
-      undefined,
-      undefined,
-      'text',
-      { gameId, gameSummary: true, scores, participants },
-    );
-  };
+    try {
+      await sendMessage(
+        `${t('Draw and Guess')}\n${results}`,
+        undefined,
+        undefined,
+        'text',
+        { gameId, gameName: 'Draw and Guess', gameSummary: true, scores, participants, winnerId },
+      );
+    } catch (sendError) {
+      console.error('Could not post Draw and Guess results:', sendError);
+      setError(t('Could not post the final game results.'));
+    }
+  }, [gameId, memberName, sendMessage, t]);
+
+  useEffect(() => {
+    if (!game || game.status !== 'finished' || game.results_announced) return;
+    void announceResults(game.scores || {}, game.participant_ids || game.players);
+  }, [game?.id, game?.status, game?.results_announced, game?.scores, game?.participant_ids, game?.players, announceResults]);
 
   useEffect(() => {
     if (!game || game.status !== 'playing' || !game.winner_id || game.creator_id !== userId) return;
@@ -281,6 +324,9 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       return;
     }
     if (game.status === 'finished' || game.status === 'cancelled') {
+      if (game.status === 'finished') {
+        await announceResults(game.scores || {}, game.participant_ids || game.players);
+      }
       onClose();
       return;
     }
@@ -439,7 +485,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div data-no-edge-swipe className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
         <button type="button" onClick={() => void closeGame()} aria-label={t('Cancel game or leave game')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
           <ArrowLeft size={21} />
@@ -476,11 +522,25 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             onStart={() => void startRound()}
             onJoin={() => void openGame()}
             onLeave={() => void closeGame()}
-          />
+          >
+            {game.creator_id === userId && (
+              <label className="mt-5 block border-t border-white/10 pt-4 text-xs font-semibold text-white/60">
+                {t('Rounds')}
+                <select
+                  value={roundLimit}
+                  onChange={(event) => void changeRoundLimit(Number(event.target.value))}
+                  className="mt-1.5 block h-11 w-full rounded-xl border border-white/10 bg-[#2a2a2e] px-3 text-sm text-white"
+                >
+                  {[3, 5, 10].map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+            )}
+          </GameLobby>
         ) : game?.status === 'playing' ? (
           <>
             <div className="shrink-0 py-1 text-center">
-              <p className="min-h-8 text-xl font-black tracking-wide">{isDrawer ? getDrawGameWordLabel(secretWord, language) : game.winner_id ? `${memberName(game.winner_id)} ${t('guessed it!')}` : '\u00a0'}</p>
+              <p className="min-h-8 text-sm font-semibold text-white/60">{t('Round')} {game.round_number}/{game.round_limit}</p>
+              <p className="text-xl font-black tracking-wide">{isDrawer ? getDrawGameWordLabel(secretWord, language) : game.winner_id ? `${memberName(game.winner_id)} ${t('guessed it!')}` : '\u00a0'}</p>
             </div>
             <div
               className="mx-auto flex w-full min-w-0 flex-none items-stretch justify-center gap-3 px-1"
@@ -505,10 +565,17 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
               <div className="relative shrink-0" style={{ width: `${drawingSize}px`, height: `${drawingSize}px` }}>
                 <canvas
                   ref={canvasRef}
-                  onPointerDown={onCanvasDown}
-                  onPointerMove={onCanvasMove}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    onCanvasDown(event);
+                  }}
+                  onPointerMove={(event) => {
+                    event.preventDefault();
+                    onCanvasMove(event);
+                  }}
                   onPointerUp={() => void onCanvasUp()}
                   onPointerCancel={() => void onCanvasUp()}
+                  style={{ touchAction: isDrawer && !game.winner_id ? 'none' : 'auto', userSelect: 'none' }}
                   className={`block h-full w-full rounded-xl bg-white ${isDrawer && !game.winner_id ? 'touch-none' : 'pointer-events-none'}`}
                   aria-label={t('Live drawing canvas')}
                 />
@@ -563,14 +630,28 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
             )}
           </>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center">
-            <div className="w-full max-w-sm space-y-2">
-              <h2 className="mb-4 text-center text-xl font-bold">{t('Draw and Guess')}</h2>
+          <div className="relative flex flex-1 flex-col items-center justify-center">
+            {game?.status === 'finished' && <GameConfetti />}
+            <div className="w-full max-w-sm space-y-2 text-center">
+              <h2 className="mb-4 text-2xl font-extrabold">
+                {game?.winner_id ? `${memberName(game.winner_id)} ${t('wins!')}` : t('It’s a draw')}
+              </h2>
+              <h3 className="mb-3 text-sm font-bold text-white/65">{t('Final results')}</h3>
               {(game?.participant_ids || game?.players || []).map((id) => (
-                <p key={id} className="text-sm">{memberName(id)}:{game?.scores?.[id] || 0}</p>
+                <p key={id} className="flex justify-between rounded-xl bg-white/[0.06] px-4 py-2 text-sm">
+                  <span>{memberName(id)}</span><strong>{game?.scores?.[id] || 0}</strong>
+                </p>
               ))}
             </div>
           </div>
+        )}
+        {game?.status === 'playing' && game.winner_id && (
+          <>
+            <GameConfetti />
+            <div className="pointer-events-none fixed inset-0 z-[12003] flex items-center justify-center px-5 text-center">
+              <h2 className="rounded-full bg-black/55 px-5 py-3 text-3xl font-black drop-shadow-lg backdrop-blur-sm">{memberName(game.winner_id)} {t('guessed it!')}</h2>
+            </div>
+          </>
         )}
         {error && <p role="alert" className="shrink-0 rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</p>}
       </div>

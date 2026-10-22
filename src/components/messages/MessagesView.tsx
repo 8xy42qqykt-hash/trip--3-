@@ -784,7 +784,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
     try {
       await sendMessage(
-        `${t(gameType === 'movie_trivia' ? 'Movie Trivia' : gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe')} — ${t('join the game!')}`,
+        `${t(gameType === 'movie_trivia' ? 'Movie Emoji' : gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe')} — ${t('join the game!')}`,
         undefined,
         undefined,
         'game_session',
@@ -798,7 +798,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   };
 
   const visibleMessages = isGamesView
-    ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session')
+    ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session' || message.metadata?.gameSummary === true)
     : isFilteredView
     ? messages.filter((message) => message.type === viewMode)
     : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan'
@@ -1180,10 +1180,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               aria-haspopup="menu"
               aria-expanded={isGamesMenuOpen}
               onClick={() => setIsGamesMenuOpen((open) => !open)}
-              className="flex min-h-[48px] w-full items-center justify-between rounded-full border border-white/[0.12] bg-[#222226]/95 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+              className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/95 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
             >
               <span className="flex items-center gap-2"><GameController size={19} weight="fill" />{t('Choose a game')}</span>
-              <CaretLeft size={16} className={`-rotate-90 transition-transform ${isGamesMenuOpen ? 'rotate-90' : ''}`} />
             </button>
             {isGamesMenuOpen && (
               <>
@@ -1191,7 +1190,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 rounded-[24px] border border-white/[0.14] bg-[#202024]/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl animate-pop-in">
                   {([
                     ['Draw and Guess', () => void createDrawGame()],
-                    ['Movie Trivia', () => void createTripGame('movie_trivia')],
+                    ['Movie Emoji', () => void createTripGame('movie_trivia')],
                     ['Connect Four', () => void createTripGame('connect_four')],
                     ['Tic-Tac-Toe', () => void createTripGame('tic_tac_toe')],
                   ] as const).map(([name, create]) => (

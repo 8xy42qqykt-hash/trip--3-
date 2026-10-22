@@ -12,9 +12,13 @@ create table if not exists public.trip_game_sessions (
   config jsonb not null default '{}'::jsonb,
   state jsonb not null default '{}'::jsonb,
   winner_id uuid references public.profiles(id) on delete set null,
+  results_announced boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.trip_game_sessions
+  add column if not exists results_announced boolean not null default false;
 
 create table if not exists public.trip_game_secrets (
   session_id uuid not null references public.trip_game_sessions(id) on delete cascade,
@@ -63,6 +67,19 @@ create policy "Players can read revealed game answers" on public.trip_game_answe
         and (s.state->>'round')::integer > round_number
         and public.is_trip_member(s.trip_id)
     ))
+  );
+
+drop policy if exists "Only the current movie explainer can read its title" on public.trip_game_secrets;
+create policy "Only the current movie explainer can read its title" on public.trip_game_secrets
+  for select to authenticated using (
+    exists (
+      select 1 from public.trip_game_sessions s
+      where s.id = session_id and s.status = 'playing'
+        and s.game_type = 'movie_trivia'
+        and (s.state->>'drawerId')::uuid = auth.uid()
+        and (s.state->>'round')::integer = round_number
+        and public.is_trip_member(s.trip_id)
+    )
   );
 
 create or replace function public.create_trip_game_session(
@@ -287,6 +304,27 @@ where not exists (
   select 1 from public.trip_movie_trivia_questions existing where existing.prompt = q.prompt
 );
 
+create table if not exists public.trip_movie_emoji_movies (
+  title text primary key
+);
+
+insert into public.trip_movie_emoji_movies (title)
+select title from (values
+  ('Frozen'), ('Toy Story'), ('Harry Potter and the Sorcerer’s Stone'), ('The Lion King'),
+  ('Jurassic Park'), ('Back to the Future'), ('Star Wars'), ('Black Panther'),
+  ('Inside Out'), ('Titanic'), ('The Lord of the Rings'), ('Up'), ('The Terminator'),
+  ('Shrek'), ('Finding Nemo'), ('Mary Poppins'), ('Batman'), ('E.T. the Extra-Terrestrial'),
+  ('Moana'), ('Coco'), ('Home Alone'), ('The Incredibles'), ('Jaws'), ('The Wizard of Oz'),
+  ('The Avengers'), ('Spider-Man: Into the Spider-Verse'), ('The Little Mermaid'),
+  ('Beauty and the Beast'), ('Aladdin'), ('Ratatouille'), ('The Matrix'), ('Ghostbusters'),
+  ('Pirates of the Caribbean'), ('WALL-E'), ('Despicable Me'), ('The Jungle Book'),
+  ('Charlie and the Chocolate Factory'), ('The Sound of Music'), ('How to Train Your Dragon'),
+  ('The Princess Bride')
+) as movies(title)
+where not exists (
+  select 1 from public.trip_movie_emoji_movies existing where existing.title = movies.title
+);
+
 create or replace function public.enqueue_notification_event()
 returns trigger
 language plpgsql
@@ -421,8 +459,11 @@ end;
 $$;
 
 alter table public.trip_movie_trivia_questions enable row level security;
+alter table public.trip_movie_emoji_movies enable row level security;
 revoke all on public.trip_movie_trivia_questions from anon, authenticated;
+revoke all on public.trip_movie_emoji_movies from anon, authenticated;
 revoke all on public.trip_game_secrets from anon, authenticated;
+grant select on public.trip_game_secrets to authenticated;
 revoke insert, update, delete on public.trip_game_sessions from anon, authenticated;
 revoke insert, update, delete on public.trip_game_answers from anon, authenticated;
 
@@ -434,7 +475,8 @@ set search_path = public
 as $$
 declare
   s public.trip_game_sessions%rowtype;
-  q public.trip_movie_trivia_questions%rowtype;
+  v_movie_title text;
+  v_drawer_id uuid;
   v_rounds integer;
   v_time_limit integer;
   v_board jsonb;
@@ -454,11 +496,13 @@ begin
     if v_rounds not in (5, 10, 15) or v_time_limit not in (15, 30, 45) then
       raise exception 'Invalid trivia settings';
     end if;
-    select * into q from public.trip_movie_trivia_questions order by random() limit 1;
-    insert into public.trip_game_secrets(session_id, round_number, answer) values (s.id, 1, q.answer);
+    select title into v_movie_title from public.trip_movie_emoji_movies order by random() limit 1;
+    v_drawer_id := s.players[floor(random() * cardinality(s.players))::integer + 1];
+    insert into public.trip_game_secrets(session_id, round_number, answer) values (s.id, 1, v_movie_title);
     update public.trip_game_sessions set status = 'playing',
       state = jsonb_build_object('round', 1, 'rounds', v_rounds, 'timeLimit', v_time_limit,
-        'prompt', q.prompt, 'roundStartedAt', now(), 'scores', '{}'::jsonb, 'revealedAnswer', null, 'correctUsers', '[]'::jsonb),
+        'drawerId', v_drawer_id, 'clue', '', 'roundStartedAt', now(), 'scores', '{}'::jsonb,
+        'revealedAnswer', null, 'correctUsers', '[]'::jsonb),
       updated_at = now() where id = s.id;
   elsif s.game_type = 'connect_four' then
     v_board := jsonb_build_array(
@@ -608,7 +652,8 @@ begin
   if p_answer is null or length(trim(p_answer)) not between 1 and 200 then raise exception 'Enter an answer first'; end if;
   select * into s from public.trip_game_sessions where id = p_session_id for update;
   if not found or s.status <> 'playing' or s.game_type <> 'movie_trivia'
-     or not auth.uid() = any(s.players) or not public.is_trip_member(s.trip_id) then
+     or not auth.uid() = any(s.players) or not public.is_trip_member(s.trip_id)
+     or (s.state->>'drawerId')::uuid = auth.uid() then
     raise exception 'This trivia round is not accepting answers';
   end if;
   v_round := (s.state->>'round')::integer;
@@ -639,11 +684,12 @@ declare
   s public.trip_game_sessions%rowtype;
   v_round integer;
   v_next integer;
-  v_question public.trip_movie_trivia_questions%rowtype;
+  v_movie_title text;
   v_answer text;
   v_correct_users jsonb;
   v_scores jsonb;
   v_score record;
+  v_drawer_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
   select * into s from public.trip_game_sessions where id = p_session_id for update;
@@ -676,20 +722,160 @@ begin
     update public.trip_game_sessions set status = 'finished', state = s.state || jsonb_build_object(
       'scores', v_scores, 'revealedAnswer', v_answer, 'correctUsers', v_correct_users, 'roundEnded', true
     ), winner_id = (
-      select (key)::uuid from jsonb_each_text(v_scores) order by value::integer desc limit 1
+      select (array_agg(key::uuid))[1]
+      from jsonb_each_text(v_scores)
+      where value::integer = (select max(value::integer) from jsonb_each_text(v_scores))
+      having count(*) = 1
     ), updated_at = now() where id = s.id;
     return;
   end if;
-  select * into v_question from public.trip_movie_trivia_questions
-    where id not in (select q.id from public.trip_movie_trivia_questions q join public.trip_game_secrets secret on secret.answer = q.answer where secret.session_id = s.id)
+  select title into v_movie_title from public.trip_movie_emoji_movies
+    where title not in (select answer from public.trip_game_secrets where session_id = s.id)
     order by random() limit 1;
-  if v_question.id is null then select * into v_question from public.trip_movie_trivia_questions order by random() limit 1; end if;
-  insert into public.trip_game_secrets(session_id, round_number, answer) values (s.id, v_next, v_question.answer);
+  if v_movie_title is null then
+    select title into v_movie_title from public.trip_movie_emoji_movies order by random() limit 1;
+  end if;
+  select player into v_drawer_id
+    from unnest(s.players) as player
+    where cardinality(s.players) < 2 or player <> (s.state->>'drawerId')::uuid
+    order by random()
+    limit 1;
+  insert into public.trip_game_secrets(session_id, round_number, answer) values (s.id, v_next, v_movie_title);
   update public.trip_game_sessions set state = jsonb_build_object(
     'round', v_next, 'rounds', s.state->'rounds', 'timeLimit', s.state->'timeLimit',
-    'prompt', v_question.prompt, 'roundStartedAt', now(), 'scores', v_scores,
+    'drawerId', v_drawer_id, 'clue', '', 'roundStartedAt', now(), 'scores', v_scores,
     'revealedAnswer', v_answer, 'correctUsers', v_correct_users
   ), updated_at = now() where id = s.id;
+end;
+$$;
+
+create or replace function public.set_trip_movie_emoji_clue(p_session_id uuid, p_clue text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s public.trip_game_sessions%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into s from public.trip_game_sessions where id = p_session_id for update;
+  if not found or s.status <> 'playing' or s.game_type <> 'movie_trivia'
+     or (s.state->>'drawerId')::uuid is distinct from auth.uid()
+     or not public.is_trip_member(s.trip_id) then
+    raise exception 'Only this round’s explainer can send clues';
+  end if;
+  if p_clue is null or length(p_clue) > 400 or p_clue ~ '[[:alnum:]]' then
+    raise exception 'Use emoji clues only';
+  end if;
+  update public.trip_game_sessions
+  set state = jsonb_set(state, '{clue}', to_jsonb(p_clue), true), updated_at = now()
+  where id = s.id;
+end;
+$$;
+
+create or replace function public.claim_trip_game_results_announcement(p_session_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s public.trip_game_sessions%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into s from public.trip_game_sessions where id = p_session_id for update;
+  if not found or s.status <> 'finished' or not public.is_trip_member(s.trip_id)
+     or s.results_announced then return false; end if;
+  update public.trip_game_sessions set results_announced = true, updated_at = now() where id = s.id;
+  return true;
+end;
+$$;
+
+alter table public.draw_games
+  add column if not exists round_limit integer not null default 5
+    check (round_limit in (3, 5, 10)),
+  add column if not exists results_announced boolean not null default false;
+
+create or replace function public.update_draw_game_round_limit(p_game_id uuid, p_round_limit integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  g public.draw_games%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into g from public.draw_games where id = p_game_id for update;
+  if not found or g.creator_id <> auth.uid() or not public.is_trip_member(g.trip_id)
+     or g.status <> 'lobby' or g.round_number <> 0 then
+    raise exception 'Only the host can change rounds before starting';
+  end if;
+  if p_round_limit not in (3, 5, 10) then raise exception 'Invalid round count'; end if;
+  update public.draw_games set round_limit = p_round_limit, updated_at = now() where id = g.id;
+end;
+$$;
+
+create or replace function public.start_draw_game_round(p_game_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  g public.draw_games%rowtype;
+  next_round integer;
+  next_drawer uuid;
+  next_word text;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into g from public.draw_games where id = p_game_id for update;
+  if not found or not public.is_trip_member(g.trip_id) then raise exception 'Game not found'; end if;
+  if g.creator_id <> auth.uid() then raise exception 'Only the game host can start a round'; end if;
+  if g.status not in ('lobby', 'playing') or cardinality(g.players) < 2 then
+    raise exception 'Invalid game state or not enough players';
+  end if;
+  if g.round_number >= g.round_limit then
+    update public.draw_games
+    set status = 'finished',
+        winner_id = (
+          select (array_agg(key::uuid))[1]
+          from jsonb_each_text(g.scores)
+          where value::integer = (select max(value::integer) from jsonb_each_text(g.scores))
+          having count(*) = 1
+        ),
+        updated_at = now()
+    where id = g.id;
+    return;
+  end if;
+  next_drawer := g.players[floor(random() * cardinality(g.players))::integer + 1];
+  select word_english into next_word from public.draw_game_words order by random() limit 1;
+  next_round := g.round_number + 1;
+  update public.draw_games
+    set status = 'playing', round_number = next_round, drawer_id = next_drawer,
+        drawing = '[]'::jsonb, winner_id = null, updated_at = now()
+    where id = p_game_id;
+  insert into public.draw_game_round_secrets(game_id, round_number, drawer_id, word)
+    values (p_game_id, next_round, next_drawer, next_word);
+end;
+$$;
+
+create or replace function public.claim_draw_game_results_announcement(p_game_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  g public.draw_games%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select * into g from public.draw_games where id = p_game_id for update;
+  if not found or g.status <> 'finished' or not public.is_trip_member(g.trip_id)
+     or g.results_announced then return false; end if;
+  update public.draw_games set results_announced = true, updated_at = now() where id = g.id;
+  return true;
 end;
 $$;
 
@@ -703,6 +889,11 @@ revoke all on function public.start_trip_game_session(uuid) from public;
 revoke all on function public.play_trip_game_move(uuid, integer) from public;
 revoke all on function public.submit_trip_trivia_answer(uuid, text) from public;
 revoke all on function public.advance_trip_trivia_round(uuid, integer) from public;
+revoke all on function public.set_trip_movie_emoji_clue(uuid, text) from public;
+revoke all on function public.claim_trip_game_results_announcement(uuid) from public;
+revoke all on function public.update_draw_game_round_limit(uuid, integer) from public;
+revoke all on function public.claim_draw_game_results_announcement(uuid) from public;
+revoke all on function public.start_draw_game_round(uuid) from public;
 grant execute on function public.create_trip_game_session(uuid, text, jsonb) to authenticated;
 grant execute on function public.create_trip_draw_game(uuid) to authenticated;
 grant execute on function public.join_draw_game(uuid) to authenticated;
@@ -713,6 +904,11 @@ grant execute on function public.start_trip_game_session(uuid) to authenticated;
 grant execute on function public.play_trip_game_move(uuid, integer) to authenticated;
 grant execute on function public.submit_trip_trivia_answer(uuid, text) to authenticated;
 grant execute on function public.advance_trip_trivia_round(uuid, integer) to authenticated;
+grant execute on function public.set_trip_movie_emoji_clue(uuid, text) to authenticated;
+grant execute on function public.claim_trip_game_results_announcement(uuid) to authenticated;
+grant execute on function public.update_draw_game_round_limit(uuid, integer) to authenticated;
+grant execute on function public.claim_draw_game_results_announcement(uuid) to authenticated;
+grant execute on function public.start_draw_game_round(uuid) to authenticated;
 
 do $$
 begin

@@ -279,6 +279,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   }
 
   const isPollResult = message.type === 'poll_result' && message.metadata;
+  const isGameSummary = message.type === 'text' && message.metadata?.gameSummary === true;
   const isImageOnly = message.type === 'image' && Boolean(message.image_url);
   const stickerId = typeof message.metadata?.stickerId === 'string' ? message.metadata.stickerId : null;
   const isSticker = message.type === 'text' && stickerId !== null;
@@ -435,6 +436,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   />
                 ) : isPollResult ? (
                   <PollResultMessage metadata={message.metadata} isOwn={isOwn} />
+                ) : isGameSummary ? (
+                  <div className="min-w-[190px] space-y-2">
+                    <p className="text-xs font-semibold tracking-wide text-white/70">
+                      {t(typeof message.metadata?.gameName === 'string' ? message.metadata.gameName : 'Game results')}
+                    </p>
+                    {typeof message.metadata?.winnerId === 'string' ? (
+                      <p className="text-sm font-bold">
+                        {members?.find((member) => member.user_id === message.metadata?.winnerId)?.profile?.display_name || t('Member')} {t('wins!')}
+                      </p>
+                    ) : (
+                      <p className="text-sm font-bold">{t('It’s a draw')}</p>
+                    )}
+                    {Array.isArray(message.metadata?.participants) && message.metadata.participants.map((id: string) => (
+                      <p key={id} className="flex justify-between gap-5 text-xs text-white/75">
+                        <span>{members?.find((member) => member.user_id === id)?.profile?.display_name || t('Member')}</span>
+                        {typeof message.metadata?.scores?.[id] === 'number' && <strong>{message.metadata.scores[id]}</strong>}
+                      </p>
+                    ))}
+                  </div>
                 ) : message.type === 'grocery_list' ? (
                   <div className="min-w-[190px] space-y-2">
                     <div className="text-xs font-semibold tracking-wide text-white/70">{t('Grocery list')}</div>

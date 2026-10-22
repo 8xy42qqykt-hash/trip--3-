@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, GameController, PaperPlaneTilt } from '@phosphor-icons/react';
+import { ArrowLeft, Backspace, Circle, GameController, X } from '@phosphor-icons/react';
 import { supabase } from '../../lib/supabase';
 import { Message, TripMember } from '../../types';
 import { Avatar } from '../common/Avatar';
 import { useLanguage } from '../../context/LanguageContext';
 import { GameLobby } from './GameLobby';
+import { GameConfetti } from './GameConfetti';
 
 type GameType = 'movie_trivia' | 'connect_four' | 'tic_tac_toe';
 type GameStatus = 'lobby' | 'playing' | 'finished' | 'cancelled';
@@ -28,11 +29,14 @@ type GameSession = {
     timeLimit?: number;
     prompt?: string;
     roundStartedAt?: string;
+    drawerId?: string;
+    clue?: string;
     revealedAnswer?: string | null;
     correctUsers?: Array<{ userId: string; points: number }>;
     scores?: Record<string, number>;
   };
   winner_id: string | null;
+  results_announced: boolean;
 };
 
 interface TripGameSessionProps {
@@ -51,10 +55,12 @@ interface TripGameSessionProps {
 }
 
 const GAME_NAMES: Record<GameType, string> = {
-  movie_trivia: 'Movie Trivia',
+  movie_trivia: 'Movie Emoji',
   connect_four: 'Connect Four',
   tic_tac_toe: 'Tic-Tac-Toe',
 };
+
+const MOVIE_EMOJIS = ['🎬', '🍿', '⭐', '🚀', '🧙', '🦁', '❄️', '🐠', '🏰', '🕷️', '🦖', '🚗', '👽', '🤖', '🎸', '🏴‍☠️', '🧸', '🐼', '🌙', '🔥', '💎', '👑', '🌊', '🧟', '🦸', '🎭', '🌹', '🐉', '🛸', '🎤'];
 
 const rpcErrorMessage = (message: string, t: (key: string) => string) => {
   if (message.includes('already full')) return t('This game is already full');
@@ -77,12 +83,15 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState('');
+  const [movieTitle, setMovieTitle] = useState('');
   const [answeredCorrectly, setAnsweredCorrectly] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [rounds, setRounds] = useState(5);
   const [timeLimit, setTimeLimit] = useState(30);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const answerInputRef = useRef<HTMLInputElement>(null);
+  const movieClueRef = useRef('');
+  const clueWritesRef = useRef<Promise<void>>(Promise.resolve());
 
   const loadSession = useCallback(async () => {
     if (!supabase) {
@@ -92,7 +101,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     const client = supabase;
     const { data, error: loadError } = await client
       .from('trip_game_sessions')
-      .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id')
+      .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id, results_announced')
       .eq('id', gameId)
       .maybeSingle();
     if (loadError) {
@@ -106,23 +115,42 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     }
     const loaded = data as GameSession;
     setSession(loaded);
+    movieClueRef.current = loaded.state.clue || '';
     setRounds(loaded.config?.rounds || 5);
     setTimeLimit(loaded.config?.timeLimit || 30);
     if (loaded.game_type === 'movie_trivia' && loaded.status === 'playing' && loaded.state.round) {
-      const { data: ownAnswers, error: answersError } = await client
-        .from('trip_game_answers')
-        .select('correct')
-        .eq('session_id', gameId)
-        .eq('round_number', loaded.state.round)
-        .eq('user_id', userId);
-      if (answersError) {
-        console.error('Could not load the current trivia answer status:', answersError);
-        setError(t('Could not load your answer status.'));
-        return;
+      if (loaded.state.drawerId === userId) {
+        const { data: secret, error: secretError } = await client
+          .from('trip_game_secrets')
+          .select('answer')
+          .eq('session_id', gameId)
+          .eq('round_number', loaded.state.round)
+          .maybeSingle();
+        if (secretError) {
+          console.error('Could not load the private movie title:', secretError);
+          setError(t('Could not load your movie title.'));
+          return;
+        }
+        setMovieTitle(secret?.answer || '');
+        setAnsweredCorrectly(false);
+      } else {
+        setMovieTitle('');
+        const { data: ownAnswers, error: answersError } = await client
+          .from('trip_game_answers')
+          .select('correct')
+          .eq('session_id', gameId)
+          .eq('round_number', loaded.state.round)
+          .eq('user_id', userId);
+        if (answersError) {
+          console.error('Could not load the current movie guess status:', answersError);
+          setError(t('Could not load your answer status.'));
+          return;
+        }
+        setAnsweredCorrectly(Boolean(ownAnswers?.some((item: { correct: boolean }) => item.correct)));
       }
-      setAnsweredCorrectly(Boolean(ownAnswers?.some((item: { correct: boolean }) => item.correct)));
     } else {
       setAnsweredCorrectly(false);
+      setMovieTitle('');
     }
   }, [gameId, t, userId]);
 
@@ -225,6 +253,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     members.find((member) => member.user_id === id)?.profile?.display_name || t('Member')
   ), [members, t]);
   const isHost = session?.host_id === userId;
+  const isMovieExplainer = session?.game_type === 'movie_trivia' && session.state.drawerId === userId;
   const winnerName = session?.winner_id ? memberName(session.winner_id) : null;
   const maxPlayers = session?.game_type === 'movie_trivia' ? null : 2;
   const full = Boolean(maxPlayers && session && session.players.length >= maxPlayers);
@@ -235,7 +264,48 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     const source = session?.state.winningLine || [];
     return new Set((source as number[][]).map((cell) => cell.join(',')));
   }, [session?.state.winningLine]);
+  const winningLine = (session?.state.winningLine as number[][] | undefined) || [];
   const currentPlayer = session?.players[((session.state.moveCount || 0) % 2)];
+
+  const publishGameResults = useCallback(async (finishedSession: GameSession) => {
+    if (!supabase || finishedSession.status !== 'finished' || finishedSession.results_announced) return;
+    const client = supabase;
+    const { data: claimed, error: claimError } = await client.rpc('claim_trip_game_results_announcement', {
+      p_session_id: finishedSession.id,
+    });
+    if (claimError) {
+      console.error('Could not claim game results announcement:', claimError);
+      setError(t('Could not post the final game results.'));
+      return;
+    }
+    if (!claimed) return;
+    const scores = finishedSession.state.scores || {};
+    const scoreboard = finishedSession.participant_ids
+      .map((id) => `${memberName(id)}: ${scores[id] || 0}`)
+      .join('\n');
+    const winner = finishedSession.winner_id ? memberName(finishedSession.winner_id) : null;
+    const outcome = winner ? `${winner} ${t('wins!')}` : t('It’s a draw');
+    const summary = `${t(GAME_NAMES[finishedSession.game_type])}\n${outcome}${scoreboard ? `\n${scoreboard}` : ''}`;
+    try {
+      await sendMessage(summary, undefined, undefined, 'text', {
+        gameId: finishedSession.id,
+        gameName: GAME_NAMES[finishedSession.game_type],
+        gameSummary: true,
+        scores,
+        participants: finishedSession.participant_ids,
+        winnerId: finishedSession.winner_id,
+      });
+    } catch (sendError) {
+      console.error('Could not post game results:', sendError);
+      setError(t('Could not post the final game results.'));
+    }
+  }, [memberName, sendMessage, t]);
+
+  useEffect(() => {
+    if (session?.status === 'finished' && !session.results_announced) {
+      void publishGameResults(session);
+    }
+  }, [session, publishGameResults]);
 
   const runAction = async (action: () => PromiseLike<{ error: { message: string } | null }>) => {
     if (busy) return false;
@@ -273,12 +343,27 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     if (session && supabase && session.status !== 'finished' && session.status !== 'cancelled') {
       await runAction(() => supabase!.rpc('leave_trip_game_session', { p_session_id: session.id }));
     }
+    if (session?.status === 'finished') {
+      await publishGameResults(session);
+    } else if (session && supabase && session.status !== 'cancelled') {
+      const { data: finalSession, error: finalLoadError } = await supabase
+        .from('trip_game_sessions')
+        .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id, results_announced')
+        .eq('id', session.id)
+        .maybeSingle();
+      if (finalLoadError) {
+        console.error('Could not load finished game results:', finalLoadError);
+        setError(t('Could not load the final game results.'));
+        return;
+      }
+      if (finalSession?.status === 'finished') await publishGameResults(finalSession as GameSession);
+    }
     onClose();
   };
 
   const submitAnswer = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!supabase || !session || !answer.trim()) return;
+    if (!supabase || !session || isMovieExplainer || !answer.trim()) return;
     setBusy(true);
     setError('');
     try {
@@ -287,7 +372,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
         p_answer: answer,
       });
       if (answerError) {
-        console.error('Could not submit trivia answer:', answerError);
+        console.error('Could not submit movie guess:', answerError);
         setError(rpcErrorMessage(answerError.message, t));
       } else {
         setAnswer('');
@@ -302,6 +387,37 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     } finally {
       setBusy(false);
     }
+  };
+
+  const updateMovieClue = (nextClue: string) => {
+    if (!supabase || !session || !isMovieExplainer) return;
+    movieClueRef.current = nextClue;
+    setSession((current) => current ? {
+      ...current,
+      state: { ...current.state, clue: nextClue },
+    } : current);
+    const client = supabase;
+    const nextWrite = clueWritesRef.current.then(async () => {
+      const { error: clueError } = await client.rpc('set_trip_movie_emoji_clue', {
+        p_session_id: session.id,
+        p_clue: nextClue,
+      });
+      if (clueError) throw clueError;
+    });
+    clueWritesRef.current = nextWrite.catch((clueError: unknown) => {
+      console.error('Could not update the movie emoji clue:', clueError);
+      setError(t('Could not update the emoji clue.'));
+    });
+  };
+
+  const addMovieEmoji = (emoji: string) => {
+    updateMovieClue(`${movieClueRef.current}${emoji}`);
+  };
+
+  const removeLastMovieEmoji = () => {
+    const lastEmoji = [...MOVIE_EMOJIS].sort((left, right) => right.length - left.length)
+      .find((emoji) => movieClueRef.current.endsWith(emoji));
+    if (lastEmoji) updateMovieClue(movieClueRef.current.slice(0, -lastEmoji.length));
   };
 
   const playMove = (position: number) => {
@@ -355,11 +471,8 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const isTicTacToe = session.game_type === 'tic_tac_toe';
   const cells = isTicTacToe ? (board as Array<string | null> | undefined) || [] : [];
   const connectBoard = !isTicTacToe ? (board as Array<Array<string | null>> | undefined) || [] : [];
-  const playerIndex = session.players.indexOf(userId);
-  const hasAnswered = false;
-
   return (
-    <div className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div data-no-edge-swipe className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
         <button type="button" onClick={() => void leaveGame()} aria-label={t('Leave game')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
           <ArrowLeft size={21} />
@@ -395,7 +508,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                     </select>
                   </label>
                   <label className="text-xs font-semibold text-white/60">
-                    {t('Time per question')}
+                    {t('Time per round')}
                     <select value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))} className="mt-1.5 block h-11 w-full rounded-xl border border-white/10 bg-[#2a2a2e] px-3 text-sm text-white">
                       {[15, 30, 45].map((value) => <option key={value} value={value}>{value}s</option>)}
                     </select>
@@ -410,10 +523,24 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
               <span>{remainingSeconds}s</span>
             </div>
             <div className="rounded-[24px] border border-white/[0.1] bg-[#1c1c1e] p-5">
-              <h2 className="text-center text-xl font-bold">{session.state.prompt}</h2>
+              <p className="text-center text-sm font-semibold text-white/60">
+                {isMovieExplainer ? t('Explain this movie with emojis') : `${memberName(session.state.drawerId || '')} ${t('is explaining the movie')}`}
+              </p>
+              {isMovieExplainer ? (
+                <>
+                  <h2 className="mt-3 text-center text-2xl font-extrabold text-[#70baff]">{movieTitle}</h2>
+                  <p className="mt-4 min-h-16 break-words text-center text-5xl leading-tight" aria-live="polite">
+                    {session.state.clue || t('Choose emojis below')}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-4 min-h-16 break-words text-center text-5xl leading-tight" aria-live="polite">
+                  {session.state.clue || t('Waiting for emoji clues…')}
+                </p>
+              )}
               {session.state.revealedAnswer && (
                 <div className="mt-4 rounded-2xl bg-white/[0.06] p-3 text-center">
-                  <p className="text-xs text-white/50">{t('Correct answer')}</p>
+                  <p className="text-xs text-white/50">{t('Movie title')}</p>
                   <p className="mt-1 font-bold text-emerald-300">{session.state.revealedAnswer}</p>
                   {session.state.correctUsers?.map((item) => (
                     <p key={item.userId} className="mt-1 text-xs text-white/75">{memberName(item.userId)} +{item.points}</p>
@@ -422,29 +549,39 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
               )}
             </div>
             <Scoreboard scores={session.state.scores || {}} players={session.participant_ids} memberName={memberName} title={t('Scoreboard')} />
-            <div className="fixed left-3.5 right-3.5 z-[12001] mx-auto max-w-lg transition-[bottom] duration-150 ease-out" style={{ bottom: keyboardOffset > 0 ? `${Math.max(8, keyboardOffset + 6)}px` : 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
-              <form onSubmit={(event) => void submitAnswer(event)} className="flex min-h-[46px] items-center gap-2 rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]">
-                <input
-                  ref={answerInputRef}
-                  value={answer}
-                  onChange={(event) => setAnswer(event.target.value)}
-                  onFocus={() => window.dispatchEvent(new CustomEvent('trip:keyboard-toggle', { detail: { isOpen: true } }))}
-                  onBlur={() => window.setTimeout(() => {
-                    if (document.activeElement !== answerInputRef.current) {
-                      window.dispatchEvent(new CustomEvent('trip:keyboard-toggle', { detail: { isOpen: false } }));
-                    }
-                  }, 120)}
-                  placeholder={t('Your answer…')}
-                  className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-white outline-none placeholder:text-white/40"
-                  enterKeyHint="send"
-                />
-                <button type="submit" aria-label={t('Send')}                 disabled={busy || answeredCorrectly || !answer.trim()} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A84FF] text-white disabled:opacity-40">
-                  <PaperPlaneTilt size={17} weight="fill" />
-                </button>
-              </form>
-            </div>
+            {isMovieExplainer ? (
+              <div className="fixed bottom-2 left-3.5 right-3.5 z-[12001] mx-auto max-w-lg rounded-[22px] border border-white/[0.12] bg-[#222226]/95 p-2 shadow-[0_4px_16px_rgba(0,0,0,0.3)]" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}>
+                <div className="grid max-h-36 grid-cols-10 gap-1 overflow-y-auto overscroll-contain">
+                  {MOVIE_EMOJIS.map((emoji, index) => (
+                    <button key={`${emoji}-${index}`} type="button" disabled={busy || remainingSeconds <= 0} onClick={() => addMovieEmoji(emoji)} aria-label={`${t('Add emoji clue')} ${emoji}`} className="flex h-10 items-center justify-center rounded-xl text-2xl transition-transform active:scale-90 disabled:opacity-40">
+                      {emoji}
+                    </button>
+                  ))}
+                  <button type="button" disabled={!session.state.clue || busy || remainingSeconds <= 0} onClick={removeLastMovieEmoji} aria-label={t('Remove last emoji')} className="flex h-10 items-center justify-center rounded-xl bg-white/[0.08] text-white disabled:opacity-40"><Backspace size={19} /></button>
+                </div>
+              </div>
+            ) : !answeredCorrectly && (
+              <div className="fixed left-3.5 right-3.5 z-[12001] mx-auto max-w-lg transition-[bottom] duration-150 ease-out" style={{ bottom: keyboardOffset > 0 ? `${Math.max(8, keyboardOffset + 6)}px` : 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+                <form onSubmit={(event) => void submitAnswer(event)} className="flex min-h-[46px] items-center rounded-full border border-white/[0.12] bg-[#222226]/95 px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)]">
+                  <input
+                    ref={answerInputRef}
+                    value={answer}
+                    onChange={(event) => setAnswer(event.target.value)}
+                    onFocus={() => window.dispatchEvent(new CustomEvent('trip:keyboard-toggle', { detail: { isOpen: true } }))}
+                    onBlur={() => window.setTimeout(() => {
+                      if (document.activeElement !== answerInputRef.current) {
+                        window.dispatchEvent(new CustomEvent('trip:keyboard-toggle', { detail: { isOpen: false } }));
+                      }
+                    }, 120)}
+                    placeholder={t('Guess the movie and press Enter')}
+                    className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-white outline-none placeholder:text-white/40"
+                    enterKeyHint="send"
+                  />
+                </form>
+              </div>
+            )}
           </section>
-        ) : session.status === 'playing' ? (
+        ) : (session.status === 'playing' || (session.status === 'finished' && session.game_type !== 'movie_trivia')) ? (
           <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-5 pb-4">
             <div className="flex w-full items-center justify-between">
               {session.players.slice(0, 2).map((id, index) => {
@@ -459,49 +596,118 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
               })}
             </div>
             <p className="text-sm font-semibold text-white/70">
-              {currentPlayer === userId ? t('Your turn') : `${memberName(currentPlayer || '')} ${t('is thinking…')}`}
+              {session.status === 'finished'
+                ? winnerName ? `${winnerName} ${t('wins!')}` : t('It’s a draw')
+                : currentPlayer === userId ? t('Your turn') : `${memberName(currentPlayer || '')} ${t('is thinking…')}`}
             </p>
             {isTicTacToe ? (
-              <div className="grid aspect-square w-full max-w-[min(84vw,390px)] grid-cols-3 gap-2 rounded-[24px] border border-white/[0.1] bg-[#1c1c1e] p-3">
-                {cells.map((cell, index) => (
-                  <button key={index} type="button" disabled={session.status !== 'playing' || currentPlayer !== userId || Boolean(cell)} onClick={() => playMove(index)} className={`rounded-2xl bg-[#2a2a2e] text-5xl font-black transition-colors disabled:cursor-default ${winningCells.has(`${Math.floor(index / 3)},${index % 3}`) ? 'bg-[#0A84FF]/30 text-[#55a7ff]' : cell === 'X' ? 'text-[#0A84FF]' : 'text-[#FF453A]'}`}>
-                    {cell}
-                  </button>
-                ))}
+              <div className="relative aspect-square w-full max-w-[min(84vw,390px)] rounded-[24px] border border-white/[0.1] bg-[#1c1c1e] p-3">
+                <div className="absolute inset-3 grid grid-cols-3 grid-rows-3 gap-2">
+                  {cells.map((cell, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      disabled={session.status !== 'playing' || currentPlayer !== userId || Boolean(cell)}
+                      onClick={() => playMove(index)}
+                      className={`relative flex min-h-0 min-w-0 items-center justify-center rounded-2xl bg-[#2a2a2e] transition-colors disabled:cursor-default ${winningCells.has(`${Math.floor(index / 3)},${index % 3}`) ? 'bg-[#0A84FF]/30' : ''}`}
+                    >
+                      {cell === 'X' && <X size={44} weight="bold" className="h-11 w-11 shrink-0 text-[#0A84FF]" />}
+                      {cell === 'O' && <Circle size={42} weight="bold" className="h-11 w-11 shrink-0 text-[#FF453A]" />}
+                    </button>
+                  ))}
+                </div>
+                {winningLine.length === 3 && (
+                  <motion.svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className="pointer-events-none absolute inset-3 z-10 h-[calc(100%-24px)] w-[calc(100%-24px)] overflow-visible"
+                    aria-hidden="true"
+                  >
+                    <motion.path
+                      d={`M ${(winningLine[0][1] + 0.5) * 100 / 3} ${(winningLine[0][0] + 0.5) * 100 / 3} L ${(winningLine[2][1] + 0.5) * 100 / 3} ${(winningLine[2][0] + 0.5) * 100 / 3}`}
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 0.65, ease: 'easeInOut' }}
+                      fill="none"
+                      stroke="#FFFFFF"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </motion.svg>
+                )}
               </div>
             ) : (
               <div className="w-full max-w-[min(94vw,560px)] rounded-[24px] border border-white/[0.1] bg-[#1c1c1e] p-3">
-                <div className="mb-2 grid grid-cols-7 gap-1">
+                <div className="relative">
+                  <div className="grid aspect-[7/6] grid-cols-7 grid-rows-6 gap-1">
+                    {connectBoard.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
+                      <div
+                        key={`${rowIndex}-${columnIndex}`}
+                        className={`relative min-h-0 min-w-0 overflow-hidden rounded-full border border-white/10 bg-[#2a2a2e] ${winningCells.has(`${rowIndex},${columnIndex}`) ? 'bg-[#0A84FF]/25' : ''}`}
+                      >
+                        {cell && (
+                          <motion.span
+                            initial={{ y: -60, opacity: 0.8 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                            className={`absolute inset-1 rounded-full ${cell === 'X' ? 'bg-[#0A84FF]' : 'bg-[#FF453A]'}`}
+                          />
+                        )}
+                      </div>
+                    )))}
+                  </div>
+                  {winningLine.length === 4 && (
+                    <motion.svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+                      <motion.path
+                        d={`M ${(winningLine[0][1] + 0.5) * 100 / 7} ${(winningLine[0][0] + 0.5) * 100 / 6} L ${(winningLine[3][1] + 0.5) * 100 / 7} ${(winningLine[3][0] + 0.5) * 100 / 6}`}
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.75, ease: 'easeInOut' }}
+                        fill="none"
+                        stroke="#FFFFFF"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </motion.svg>
+                  )}
+                </div>
+                <div className="mt-2 grid grid-cols-7 gap-1">
                   {Array.from({ length: 7 }).map((_, column) => (
-                    <button key={column} type="button" aria-label={`${t('Drop disc in column')} ${column + 1}`} disabled={session.status !== 'playing' || currentPlayer !== userId} onClick={() => playMove(column)} className="h-8 rounded-full text-xs text-white/60 active:bg-white/10">↓</button>
+                    <button
+                      key={column}
+                      type="button"
+                      aria-label={`${t('Drop disc in column')} ${column + 1}`}
+                      disabled={session.status !== 'playing' || currentPlayer !== userId || connectBoard[0]?.[column] !== null}
+                      onClick={() => playMove(column)}
+                      className="flex min-h-10 items-center justify-center rounded-xl text-[#70baff] transition-colors active:bg-white/10 disabled:opacity-35"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+                        <path d="M5 5h4M3 9h4M12 5v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="16" cy="14" r="4" fill="currentColor" />
+                      </svg>
+                    </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {connectBoard.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
-                    <button
-                      key={`${rowIndex}-${columnIndex}`}
-                      type="button"
-                      aria-label={`${t('Row')} ${rowIndex + 1}, ${t('Column')} ${columnIndex + 1}`}
-                      disabled={session.status !== 'playing' || currentPlayer !== userId}
-                      onClick={() => playMove(columnIndex)}
-                      className={`relative aspect-square overflow-hidden rounded-full border border-white/10 bg-[#2a2a2e] ${winningCells.has(`${rowIndex},${columnIndex}`) ? 'ring-4 ring-yellow-300' : ''}`}
-                    >
-                      {cell && (
-                        <motion.span
-                          initial={{ y: -60, opacity: 0.8 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-                          className={`absolute inset-1 rounded-full ${cell === 'X' ? 'bg-[#0A84FF]' : 'bg-[#FF453A]'}`}
-                        />
-                      )}
-                    </button>
-                  )))}
+              </div>
+            )}
+            {session.status === 'finished' && (
+              <div className="pointer-events-none fixed inset-0 z-[12003] flex items-center justify-center px-5">
+                <GameConfetti />
+                <div className="text-center">
+                  <h2 className="inline-block rounded-full bg-black/55 px-5 py-3 text-2xl font-extrabold shadow-xl backdrop-blur-sm">{winnerName ? `${winnerName} ${t('wins!')}` : t('It’s a draw')}</h2>
+                  <div className="pointer-events-auto fixed bottom-[max(20px,env(safe-area-inset-bottom))] left-4 right-4 mx-auto flex max-w-sm gap-3">
+                    <button type="button" onClick={onClose} className="min-h-12 flex-1 rounded-full border border-white/15 bg-white/[0.06] text-sm font-semibold">{t('Back to games')}</button>
+                    <button type="button" onClick={() => void rematch()} className="min-h-12 flex-1 rounded-full bg-[#0A84FF] text-sm font-bold">{t('Rematch')}</button>
+                  </div>
                 </div>
               </div>
             )}
           </section>
         ) : (
           <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-5 text-center">
+            {session.status === 'finished' && <GameConfetti />}
             <h2 className="text-2xl font-extrabold">{session.status === 'cancelled' ? t('Game cancelled') : winnerName ? `${winnerName} ${t('wins!')}` : t('It’s a draw')}</h2>
             {session.game_type === 'movie_trivia' && (
               <>
