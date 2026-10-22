@@ -38,6 +38,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const activePhoto = photos.find((photo) => photo.id === selectedPhotoId) || photos[0];
   const [downloading, setDownloading] = useState(false);
   const [imageFrames, setImageFrames] = useState<Record<string, ImageFrame>>({});
+  const [decodedPhotoIds, setDecodedPhotoIds] = useState<Set<string>>(() => new Set());
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
   const pinchStartDistance = useRef<number | null>(null);
@@ -47,6 +48,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const scrollTimer = useRef<number | null>(null);
   const programmaticScrollTimer = useRef<number | null>(null);
   const isProgrammaticScroll = useRef(false);
+  const photoListKey = photos.map((photo) => `${photo.id}:${photo.url}`).join('|');
 
   const measureImage = useCallback((photoId: string, image: HTMLImageElement) => {
     const slide = image.closest<HTMLElement>('[data-photo-id]');
@@ -165,6 +167,24 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     pinchStartDistance.current = null;
   }, [activePhoto?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(photos.map(async (photo) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = photo.url;
+      try {
+        await image.decode();
+        if (!cancelled) {
+          setDecodedPhotoIds((current) => new Set(current).add(photo.id));
+        }
+      } catch (error) {
+        console.error(`Could not preload photo blur for ${photo.id}:`, error);
+      }
+    }));
+    return () => { cancelled = true; };
+  }, [photoListKey]);
+
   const handlePinchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
     if (event.touches.length === 1 && zoomScale > 1) {
@@ -245,11 +265,10 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
         }}
       >
-        {photos.map((photo, index) => {
+        {photos.map((photo) => {
           const frame = imageFrames[photo.id];
-          const photoIndex = photos.findIndex((entry) => entry.id === activePhoto.id);
-          const isAdjacent = Math.abs(index - photoIndex) <= 1;
           const isActive = photo.id === activePhoto.id;
+          const blurIsReady = decodedPhotoIds.has(photo.id);
           const slideWidth = carouselRef.current?.clientWidth || frame?.width || 0;
           const slideHeight = carouselRef.current?.clientHeight || frame?.height || 0;
           const displayScale = isActive ? zoomScale : 1;
@@ -269,7 +288,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-visible"
               style={{ touchAction: isActive && zoomScale > 1 ? 'none' : 'pan-x pan-y' }}
             >
-              {frame && isAdjacent && (
+              {frame && blurIsReady && (
                 <>
                   <div
                     aria-hidden="true"
@@ -309,12 +328,12 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                   </div>
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute z-[1] bg-gradient-to-b from-transparent to-black"
+                    className="pointer-events-none absolute z-[1] bg-gradient-to-b from-transparent via-black/70 to-black"
                     style={{
-                      left: 0,
-                      right: 0,
                       top: frame.top + frame.height,
-                      height: `max(50vh, ${Math.round(frame.height * 0.9)}px)`,
+                      left: frame.left,
+                      width: frame.width,
+                      height: frame.height,
                     }}
                   />
                 </>
@@ -323,7 +342,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                 data-photo-image={photo.id}
                 src={photo.url}
                 alt={t('Shared trip photo')}
-                loading={isAdjacent ? 'eager' : 'lazy'}
+                loading="eager"
                 onLoad={(event) => measureImage(photo.id, event.currentTarget)}
                 className="pointer-events-none relative z-[2] block h-full w-full select-none object-contain"
                 style={{

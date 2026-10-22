@@ -1429,11 +1429,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 value={inputText}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
-                onPointerDown={(event) => {
-                  if (event.pointerType !== 'mouse') {
-                    event.currentTarget.focus({ preventScroll: true });
-                  }
-                }}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 className={`flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden ${

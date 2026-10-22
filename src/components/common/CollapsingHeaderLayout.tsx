@@ -74,7 +74,7 @@ export const CollapsingHeaderLayout: React.FC<CollapsingHeaderLayoutProps> = ({
 
           {/* Small Title on scroll */}
           <div
-            className="absolute left-1/2 flex max-w-[calc(100%-12rem)] -translate-x-1/2 items-center gap-1"
+            className="absolute left-1/2 flex max-w-[calc(100%-12rem)] -translate-x-1/2 flex-col items-center gap-0.5 text-center"
           >
             <h2 className={`truncate text-center text-base font-bold text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isScrolled ? 'translate-y-0 opacity-100' : 'pointer-events-none absolute -translate-y-2 opacity-0'

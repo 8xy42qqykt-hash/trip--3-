@@ -318,7 +318,7 @@ export const TripOverview: React.FC<{ onPhotoViewerChange?: (isOpen: boolean) =>
         />
         <div className="relative z-10 flex h-14 w-full items-center justify-between px-3.5">
           <div aria-hidden="true" className="w-14" />
-          <div className="absolute left-1/2 flex max-w-[calc(100%-8rem)] -translate-x-1/2 flex-col truncate text-center">
+          <div className="absolute left-1/2 flex max-w-[calc(100%-8rem)] -translate-x-1/2 flex-col items-center truncate text-center">
             <span className={`truncate text-base font-bold tracking-tight text-white transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isTitleCollapsed ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-2 scale-95 opacity-0'
             }`}>{currentTrip.name}</span>
