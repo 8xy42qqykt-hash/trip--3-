@@ -46,11 +46,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       .find((photo) => photo.dataset.photoId === selectedPhotoId);
     if (!selected) return;
     const strip = stripRef.current;
-    const stripRect = strip.getBoundingClientRect();
-    const selectedRect = selected.getBoundingClientRect();
-    const targetLeft = strip.scrollLeft
-      + selectedRect.left + selectedRect.width / 2
-      - stripRect.left - strip.clientWidth / 2;
+    const targetLeft = selected.offsetLeft - (strip.clientWidth - selected.offsetWidth) / 2;
     isProgrammaticScrollRef.current = true;
     strip.scrollTo({ left: targetLeft, behavior: 'smooth' });
     if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
@@ -62,9 +58,10 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   useLayoutEffect(() => {
     const carousel = mainCarouselRef.current;
     if (!carousel || !selectedPhotoId || isMainScrollingRef.current) return;
-    const index = photos.findIndex((photo) => photo.id === selectedPhotoId);
-    if (index < 0) return;
-    const targetLeft = index * carousel.clientWidth;
+    const selected = Array.from(carousel.querySelectorAll<HTMLElement>('[data-main-photo-id]'))
+      .find((slide) => slide.dataset.mainPhotoId === selectedPhotoId);
+    if (!selected) return;
+    const targetLeft = selected.offsetLeft;
     if (Math.abs(carousel.scrollLeft - targetLeft) > 2) {
       isMainScrollingRef.current = true;
       carousel.scrollTo({ left: targetLeft, behavior: 'smooth' });
@@ -148,10 +145,17 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     if (!carousel || !onSelectPhoto || isMainScrollingRef.current) return;
     if (mainScrollTimer.current !== null) window.clearTimeout(mainScrollTimer.current);
     mainScrollTimer.current = window.setTimeout(() => {
-      const index = Math.max(0, Math.min(photos.length - 1, Math.round(carousel.scrollLeft / carousel.clientWidth)));
-      const photoId = photos[index]?.id;
+      const center = carousel.getBoundingClientRect().left + carousel.clientWidth / 2;
+      const nearest = Array.from(carousel.querySelectorAll<HTMLElement>('[data-main-photo-id]'))
+        .reduce<HTMLElement | null>((current, candidate) => {
+          if (!current) return candidate;
+          const currentDistance = Math.abs(current.getBoundingClientRect().left + current.offsetWidth / 2 - center);
+          const candidateDistance = Math.abs(candidate.getBoundingClientRect().left + candidate.offsetWidth / 2 - center);
+          return candidateDistance < currentDistance ? candidate : current;
+        }, null);
+      const photoId = nearest?.dataset.mainPhotoId;
       if (photoId && photoId !== activePhoto?.id) onSelectPhoto(photoId);
-    }, 100);
+    }, 160);
   };
 
   if (!activePhoto) return null;
@@ -198,14 +202,14 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
         <div
           ref={mainCarouselRef}
           onScroll={handleMainScroll}
-          className="relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
+          className="photo-main-carousel relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
           style={{ scrollbarWidth: 'none', touchAction: 'pan-x pan-y' }}
         >
           {photos.map((photo) => (
             <div
               key={photo.id}
               data-main-photo-id={photo.id}
-              className="relative flex h-full w-full shrink-0 snap-center items-center justify-center overflow-hidden"
+              className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-hidden"
             >
               <img
                 src={photo.url}
@@ -213,26 +217,27 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                 className="block h-full w-full select-none object-contain"
                 draggable={false}
               />
+              <button
+                type="button"
+                aria-label={t('Download photo')}
+                onClick={() => void downloadPhoto()}
+                disabled={downloading || photo.id !== activePhoto.id}
+                className="absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+              >
+                <DownloadSimple size={21} weight="bold" />
+              </button>
             </div>
           ))}
-          <button
-            type="button"
-            aria-label={t('Download photo')}
-            onClick={() => void downloadPhoto()}
-            disabled={downloading}
-            className="pointer-events-auto absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
-          >
-            <DownloadSimple size={21} weight="bold" />
-          </button>
         </div>
 
         {photos.length > 0 && (
           <div
             ref={stripRef}
             onScroll={handleStripScroll}
-            className="photo-filmstrip flex h-[calc(76px+env(safe-area-inset-bottom,0px))] shrink-0 snap-x snap-mandatory items-center gap-2 overflow-x-auto px-[calc(50vw-27px)] pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-1"
+            className="photo-filmstrip relative flex h-[calc(76px+env(safe-area-inset-bottom,0px))] shrink-0 snap-x snap-mandatory items-center gap-2 overflow-x-auto pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-1"
             style={{
               scrollbarWidth: 'none',
+              paddingInline: 'calc((100% - 56px) / 2)',
             }}
           >
             {photos.map((photo) => (
