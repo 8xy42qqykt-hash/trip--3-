@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DownloadSimple, X } from '@phosphor-icons/react';
 import { motion } from 'motion/react';
 import { useLanguage } from '../../context/LanguageContext';
@@ -6,6 +6,13 @@ import { useLanguage } from '../../context/LanguageContext';
 export interface LightboxPhoto {
   id: string;
   url: string;
+}
+
+interface ImageFrame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 interface PhotoLightboxProps {
@@ -30,53 +37,70 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const photos = providedPhotos?.length ? providedPhotos : fallbackPhotos;
   const activePhoto = photos.find((photo) => photo.id === selectedPhotoId) || photos[0];
   const [downloading, setDownloading] = useState(false);
-  const stripRef = useRef<HTMLDivElement>(null);
-  const mainCarouselRef = useRef<HTMLDivElement>(null);
-  const stripScrollTimer = useRef<number | null>(null);
+  const [imageFrame, setImageFrame] = useState<ImageFrame | null>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const scrollTimer = useRef<number | null>(null);
   const programmaticScrollTimer = useRef<number | null>(null);
-  const mainScrollTimer = useRef<number | null>(null);
-  const programmaticMainScrollTimer = useRef<number | null>(null);
-  const isStripScrollingRef = useRef(false);
-  const isProgrammaticScrollRef = useRef(false);
-  const isMainScrollingRef = useRef(false);
+  const isProgrammaticScroll = useRef(false);
+
+  const measureActiveImage = useCallback(() => {
+    const carousel = carouselRef.current;
+    if (!carousel || !activePhoto) return;
+    const slide = Array.from(carousel.querySelectorAll<HTMLElement>('[data-photo-id]'))
+      .find((element) => element.dataset.photoId === activePhoto.id);
+    const image = slide?.querySelector('img');
+    if (!slide || !image?.naturalWidth || !image.naturalHeight) return;
+
+    const scale = Math.min(slide.clientWidth / image.naturalWidth, slide.clientHeight / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    const slideRect = slide.getBoundingClientRect();
+    const nextFrame = {
+      left: slideRect.left + (slide.clientWidth - width) / 2,
+      top: slideRect.top + (slide.clientHeight - height) / 2,
+      width,
+      height,
+    };
+    setImageFrame((current) => (
+      current
+      && Math.abs(current.left - nextFrame.left) < 1
+      && Math.abs(current.top - nextFrame.top) < 1
+      && Math.abs(current.width - nextFrame.width) < 1
+      && Math.abs(current.height - nextFrame.height) < 1
+        ? current
+        : nextFrame
+    ));
+  }, [activePhoto]);
 
   useLayoutEffect(() => {
-    if (!selectedPhotoId || !stripRef.current || isStripScrollingRef.current) return;
-    const selected = Array.from(stripRef.current.querySelectorAll<HTMLElement>('[data-photo-id]'))
-      .find((photo) => photo.dataset.photoId === selectedPhotoId);
-    if (!selected) return;
-    const strip = stripRef.current;
-    const targetLeft = selected.offsetLeft - (strip.clientWidth - selected.offsetWidth) / 2;
-    isProgrammaticScrollRef.current = true;
-    strip.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    const carousel = carouselRef.current;
+    if (!carousel || !selectedPhotoId) return;
+    const selectedSlide = Array.from(carousel.querySelectorAll<HTMLElement>('[data-photo-id]'))
+      .find((slide) => slide.dataset.photoId === selectedPhotoId);
+    if (!selectedSlide) return;
+    const targetLeft = selectedSlide.offsetLeft;
+    if (Math.abs(carousel.scrollLeft - targetLeft) < 2) return;
+
+    isProgrammaticScroll.current = true;
+    carousel.scrollTo({ left: targetLeft, behavior: 'smooth' });
     if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
     programmaticScrollTimer.current = window.setTimeout(() => {
-      isProgrammaticScrollRef.current = false;
-    }, 450);
-  }, [selectedPhotoId, photos.length]);
+      isProgrammaticScroll.current = false;
+    }, 500);
+  }, [photos, selectedPhotoId]);
 
   useLayoutEffect(() => {
-    const carousel = mainCarouselRef.current;
-    if (!carousel || !selectedPhotoId || isMainScrollingRef.current) return;
-    const selected = Array.from(carousel.querySelectorAll<HTMLElement>('[data-main-photo-id]'))
-      .find((slide) => slide.dataset.mainPhotoId === selectedPhotoId);
-    if (!selected) return;
-    const targetLeft = selected.offsetLeft;
-    if (Math.abs(carousel.scrollLeft - targetLeft) > 2) {
-      isMainScrollingRef.current = true;
-      carousel.scrollTo({ left: targetLeft, behavior: 'smooth' });
-      if (programmaticMainScrollTimer.current !== null) window.clearTimeout(programmaticMainScrollTimer.current);
-      programmaticMainScrollTimer.current = window.setTimeout(() => {
-        isMainScrollingRef.current = false;
-      }, 450);
-    }
-  }, [selectedPhotoId, photos]);
+    measureActiveImage();
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+    const observer = new ResizeObserver(measureActiveImage);
+    observer.observe(carousel);
+    return () => observer.disconnect();
+  }, [measureActiveImage]);
 
   useEffect(() => () => {
-    if (stripScrollTimer.current !== null) window.clearTimeout(stripScrollTimer.current);
+    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
     if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
-    if (mainScrollTimer.current !== null) window.clearTimeout(mainScrollTimer.current);
-    if (programmaticMainScrollTimer.current !== null) window.clearTimeout(programmaticMainScrollTimer.current);
   }, []);
 
   useEffect(() => {
@@ -91,71 +115,46 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [activePhoto, onClose, onSelectPhoto, photos]);
 
-  const downloadPhoto = async () => {
-    if (!activePhoto || downloading) return;
+  const downloadPhoto = async (photo: LightboxPhoto) => {
+    if (downloading) return;
     setDownloading(true);
     try {
-      const response = await fetch(activePhoto.url);
+      const response = await fetch(photo.url);
       if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
-      anchor.download = `trip-photo-${activePhoto.id}.jpg`;
+      anchor.download = `trip-photo-${photo.id}.jpg`;
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       console.error('Could not download trip photo:', error);
-      window.open(activePhoto.url, '_blank', 'noopener,noreferrer');
+      window.open(photo.url, '_blank', 'noopener,noreferrer');
     } finally {
       setDownloading(false);
     }
   };
 
-  const stepPhoto = (direction: number) => {
-    if (!onSelectPhoto || !activePhoto || photos.length < 2) return;
-    const index = photos.findIndex((photo) => photo.id === activePhoto.id);
-    onSelectPhoto(photos[(index + direction + photos.length) % photos.length].id);
-  };
-
-  const handleStripScroll = () => {
-    const strip = stripRef.current;
-    if (!strip || !onSelectPhoto || isProgrammaticScrollRef.current) return;
-    isStripScrollingRef.current = true;
-    if (stripScrollTimer.current !== null) window.clearTimeout(stripScrollTimer.current);
-    stripScrollTimer.current = window.setTimeout(() => {
-      isStripScrollingRef.current = false;
-      const stripCenter = strip.getBoundingClientRect().left + strip.clientWidth / 2;
-      const nearest = Array.from(strip.querySelectorAll<HTMLElement>('[data-photo-id]'))
-        .reduce<HTMLElement | null>((current, candidate) => {
-          if (!current) return candidate;
-          const currentDistance = Math.abs(current.getBoundingClientRect().left + current.offsetWidth / 2 - stripCenter);
-          const candidateDistance = Math.abs(candidate.getBoundingClientRect().left + candidate.offsetWidth / 2 - stripCenter);
-          return candidateDistance < currentDistance ? candidate : current;
-        }, null);
-      const photoId = nearest?.dataset.photoId;
-      if (photoId && photoId !== activePhoto?.id) onSelectPhoto(photoId);
-    }, 140);
-  };
-
-  const handleMainScroll = () => {
-    const carousel = mainCarouselRef.current;
-    if (!carousel || !onSelectPhoto || isMainScrollingRef.current) return;
-    if (mainScrollTimer.current !== null) window.clearTimeout(mainScrollTimer.current);
-    mainScrollTimer.current = window.setTimeout(() => {
+  const handleCarouselScroll = () => {
+    measureActiveImage();
+    const carousel = carouselRef.current;
+    if (!carousel || !onSelectPhoto || isProgrammaticScroll.current) return;
+    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
+    scrollTimer.current = window.setTimeout(() => {
       const center = carousel.getBoundingClientRect().left + carousel.clientWidth / 2;
-      const nearest = Array.from(carousel.querySelectorAll<HTMLElement>('[data-main-photo-id]'))
+      const nearest = Array.from(carousel.querySelectorAll<HTMLElement>('[data-photo-id]'))
         .reduce<HTMLElement | null>((current, candidate) => {
           if (!current) return candidate;
           const currentDistance = Math.abs(current.getBoundingClientRect().left + current.offsetWidth / 2 - center);
           const candidateDistance = Math.abs(candidate.getBoundingClientRect().left + candidate.offsetWidth / 2 - center);
           return candidateDistance < currentDistance ? candidate : current;
         }, null);
-      const photoId = nearest?.dataset.mainPhotoId;
+      const photoId = nearest?.dataset.photoId;
       if (photoId && photoId !== activePhoto?.id) onSelectPhoto(photoId);
-    }, 160);
+    }, 180);
   };
 
   if (!activePhoto) return null;
@@ -169,20 +168,41 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.24, ease: 'easeOut' }}
     >
-      <motion.img
-        key={`backdrop-${activePhoto.id}`}
-        src={activePhoto.url}
-        alt=""
-        aria-hidden="true"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.68 }}
-        transition={{ duration: 0.3 }}
-        className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[40px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 bg-gradient-to-b from-transparent to-black"
-      />
+      {imageFrame && (
+        <>
+          <img
+            src={activePhoto.url}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none fixed z-0 max-w-none object-fill blur-[40px]"
+            style={{
+              left: imageFrame.left,
+              top: imageFrame.top - imageFrame.height,
+              width: imageFrame.width,
+              height: imageFrame.height,
+              transform: 'scaleY(-1)',
+            }}
+          />
+          <img
+            src={activePhoto.url}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none fixed z-0 max-w-none object-fill blur-[40px]"
+            style={{
+              left: imageFrame.left,
+              top: imageFrame.top + imageFrame.height,
+              width: imageFrame.width,
+              height: imageFrame.height,
+              transform: 'scaleY(-1)',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-[1] bg-gradient-to-b from-transparent to-black"
+            style={{ top: imageFrame.top + imageFrame.height }}
+          />
+        </>
+      )}
 
       {showCloseButton && (
         <button
@@ -196,75 +216,46 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       )}
 
       <div
-        className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
-        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}
+        ref={carouselRef}
+        onScroll={handleCarouselScroll}
+        className="photo-main-carousel absolute inset-0 z-[2] flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
+        style={{
+          scrollbarWidth: 'none',
+          touchAction: 'pan-x pan-y',
+          WebkitOverflowScrolling: 'touch',
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
+        }}
       >
-        <div
-          ref={mainCarouselRef}
-          onScroll={handleMainScroll}
-          className="photo-main-carousel relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
-          style={{ scrollbarWidth: 'none', touchAction: 'pan-x pan-y' }}
-        >
-          {photos.map((photo) => (
-            <div
-              key={photo.id}
-              data-main-photo-id={photo.id}
-              className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-hidden"
-            >
-              <img
-                src={photo.url}
-                alt={t('Shared trip photo')}
-                className="block h-full w-full select-none object-contain"
-                draggable={false}
-              />
+        {photos.map((photo) => (
+          <div
+            key={photo.id}
+            data-photo-id={photo.id}
+            className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-hidden"
+          >
+            <img
+              src={photo.url}
+              alt={t('Shared trip photo')}
+              onLoad={photo.id === activePhoto.id ? measureActiveImage : undefined}
+              className="pointer-events-none block h-full w-full select-none object-contain"
+              draggable={false}
+            />
+            {photo.id === activePhoto.id && imageFrame && (
               <button
                 type="button"
                 aria-label={t('Download photo')}
-                onClick={() => void downloadPhoto()}
-                disabled={downloading || photo.id !== activePhoto.id}
-                className="absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+                onClick={() => void downloadPhoto(photo)}
+                disabled={downloading}
+                className="absolute z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
+                style={{
+                  right: `calc((100% - ${imageFrame.width}px) / 2 + 12px)`,
+                  bottom: `calc((100% - ${imageFrame.height}px) / 2 + 12px)`,
+                }}
               >
                 <DownloadSimple size={21} weight="bold" />
               </button>
-            </div>
-          ))}
-        </div>
-
-        {photos.length > 0 && (
-          <div
-            ref={stripRef}
-            onScroll={handleStripScroll}
-            className="photo-filmstrip relative flex h-[calc(76px+env(safe-area-inset-bottom,0px))] shrink-0 snap-x snap-mandatory items-center gap-2 overflow-x-auto pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] pt-1"
-            style={{
-              scrollbarWidth: 'none',
-              paddingInline: 'calc((100% - 56px) / 2)',
-            }}
-          >
-            {photos.map((photo) => (
-              <button
-                key={photo.id}
-                data-photo-id={photo.id}
-                type="button"
-                aria-label={t('View shared trip photo')}
-                aria-current={photo.id === activePhoto.id}
-                onClick={() => onSelectPhoto?.(photo.id)}
-                className="h-14 w-14 shrink-0 snap-center overflow-hidden rounded-xl"
-              >
-                <motion.img
-                  src={photo.url}
-                  alt=""
-                  loading="lazy"
-                  animate={{
-                    scale: photo.id === activePhoto.id ? 1.12 : 0.94,
-                    opacity: photo.id === activePhoto.id ? 1 : 0.58,
-                  }}
-                  transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                  className="h-full w-full rounded-xl object-cover"
-                />
-              </button>
-            ))}
+            )}
           </div>
-        )}
+        ))}
       </div>
     </motion.div>
   );
