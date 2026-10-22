@@ -48,10 +48,10 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
 
   const tabs: { key: TabKey; label: string; Icon: React.ComponentType<any> }[] = [
     { key: 'messages', label: t('Messages'), Icon: PaperPlaneTilt },
+    { key: 'schedule', label: t('Plans'), Icon: CalendarBlank },
     secondaryTab === 'games'
       ? { key: 'games', label: t('Games'), Icon: GameController }
       : { key: 'groceries', label: t('Groceries'), Icon: ShoppingCart },
-    { key: 'schedule', label: t('Plans'), Icon: CalendarBlank },
     { key: 'my_trip', label: t('My Trip'), Icon: MapTrifold },
     { key: 'settings', label: t('Settings'), Icon: Gear },
   ];

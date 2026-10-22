@@ -6,7 +6,7 @@ import { Avatar } from '../common/Avatar';
 import { useLanguage } from '../../context/LanguageContext';
 
 type SessionSummary = {
-  game_type: 'movie_trivia' | 'connect_four' | 'tic_tac_toe';
+  game_type: 'connect_four' | 'tic_tac_toe';
   status: string;
   creator_id: string;
   players: string[];
@@ -15,7 +15,6 @@ type SessionSummary = {
 };
 
 const GAME_LABELS: Record<SessionSummary['game_type'], string> = {
-  movie_trivia: 'Movie Emoji',
   connect_four: 'Connect Four',
   tic_tac_toe: 'Tic-Tac-Toe',
 };
@@ -64,11 +63,11 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
   }, [gameId]);
 
   if (!session || !gameId) return <p className="text-sm text-white/70">{t('Game invitation')}</p>;
-  const title = t(GAME_LABELS[session.game_type]);
+  const title = t(GAME_LABELS[session.game_type] || 'Game invitation');
   const creator = members.find((member) => member.user_id === session.creator_id);
   const winner = session.winner_id && members.find((member) => member.user_id === session.winner_id);
-  const maxPlayers = session.game_type === 'movie_trivia' ? null : 2;
-  const full = maxPlayers !== null && session.players.length >= maxPlayers;
+  const maxPlayers = 2;
+  const full = session.players.length >= maxPlayers;
   const canReopen = Boolean(currentUserId && session.participant_ids.includes(currentUserId));
 
   return (
@@ -99,7 +98,7 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
           })}
         </div>
         <span className="text-xs text-white/65">
-          {session.players.length}/{maxPlayers ?? '∞'}
+          {session.players.length}/{maxPlayers}
         </span>
       </div>
       {session.status === 'playing' ? (
@@ -128,8 +127,8 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
           className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF] disabled:bg-white/15 disabled:text-white/45"
         >
           {session.players.includes(currentUserId || '')
-            ? `${t('Open game')} · ${session.players.length}/${maxPlayers ?? '∞'}`
-            : full ? `${t('Game full')} (${session.players.length}/${maxPlayers})` : `${t('Join game')} · ${session.players.length}/${maxPlayers ?? '∞'}`}
+            ? `${t('Open game')} · ${session.players.length}/${maxPlayers}`
+            : full ? `${t('Game full')} (${session.players.length}/${maxPlayers})` : `${t('Join game')} · ${session.players.length}/${maxPlayers}`}
         </button>
       )}
     </div>

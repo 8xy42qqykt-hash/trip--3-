@@ -16,6 +16,7 @@ import {
   CalendarBlank,
   GameController,
   CircleNotch,
+  Trophy,
   At,
   Hash,
   Smiley,
@@ -53,6 +54,34 @@ interface MessagesViewProps {
   call: GroupCallManager;
 }
 
+const AnimatedScore: React.FC<{ score: number }> = ({ score }) => {
+  const [displayedScore, setDisplayedScore] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+    const startedAt = performance.now();
+    const duration = 850;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      setDisplayedScore(Math.floor(score * progress));
+      if (progress < 1) frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [score]);
+
+  return (
+    <motion.span
+      initial={{ scale: 0.86, opacity: 0.55 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 360, damping: 24 }}
+      className="tabular-nums"
+    >
+      {displayedScore}
+    </motion.span>
+  );
+};
+
 export const MessagesView: React.FC<MessagesViewProps> = ({
   viewMode = 'messages',
   onKeyboardStateChange,
@@ -86,6 +115,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
   const [composerMode, setComposerMode] = useState<'message' | 'grocery_list' | 'meal' | 'plan'>(
     viewMode === 'messages' || viewMode === 'games' ? 'message' : viewMode,
   );
@@ -99,7 +129,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const callButtonRef = useRef<HTMLButtonElement>(null);
-  const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number; width: number; height: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const uploadInProgressRef = useRef(false);
   const sendInProgressRef = useRef(false);
@@ -109,6 +139,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
   const [activeGameSessionId, setActiveGameSessionId] = useState<string | null>(null);
   const [isGamesMenuOpen, setIsGamesMenuOpen] = useState(false);
+  const gamesButtonRef = useRef<HTMLButtonElement>(null);
+  const [isGameScoreboardOpen, setIsGameScoreboardOpen] = useState(false);
+  const [isLoadingGameScores, setIsLoadingGameScores] = useState(false);
+  const [gameScoreError, setGameScoreError] = useState('');
+  const [gameScores, setGameScores] = useState<Array<{ userId: string; name: string; avatarUrl: string | null; color: string; score: number }>>([]);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
@@ -379,6 +414,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages.length]);
+
+  useEffect(() => {
+    if (isLoadingMessages) return;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollToBottom();
+      secondFrame = window.requestAnimationFrame(scrollToBottom);
+    });
+    const settleTimer = window.setTimeout(scrollToBottom, 180);
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+      window.clearTimeout(settleTimer);
+    };
+  }, [viewMode, messages.length, isLoadingMessages]);
 
   useEffect(() => {
     if (isLoadingMessages) {
@@ -761,15 +811,14 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const createTripGame = async (gameType: 'movie_trivia' | 'connect_four' | 'tic_tac_toe') => {
+  const createTripGame = async (gameType: 'connect_four' | 'tic_tac_toe') => {
     if (!currentTrip || !user || !supabase) {
       setComposerError(t('Games require an online connection.'));
       return;
     }
     setIsGamesMenuOpen(false);
     setComposerError('');
-    const config = gameType === 'movie_trivia' ? { rounds: 5, timeLimit: 30 }
-      : gameType === 'tic_tac_toe' ? { bestOf: 1 } : {};
+    const config = gameType === 'tic_tac_toe' ? { bestOf: 1 } : {};
     const { data: gameId, error } = await supabase.rpc('create_trip_game_session', {
       p_trip_id: currentTrip.id,
       p_game_type: gameType,
@@ -784,7 +833,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
     try {
       await sendMessage(
-        `${t(gameType === 'movie_trivia' ? 'Movie Emoji' : gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe')} — ${t('join the game!')}`,
+        `${t(gameType === 'connect_four' ? 'Connect Four' : 'Tic-Tac-Toe')} — ${t('join the game!')}`,
         undefined,
         undefined,
         'game_session',
@@ -794,6 +843,63 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     } catch (sendError) {
       console.error('Could not post game invitation:', sendError);
       setComposerError(t('The game was created, but its chat invitation could not be sent.'));
+    }
+  };
+
+  const openGameScoreboard = async () => {
+    setIsGameScoreboardOpen(true);
+    setIsLoadingGameScores(true);
+    setGameScoreError('');
+    try {
+      if (!currentTrip || !supabase) {
+        setGameScoreError(t('Games require an online connection.'));
+        return;
+      }
+      const [sessionResults, drawResults] = await Promise.all([
+        supabase
+          .from('trip_game_sessions')
+          .select('winner_id')
+          .eq('trip_id', currentTrip.id)
+          .eq('status', 'finished'),
+        supabase
+          .from('draw_games')
+          .select('scores')
+          .eq('trip_id', currentTrip.id)
+          .eq('status', 'finished'),
+      ]);
+      const loadError = sessionResults.error || drawResults.error;
+      if (loadError) {
+        console.error('Could not load game leaderboard:', loadError);
+        setGameScoreError(t('Could not load the game leaderboard.'));
+        return;
+      }
+
+      const totals = new Map(tripMembers.map((member) => [member.user_id, 0]));
+      (sessionResults.data || []).forEach((result) => {
+        if (result.winner_id && totals.has(result.winner_id)) {
+          totals.set(result.winner_id, (totals.get(result.winner_id) || 0) + 1);
+        }
+      });
+      (drawResults.data || []).forEach((result) => {
+        const scores = result.scores as Record<string, number> | null;
+        Object.entries(scores || {}).forEach(([userId, score]) => {
+          if (totals.has(userId) && Number.isFinite(score)) {
+            totals.set(userId, (totals.get(userId) || 0) + Math.floor(score));
+          }
+        });
+      });
+      setGameScores(tripMembers.map((member) => ({
+        userId: member.user_id,
+        name: member.profile?.display_name || t('Member'),
+        avatarUrl: member.profile?.avatar_url || null,
+        color: member.profile?.color || '#0A84FF',
+        score: totals.get(member.user_id) || 0,
+      })).sort((left, right) => right.score - left.score || left.name.localeCompare(right.name)));
+    } catch (loadError) {
+      console.error('Could not load game leaderboard:', loadError);
+      setGameScoreError(t('Could not load the game leaderboard.'));
+    } finally {
+      setIsLoadingGameScores(false);
     }
   };
 
@@ -998,7 +1104,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     return;
                   }
                   const rect = callButtonRef.current?.getBoundingClientRect();
-                  if (rect) setCallMenuPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                  if (rect) setCallMenuPosition({
+                    top: rect.bottom + 8,
+                    right: window.innerWidth - rect.right,
+                    width: rect.width,
+                    height: rect.height,
+                  });
                   setIsCallMenuOpen(true);
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg active:scale-95"
@@ -1174,23 +1285,66 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
       >
         {isGamesView && (
-          <div className="relative mb-2">
+          <div className="mb-2 flex items-center gap-2">
             <button
               type="button"
-              aria-haspopup="menu"
-              aria-expanded={isGamesMenuOpen}
-              onClick={() => setIsGamesMenuOpen((open) => !open)}
-              className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/95 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+              aria-label={t('Game leaderboard')}
+              disabled={isLoadingGameScores}
+              aria-busy={isLoadingGameScores}
+              onClick={() => void openGameScoreboard()}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/90 text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] backdrop-blur-xl disabled:opacity-60"
             >
-              <span className="flex items-center gap-2"><GameController size={19} weight="fill" />{t('Choose a game')}</span>
+              <Trophy size={20} weight="fill" />
             </button>
-            {isGamesMenuOpen && (
-              <>
-                <button type="button" aria-label={t('Close game menu')} onClick={() => setIsGamesMenuOpen(false)} className="fixed inset-0 z-30 cursor-default" />
-                <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 rounded-[24px] border border-white/[0.14] bg-[#202024]/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] backdrop-blur-2xl animate-pop-in">
+            <div className="relative min-w-0 flex-1">
+              <button
+                ref={gamesButtonRef}
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={isGamesMenuOpen}
+                onClick={() => setIsGamesMenuOpen((open) => !open)}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/90 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] backdrop-blur-xl"
+                style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
+              >
+                <span className="flex items-center gap-2"><GameController size={19} weight="fill" />{t('Choose a game')}</span>
+              </button>
+            <AnimatePresence>
+              {isGamesMenuOpen && (
+                <>
+                  <motion.button
+                    type="button"
+                    aria-label={t('Close game menu')}
+                    onClick={() => setIsGamesMenuOpen(false)}
+                    className="fixed inset-0 z-30 cursor-default"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                  />
+                  <motion.div
+                    initial={{
+                      opacity: 0,
+                      scaleX: 1,
+                      scaleY: Math.min(1, (gamesButtonRef.current?.offsetHeight || 48) / 160),
+                      y: 8,
+                    }}
+                    animate={{ opacity: 1, scaleY: 1, y: 0 }}
+                    exit={{
+                      opacity: 0,
+                      scaleX: 1,
+                      scaleY: Math.min(1, (gamesButtonRef.current?.offsetHeight || 48) / 160),
+                      y: 8,
+                    }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                    style={{
+                      transformOrigin: 'bottom center',
+                      backdropFilter: 'blur(30px) saturate(190%)',
+                      WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                    }}
+                    className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 rounded-[24px] border border-white/[0.14] bg-[#202024]/90 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
+                  >
                   {([
                     ['Draw and Guess', () => void createDrawGame()],
-                    ['Movie Emoji', () => void createTripGame('movie_trivia')],
                     ['Connect Four', () => void createTripGame('connect_four')],
                     ['Tic-Tac-Toe', () => void createTripGame('tic_tac_toe')],
                   ] as const).map(([name, create]) => (
@@ -1199,9 +1353,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       {t(name)}
                     </button>
                   ))}
-                </div>
-              </>
-            )}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+            </div>
           </div>
         )}
         {composerError && (
@@ -1238,6 +1394,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         <form ref={composerFormRef} onSubmit={handleSend} className={`relative flex items-end gap-2 ${isGamesView ? 'hidden' : ''}`}>
           {/* Type-specific tabs have a fixed composer mode and do not show mode toggles. */}
           {!isFilteredView && !isGamesView && <button
+            ref={plusButtonRef}
             type="button"
             disabled={uploadingImage}
             onClick={() => {
@@ -1275,21 +1432,44 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           </button>}
 
           {/* Plus Menu Popup */}
-          {!isFilteredView && !isGamesView && isPlusMenuOpen && (
-            <>
-              <div
-                onClick={() => setIsPlusMenuOpen(false)}
-                className="fixed inset-0 z-30 bg-transparent"
-              />
-              <div
-                style={{
-                  backdropFilter: 'blur(30px) saturate(190%)',
-                  WebkitBackdropFilter: 'blur(30px) saturate(190%)',
-                  backgroundColor: 'rgba(28, 28, 32, 0.94)',
-                }}
-                data-reaction-clearance
-                className="absolute left-0 bottom-14 z-40 flex w-48 flex-col border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)] origin-bottom-left animate-pop-in"
-              >
+          {!isFilteredView && !isGamesView && (
+            <AnimatePresence>
+              {isPlusMenuOpen && (
+                <>
+                  <motion.button
+                    type="button"
+                    aria-label={t('Close attachment menu')}
+                    onClick={() => setIsPlusMenuOpen(false)}
+                    className="fixed inset-0 z-30 bg-transparent"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                  />
+                  <motion.div
+                    initial={{
+                      opacity: 0,
+                      scaleX: Math.min(1, (plusButtonRef.current?.offsetWidth || 46) / 192),
+                      scaleY: Math.min(1, (plusButtonRef.current?.offsetHeight || 46) / 240),
+                      y: 8,
+                    }}
+                    animate={{ opacity: 1, scaleX: 1, scaleY: 1, y: 0 }}
+                    exit={{
+                      opacity: 0,
+                      scaleX: Math.min(1, (plusButtonRef.current?.offsetWidth || 46) / 192),
+                      scaleY: Math.min(1, (plusButtonRef.current?.offsetHeight || 46) / 240),
+                      y: 8,
+                    }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                    style={{
+                      transformOrigin: 'bottom left',
+                      backdropFilter: 'blur(30px) saturate(190%)',
+                      WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                      backgroundColor: 'rgba(28, 28, 32, 0.94)',
+                    }}
+                    data-reaction-clearance
+                    className="absolute left-0 bottom-14 z-40 flex w-48 flex-col border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
+                  >
                 <button
                   type="button"
                   onClick={() => {
@@ -1339,8 +1519,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   </div>
                   <span>{t('Poll')}</span>
                 </button>
-              </div>
-            </>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           )}
 
           {((!isFilteredView && !isGamesView && composerMode !== 'grocery_list' && !isMentionListVisible)
@@ -1589,6 +1771,80 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           setSelectedProfileId(null);
         }}
       />
+      <AnimatePresence>
+        {isGameScoreboardOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed inset-0 z-[12010] flex flex-col bg-black text-white"
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
+            <header className="relative flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] px-3.5">
+              <div className="h-11 w-11 shrink-0" />
+              <div className="absolute left-1/2 flex max-w-[220px] -translate-x-1/2 flex-col items-center truncate text-center">
+                <h2 className="truncate text-base font-bold">{t('Game leaderboard')}</h2>
+                <TripMemberStack members={tripMembers} />
+              </div>
+              <button
+                type="button"
+                aria-label={t('Close leaderboard')}
+                onClick={() => setIsGameScoreboardOpen(false)}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/[0.08]"
+              >
+                <X size={22} weight="bold" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 pt-6">
+              {isLoadingGameScores ? (
+                <div className="flex h-full items-center justify-center text-sm text-white/60">{t('Loading leaderboard…')}</div>
+              ) : gameScoreError ? (
+                <p role="alert" className="rounded-2xl border border-red-300/15 bg-red-950/30 p-4 text-center text-sm text-red-200">{gameScoreError}</p>
+              ) : gameScores.length === 0 || gameScores.every((entry) => entry.score === 0) ? (
+                <p className="pt-16 text-center text-sm text-white/55">{t('No game scores yet')}</p>
+              ) : (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0, y: 18, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+                    className="mx-auto flex max-w-sm flex-col items-center rounded-[28px] border border-white/[0.1] bg-[#171719] px-5 py-7 text-center"
+                  >
+                    <Avatar
+                      name={gameScores[0].name}
+                      avatarUrl={gameScores[0].avatarUrl}
+                      color={gameScores[0].color}
+                      size={88}
+                      className="ring-4 ring-[#0A84FF]/30"
+                    />
+                    <div className="mt-4 flex max-w-full items-baseline justify-center gap-3">
+                      <span className="truncate text-2xl font-extrabold">{gameScores[0].name}</span>
+                      <span className="text-2xl font-extrabold text-[#70baff]"><AnimatedScore score={gameScores[0].score} /></span>
+                    </div>
+                  </motion.div>
+                  <div className="mx-auto mt-5 max-w-lg space-y-2">
+                    {gameScores.slice(1).map((entry, index) => (
+                      <motion.div
+                        key={entry.userId}
+                        initial={{ opacity: 0, x: 18 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.28, delay: index * 0.07, ease: 'easeOut' }}
+                        className="flex min-h-[66px] items-center gap-3 rounded-[20px] border border-white/[0.08] bg-[#171719] px-3.5"
+                      >
+                        <span className="w-6 text-center text-sm font-bold tabular-nums text-white/45">{index + 2}</span>
+                        <Avatar name={entry.name} avatarUrl={entry.avatarUrl} color={entry.color} size={40} />
+                        <span className="min-w-0 flex-1 truncate text-base font-semibold">{entry.name}</span>
+                        <span className="text-lg font-bold tabular-nums text-white"><AnimatedScore score={entry.score} /></span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {activeDrawGameId && user && (
         <DrawGuessGame
           gameId={activeDrawGameId}
@@ -1684,13 +1940,24 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   top: `${callMenuPosition.top}px`,
                   right: `${callMenuPosition.right}px`,
                   transformOrigin: 'top right',
+                  backgroundColor: 'rgba(32, 32, 36, 0.88)',
                   backdropFilter: 'blur(24px) saturate(180%)',
                   WebkitBackdropFilter: 'blur(24px) saturate(180%)',
                 }}
-                initial={{ opacity: 0, scale: 0.88, y: -5 }}
+                initial={{
+                  opacity: 0,
+                  scaleX: Math.min(1, callMenuPosition.width / 208),
+                  scaleY: Math.min(1, callMenuPosition.height / 144),
+                  y: -4,
+                }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: -3 }}
-                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                exit={{
+                  opacity: 0,
+                  scaleX: Math.min(1, callMenuPosition.width / 208),
+                  scaleY: Math.min(1, callMenuPosition.height / 144),
+                  y: -4,
+                }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
                 className="fixed z-[10001] w-52 rounded-2xl border border-white/10 bg-[#202024]/90 p-2 shadow-xl"
               >
                 <div className="px-3 py-1.5 text-xs font-semibold text-slate-400">{t('Start a call')}</div>

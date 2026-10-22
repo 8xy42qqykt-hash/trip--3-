@@ -23,9 +23,9 @@ type AppViewKey = 'trips' | TabKey;
 const VIEW_INDEX: Record<AppViewKey, number> = {
   trips: -1,
   messages: 0,
-  groceries: 1,
-  games: 1,
-  schedule: 2,
+  schedule: 1,
+  groceries: 2,
+  games: 2,
   my_trip: 3,
   settings: 4,
 };
@@ -447,7 +447,7 @@ const MainAppContent: React.FC = () => {
       const isCommitGesture = wasArmed
         && currentTrip
         && activeTab !== 'trips';
-      const tabs = ['messages', secondaryTab, 'schedule', 'my_trip', 'settings'] as const;
+      const tabs = ['messages', 'schedule', secondaryTab, 'my_trip', 'settings'] as const;
       let transitionDirection = 0;
       let commitTransition: (() => void) | null = null;
 
