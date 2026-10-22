@@ -1104,7 +1104,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           }}
         />
         <div className="relative z-10 h-14 w-full flex items-center justify-between px-3.5">
-          {!isFilteredView ? (
+          {!isFilteredView && !isGamesView ? (
             <button
               type="button"
               onClick={exitTrip}
@@ -1326,25 +1326,32 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         {isGamesView && (
           <div className="relative flex items-center gap-2">
             {onlineMembers.length > 0 && (
-              <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#202024]/90 px-3 py-2 shadow-lg backdrop-blur-xl">
-                <span className="shrink-0 text-xs font-semibold text-white/55">{t('Active now')}</span>
-                {onlineMembers.map((member) => (
+              <div
+                aria-label={`${onlineMembers.length} members currently active`}
+                title={`${onlineMembers.length} members currently active`}
+                className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-end -space-x-2"
+              >
+                {onlineMembers.slice(0, 7).map((member) => (
                   <button
                     key={member.userId}
                     type="button"
                     onClick={() => setSelectedProfileId(member.userId)}
                     aria-label={`${t('View profile')}: ${member.profile.display_name}`}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full pr-2 text-xs font-medium text-white/85 hover:bg-white/[0.08]"
+                    className="relative rounded-full border-2 border-black"
                   >
                     <Avatar
                       name={member.profile.display_name}
                       avatarUrl={member.profile.avatar_url}
                       color={member.profile.color}
-                      size={24}
+                      size={28}
                     />
-                    <span className="max-w-24 truncate">{member.profile.display_name}</span>
                   </button>
                 ))}
+                {onlineMembers.length > 7 && (
+                  <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                    +{onlineMembers.length - 7}
+                  </span>
+                )}
               </div>
             )}
             <button
