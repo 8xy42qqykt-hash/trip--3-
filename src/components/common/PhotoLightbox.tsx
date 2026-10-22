@@ -37,40 +37,39 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const photos = providedPhotos?.length ? providedPhotos : fallbackPhotos;
   const activePhoto = photos.find((photo) => photo.id === selectedPhotoId) || photos[0];
   const [downloading, setDownloading] = useState(false);
-  const [imageFrame, setImageFrame] = useState<ImageFrame | null>(null);
+  const [imageFrames, setImageFrames] = useState<Record<string, ImageFrame>>({});
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+  const pinchStartDistance = useRef<number | null>(null);
+  const pinchStartScale = useRef(1);
+  const panStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const scrollTimer = useRef<number | null>(null);
   const programmaticScrollTimer = useRef<number | null>(null);
   const isProgrammaticScroll = useRef(false);
 
-  const measureActiveImage = useCallback(() => {
-    const carousel = carouselRef.current;
-    if (!carousel || !activePhoto) return;
-    const slide = Array.from(carousel.querySelectorAll<HTMLElement>('[data-photo-id]'))
-      .find((element) => element.dataset.photoId === activePhoto.id);
-    const image = slide?.querySelector('img');
-    if (!slide || !image?.naturalWidth || !image.naturalHeight) return;
-
+  const measureImage = useCallback((photoId: string, image: HTMLImageElement) => {
+    const slide = image.closest<HTMLElement>('[data-photo-id]');
+    if (!slide || !image.naturalWidth || !image.naturalHeight) return;
     const scale = Math.min(slide.clientWidth / image.naturalWidth, slide.clientHeight / image.naturalHeight);
-    const width = image.naturalWidth * scale;
-    const height = image.naturalHeight * scale;
-    const slideRect = slide.getBoundingClientRect();
-    const nextFrame = {
-      left: slideRect.left + (slide.clientWidth - width) / 2,
-      top: slideRect.top + (slide.clientHeight - height) / 2,
-      width,
-      height,
+    const frame = {
+      left: (slide.clientWidth - image.naturalWidth * scale) / 2,
+      top: (slide.clientHeight - image.naturalHeight * scale) / 2,
+      width: image.naturalWidth * scale,
+      height: image.naturalHeight * scale,
     };
-    setImageFrame((current) => (
-      current
-      && Math.abs(current.left - nextFrame.left) < 1
-      && Math.abs(current.top - nextFrame.top) < 1
-      && Math.abs(current.width - nextFrame.width) < 1
-      && Math.abs(current.height - nextFrame.height) < 1
-        ? current
-        : nextFrame
-    ));
-  }, [activePhoto]);
+    setImageFrames((current) => {
+      const previous = current[photoId];
+      if (
+        previous
+        && Math.abs(previous.left - frame.left) < 1
+        && Math.abs(previous.top - frame.top) < 1
+        && Math.abs(previous.width - frame.width) < 1
+        && Math.abs(previous.height - frame.height) < 1
+      ) return current;
+      return { ...current, [photoId]: frame };
+    });
+  }, []);
 
   useLayoutEffect(() => {
     const carousel = carouselRef.current;
@@ -90,13 +89,17 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   }, [photos, selectedPhotoId]);
 
   useLayoutEffect(() => {
-    measureActiveImage();
     const carousel = carouselRef.current;
     if (!carousel) return;
-    const observer = new ResizeObserver(measureActiveImage);
+    const observer = new ResizeObserver(() => {
+      carousel.querySelectorAll<HTMLImageElement>('[data-photo-image]').forEach((image) => {
+        const photoId = image.dataset.photoImage;
+        if (photoId) measureImage(photoId, image);
+      });
+    });
     observer.observe(carousel);
     return () => observer.disconnect();
-  }, [measureActiveImage]);
+  }, [measureImage]);
 
   useEffect(() => () => {
     if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
@@ -139,7 +142,6 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   };
 
   const handleCarouselScroll = () => {
-    measureActiveImage();
     const carousel = carouselRef.current;
     if (!carousel || !onSelectPhoto || isProgrammaticScroll.current) return;
     if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
@@ -157,6 +159,59 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     }, 180);
   };
 
+  useEffect(() => {
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+    pinchStartDistance.current = null;
+  }, [activePhoto?.id]);
+
+  const handlePinchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
+    if (event.touches.length === 1 && zoomScale > 1) {
+      const touch = event.touches[0];
+      panStart.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        offsetX: zoomOffset.x,
+        offsetY: zoomOffset.y,
+      };
+      return;
+    }
+    if (event.touches.length !== 2) return;
+    const [first, second] = Array.from(event.touches);
+    pinchStartDistance.current = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+    pinchStartScale.current = zoomScale;
+    panStart.current = null;
+  };
+
+  const handlePinchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
+    if (event.touches.length === 2 && pinchStartDistance.current !== null) {
+      event.preventDefault();
+      const [first, second] = Array.from(event.touches);
+      const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+      setZoomScale(Math.min(4, Math.max(1, pinchStartScale.current * distance / pinchStartDistance.current)));
+      return;
+    }
+    if (event.touches.length === 1 && zoomScale > 1 && panStart.current) {
+      event.preventDefault();
+      const touch = event.touches[0];
+      setZoomOffset({
+        x: panStart.current.offsetX + touch.clientX - panStart.current.x,
+        y: panStart.current.offsetY + touch.clientY - panStart.current.y,
+      });
+    }
+  };
+
+  const handlePinchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
+    if (event.touches.length < 2) pinchStartDistance.current = null;
+    if (event.touches.length === 0) {
+      panStart.current = null;
+      if (zoomScale <= 1) setZoomOffset({ x: 0, y: 0 });
+    }
+  };
+
   if (!activePhoto) return null;
 
   return (
@@ -168,39 +223,6 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.24, ease: 'easeOut' }}
     >
-      {imageFrame && (
-        <>
-          {[
-            { top: imageFrame.top - imageFrame.height, scaleY: -1 },
-            { top: imageFrame.top + imageFrame.height, scaleY: -1 },
-          ].map(({ top, scaleY }, index) => (
-            <div
-              key={`${activePhoto.id}-extension-${index}`}
-              aria-hidden="true"
-              className="pointer-events-none fixed z-0 overflow-hidden bg-black"
-              style={{
-                left: imageFrame.left,
-                top,
-                width: imageFrame.width,
-                height: imageFrame.height,
-              }}
-            >
-              <img
-                src={activePhoto.url}
-                alt=""
-                className="absolute inset-0 h-full w-full max-w-none object-fill blur-[40px]"
-                style={{ transform: `scale(1.25, ${scaleY * 1.25})` }}
-              />
-            </div>
-          ))}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-[1] bg-gradient-to-b from-transparent to-black"
-            style={{ top: imageFrame.top + imageFrame.height }}
-          />
-        </>
-      )}
-
       {showCloseButton && (
         <button
           type="button"
@@ -223,36 +245,117 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)',
         }}
       >
-        {photos.map((photo) => (
-          <div
-            key={photo.id}
-            data-photo-id={photo.id}
-            className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-hidden"
-          >
-            <img
-              src={photo.url}
-              alt={t('Shared trip photo')}
-              onLoad={measureActiveImage}
-              className="pointer-events-none block h-full w-full select-none object-contain"
-              draggable={false}
-            />
-            {photo.id === activePhoto.id && imageFrame && (
-              <button
-                type="button"
-                aria-label={t('Download photo')}
-                onClick={() => void downloadPhoto(photo)}
-                disabled={downloading}
-                className="absolute z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
+        {photos.map((photo, index) => {
+          const frame = imageFrames[photo.id];
+          const photoIndex = photos.findIndex((entry) => entry.id === activePhoto.id);
+          const isAdjacent = Math.abs(index - photoIndex) <= 1;
+          const isActive = photo.id === activePhoto.id;
+          const slideWidth = carouselRef.current?.clientWidth || frame?.width || 0;
+          const slideHeight = carouselRef.current?.clientHeight || frame?.height || 0;
+          const displayScale = isActive ? zoomScale : 1;
+          return (
+            <div
+              key={photo.id}
+              data-photo-id={photo.id}
+              onTouchStart={handlePinchStart}
+              onTouchMove={handlePinchMove}
+              onTouchEnd={handlePinchEnd}
+              onTouchCancel={handlePinchEnd}
+              onDoubleClick={() => {
+                if (!isActive) return;
+                setZoomScale((current) => current > 1 ? 1 : 2);
+                setZoomOffset({ x: 0, y: 0 });
+              }}
+              className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-visible"
+              style={{ touchAction: isActive && zoomScale > 1 ? 'none' : 'pan-x pan-y' }}
+            >
+              {frame && isAdjacent && (
+                <>
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute z-0 overflow-hidden bg-black"
+                    style={{
+                      left: frame.left,
+                      top: frame.top - frame.height,
+                      width: frame.width,
+                      height: frame.height,
+                    }}
+                  >
+                    <img
+                      data-photo-image={photo.id}
+                      src={photo.url}
+                      alt=""
+                      className="absolute inset-0 h-full w-full max-w-none object-fill blur-[40px]"
+                      style={{ transform: 'scale(1.25, -1.25)' }}
+                    />
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute z-0 overflow-hidden bg-black"
+                    style={{
+                      left: frame.left,
+                      top: frame.top + frame.height,
+                      width: frame.width,
+                      height: frame.height,
+                    }}
+                  >
+                    <img
+                      data-photo-image={photo.id}
+                      src={photo.url}
+                      alt=""
+                      className="absolute inset-0 h-full w-full max-w-none object-fill blur-[40px]"
+                      style={{ transform: 'scale(1.25, -1.25)' }}
+                    />
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute z-[1] bg-gradient-to-b from-transparent to-black"
+                    style={{
+                      left: 0,
+                      right: 0,
+                      top: frame.top + frame.height,
+                      height: `max(50vh, ${Math.round(frame.height * 0.9)}px)`,
+                    }}
+                  />
+                </>
+              )}
+              <img
+                data-photo-image={photo.id}
+                src={photo.url}
+                alt={t('Shared trip photo')}
+                loading={isAdjacent ? 'eager' : 'lazy'}
+                onLoad={(event) => measureImage(photo.id, event.currentTarget)}
+                className="pointer-events-none relative z-[2] block h-full w-full select-none object-contain"
                 style={{
-                  right: `calc((100% - ${imageFrame.width}px) / 2 + 12px)`,
-                  bottom: `calc((100% - ${imageFrame.height}px) / 2 + 12px)`,
+                  transform: isActive && zoomScale > 1
+                    ? `translate(${zoomOffset.x}px, ${zoomOffset.y}px) scale(${zoomScale})`
+                    : undefined,
+                  transition: 'transform 120ms ease-out',
                 }}
-              >
-                <DownloadSimple size={21} weight="bold" />
-              </button>
-            )}
-          </div>
-        ))}
+                draggable={false}
+              />
+              {isActive && frame && (
+                <button
+                  type="button"
+                  aria-label={t('Download photo')}
+                  onClick={() => void downloadPhoto(photo)}
+                  disabled={downloading}
+                  className="absolute z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
+                  style={{
+                    left: slideWidth / 2
+                      + (frame.left + frame.width - slideWidth / 2) * displayScale
+                      + (isActive ? zoomOffset.x : 0) - 60,
+                    top: slideHeight / 2
+                      + (frame.top + frame.height - slideHeight / 2) * displayScale
+                      + (isActive ? zoomOffset.y : 0) - 60,
+                  }}
+                >
+                  <DownloadSimple size={21} weight="bold" />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );
