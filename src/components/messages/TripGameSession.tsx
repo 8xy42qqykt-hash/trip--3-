@@ -27,7 +27,6 @@ type GameSession = {
     scores?: Record<string, number>;
   };
   winner_id: string | null;
-  results_announced: boolean;
   rematch_votes: string[];
   rematch_declines: string[];
   rematch_game_id: string | null;
@@ -81,7 +80,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     const client = supabase;
     const { data, error: loadError } = await client
       .from('trip_game_sessions')
-      .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id, results_announced, rematch_votes, rematch_declines, rematch_game_id')
+      .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id, rematch_votes, rematch_declines, rematch_game_id')
       .eq('id', gameId)
       .maybeSingle();
     if (loadError) {
@@ -150,46 +149,6 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const winningLine = (session?.state.winningLine as number[][] | undefined) || [];
   const currentPlayer = session?.players[((session.state.moveCount || 0) % 2)];
 
-  const publishGameResults = useCallback(async (finishedSession: GameSession) => {
-    if (!supabase || finishedSession.status !== 'finished' || finishedSession.results_announced) return;
-    const client = supabase;
-    const { data: claimed, error: claimError } = await client.rpc('claim_trip_game_results_announcement', {
-      p_session_id: finishedSession.id,
-    });
-    if (claimError) {
-      console.error('Could not claim game results announcement:', claimError);
-      setError(t('Could not post the final game results.'));
-      return;
-    }
-    if (!claimed) return;
-    const scores = finishedSession.state.scores || {};
-    const scoreboard = finishedSession.participant_ids
-      .map((id) => `${memberName(id)}: ${scores[id] || 0}`)
-      .join('\n');
-    const winner = finishedSession.winner_id ? memberName(finishedSession.winner_id) : null;
-    const outcome = winner ? `${winner} ${t('wins!')}` : t('It’s a draw');
-    const summary = `${t(GAME_NAMES[finishedSession.game_type])}\n${outcome}${scoreboard ? `\n${scoreboard}` : ''}`;
-    try {
-      await sendMessage(summary, undefined, undefined, 'text', {
-        gameId: finishedSession.id,
-        gameName: GAME_NAMES[finishedSession.game_type],
-        gameSummary: true,
-        scores,
-        participants: finishedSession.participant_ids,
-        winnerId: finishedSession.winner_id,
-      });
-    } catch (sendError) {
-      console.error('Could not post game results:', sendError);
-      setError(t('Could not post the final game results.'));
-    }
-  }, [memberName, sendMessage, t]);
-
-  useEffect(() => {
-    if (session?.status === 'finished' && !session.results_announced) {
-      void publishGameResults(session);
-    }
-  }, [session, publishGameResults]);
-
   const rematchResolved = Boolean(session
     && session.rematch_votes.length + session.rematch_declines.length >= session.participant_ids.length);
   const myRematchVote = session?.rematch_votes.includes(userId)
@@ -225,21 +184,6 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
     if (session && supabase && session.status !== 'finished' && session.status !== 'cancelled') {
       await runAction(() => supabase!.rpc('leave_trip_game_session', { p_session_id: session.id }));
     }
-    if (session?.status === 'finished') {
-      await publishGameResults(session);
-    } else if (session && supabase && session.status !== 'cancelled') {
-      const { data: finalSession, error: finalLoadError } = await supabase
-        .from('trip_game_sessions')
-        .select('id, trip_id, creator_id, host_id, game_type, status, players, participant_ids, config, state, winner_id, results_announced, rematch_votes, rematch_declines, rematch_game_id')
-        .eq('id', session.id)
-        .maybeSingle();
-      if (finalLoadError) {
-        console.error('Could not load finished game results:', finalLoadError);
-        setError(t('Could not load the final game results.'));
-        return;
-      }
-      if (finalSession?.status === 'finished') await publishGameResults(finalSession as GameSession);
-    }
     onClose();
   };
 
@@ -252,7 +196,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   };
 
   const voteRematch = async (rematch: boolean) => {
-    if (!supabase || !session || session.status !== 'finished' || busy || rematchResolved) return;
+    if (!supabase || !session || session.status !== 'finished' || busy || rematchResolved) return false;
     setBusy(true);
     setError('');
     try {
@@ -263,7 +207,7 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
       if (voteError) {
         console.error('Could not submit rematch vote:', voteError);
         setError(rpcErrorMessage(voteError.message, t));
-        return;
+        return false;
       }
       await loadSession();
       if (newGameId) {
@@ -281,12 +225,22 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
         }
         onOpenGame(newGameId);
       }
+      return true;
     } catch (voteError) {
       console.error('Could not submit rematch vote:', voteError);
       setError(t('Could not submit your rematch vote.'));
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleBackToGames = async () => {
+    if (!rematchResolved && myRematchVote === null) {
+      const saved = await voteRematch(false);
+      if (!saved) return;
+    }
+    onClose();
   };
 
   if (!session) {
@@ -305,12 +259,20 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const isTicTacToe = session.game_type === 'tic_tac_toe';
   const cells = isTicTacToe ? (board as Array<string | null> | undefined) || [] : [];
   const connectBoard = !isTicTacToe ? (board as Array<Array<string | null>> | undefined) || [] : [];
+  const winningMarker = winningLine.length > 0
+    ? isTicTacToe
+      ? cells[winningLine[0][0] * 3 + winningLine[0][1]]
+      : connectBoard[winningLine[0][0]]?.[winningLine[0][1]]
+    : null;
+  const winningColor = winningMarker === 'O' ? '#FF453A' : '#0A84FF';
   return (
     <div data-no-edge-swipe className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
-        <button type="button" onClick={() => void leaveGame()} aria-label={t('Leave game')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
-          <ArrowLeft size={21} />
-        </button>
+        {session.status !== 'finished' && session.status !== 'cancelled' && (
+          <button type="button" onClick={() => void leaveGame()} aria-label={t('Leave game')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full">
+            <ArrowLeft size={21} />
+          </button>
+        )}
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A84FF]/15 text-[#0A84FF]">
           <GameController size={20} weight="fill" />
         </span>
@@ -385,8 +347,8 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                       animate={{ pathLength: 1 }}
                       transition={{ duration: 0.65, ease: 'easeInOut' }}
                       fill="none"
-                      stroke="#FFFFFF"
-                      strokeWidth="3"
+                      stroke={winningColor}
+                      strokeWidth="6"
                       strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
                     />
@@ -421,8 +383,8 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                         animate={{ pathLength: 1 }}
                         transition={{ duration: 0.75, ease: 'easeInOut' }}
                         fill="none"
-                        stroke="#FFFFFF"
-                        strokeWidth="3"
+                        stroke={winningColor}
+                        strokeWidth="6"
                         strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
                       />
@@ -448,31 +410,19 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                 <GameConfetti />
                 <div className="text-center">
                   <h2 className="inline-block rounded-full bg-black/55 px-5 py-3 text-2xl font-extrabold shadow-xl backdrop-blur-sm">{winnerName ? `${winnerName} ${t('wins!')}` : t('It’s a draw')}</h2>
-                  {session.rematch_votes.length > 0 && (
+                  {session.rematch_votes.length > 0 && !session.rematch_game_id && (
                     <p className="mx-auto mt-3 max-w-sm text-sm text-white/75">
                       {session.rematch_votes.map(memberName).join(', ')} {t('want a rematch')}
-                    </p>
-                  )}
-                  {session.rematch_declines.length > 0 && (
-                    <p className="mx-auto mt-2 max-w-sm text-sm text-white/55">
-                      {session.rematch_declines.map(memberName).join(', ')} {t('declined a rematch')}
                     </p>
                   )}
                   {rematchResolved && !session.rematch_game_id && (
                     <p className="mt-2 text-sm font-semibold text-white/75">{t('Rematch declined')}</p>
                   )}
                   <div className="pointer-events-auto fixed bottom-[max(20px,env(safe-area-inset-bottom))] left-4 right-4 mx-auto flex max-w-sm flex-wrap justify-center gap-2">
-                    {!rematchResolved && (
-                      <>
-                        <button type="button" disabled={busy} onClick={() => void voteRematch(true)} className={`min-h-12 min-w-[120px] flex-1 rounded-full text-sm font-bold disabled:opacity-50 ${myRematchVote === true ? 'bg-[#0A84FF] text-white' : 'bg-white/[0.08] text-white'}`}>
-                          {myRematchVote === true ? t('Rematch selected') : t('Rematch')}
-                        </button>
-                        <button type="button" disabled={busy} onClick={() => void voteRematch(false)} className={`min-h-12 min-w-[120px] flex-1 rounded-full text-sm font-bold disabled:opacity-50 ${myRematchVote === false ? 'bg-white/20 text-white' : 'border border-white/15 text-white/80'}`}>
-                          {t('No thanks')}
-                        </button>
-                      </>
-                    )}
-                    <button type="button" onClick={onClose} className="order-3 min-h-11 basis-full rounded-full border border-white/15 bg-white/[0.06] text-sm font-semibold">{t('Back to games')}</button>
+                    <button type="button" disabled={busy || rematchResolved || myRematchVote !== null} onClick={() => void voteRematch(true)} className={`min-h-12 min-w-[120px] flex-1 rounded-full text-sm font-bold disabled:opacity-60 ${myRematchVote === true ? 'bg-[#0A84FF] text-white' : 'bg-white/[0.08] text-white'}`}>
+                      {t('Rematch')}
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => void handleBackToGames()} className="min-h-12 min-w-[120px] flex-1 rounded-full border border-white/15 bg-white/[0.06] text-sm font-semibold disabled:opacity-60">{t('Back to games')}</button>
                   </div>
                 </div>
               </div>

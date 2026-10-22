@@ -147,6 +147,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  const keepScrollAtBottomRef = useRef(false);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -429,6 +431,30 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       window.clearTimeout(settleTimer);
     };
   }, [viewMode, messages.length, isLoadingMessages]);
+
+  useEffect(() => {
+    if (!isGamesView || isLoadingMessages || !scrollRef.current || !scrollContentRef.current) return;
+    keepScrollAtBottomRef.current = true;
+    const scrollAfterLayout = () => {
+      if (keepScrollAtBottomRef.current) scrollToBottom();
+    };
+    const observer = new ResizeObserver(scrollAfterLayout);
+    observer.observe(scrollRef.current);
+    observer.observe(scrollContentRef.current);
+    const firstFrame = window.requestAnimationFrame(scrollAfterLayout);
+    const secondFrame = window.requestAnimationFrame(scrollAfterLayout);
+    const settleTimer = window.setTimeout(() => {
+      scrollAfterLayout();
+      keepScrollAtBottomRef.current = false;
+    }, 1800);
+    return () => {
+      keepScrollAtBottomRef.current = false;
+      observer.disconnect();
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+      window.clearTimeout(settleTimer);
+    };
+  }, [isGamesView, isLoadingMessages, messages.length]);
 
   useEffect(() => {
     if (isLoadingMessages) {
@@ -904,11 +930,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   };
 
   const visibleMessages = isGamesView
-    ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session' || message.metadata?.gameSummary === true)
+    ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session')
     : isFilteredView
     ? messages.filter((message) => message.type === viewMode)
     : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan'
-      && message.type !== 'draw_game' && message.type !== 'game_session');
+      && message.type !== 'draw_game' && message.type !== 'game_session'
+      && message.metadata?.gameSummary !== true);
 
   // Calculate day separators & consecutive grouping
   const messageGroups: Array<{
@@ -1149,7 +1176,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         onScroll={handleChatScroll}
       >
         <div
+          ref={scrollContentRef}
           onClick={handleEmptySpaceTap}
+          onTouchStart={() => { keepScrollAtBottomRef.current = false; }}
+          onWheel={() => { keepScrollAtBottomRef.current = false; }}
           className="flex min-h-full flex-col justify-start px-4"
           style={{
             paddingTop: `calc(3.5rem + env(safe-area-inset-top, 0px) + ${hasOpenPolls ? '6rem' : '0.75rem'})`,
@@ -1851,7 +1881,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           userId={user.id}
           members={tripMembers}
           onClose={() => setActiveDrawGameId(null)}
-          sendMessage={sendMessage}
         />
       )}
       {activeGameSessionId && user && (
@@ -1946,21 +1975,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 }}
                 initial={{
                   opacity: 0,
-                  scaleX: Math.min(1, callMenuPosition.width / 208),
-                  scaleY: Math.min(1, callMenuPosition.height / 144),
+                  scaleX: Math.min(1, callMenuPosition.width / 256),
+                  scaleY: Math.min(1, callMenuPosition.height / 190),
                   y: -4,
                 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{
                   opacity: 0,
-                  scaleX: Math.min(1, callMenuPosition.width / 208),
-                  scaleY: Math.min(1, callMenuPosition.height / 144),
+                  scaleX: Math.min(1, callMenuPosition.width / 256),
+                  scaleY: Math.min(1, callMenuPosition.height / 190),
                   y: -4,
                 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
-                className="fixed z-[10001] w-52 rounded-2xl border border-white/10 bg-[#202024]/90 p-2 shadow-xl"
+                className="fixed z-[10001] w-64 rounded-2xl border border-white/10 bg-[#202024]/90 p-2.5 shadow-2xl"
               >
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400">{t('Start a call')}</div>
+                <div className="px-3 py-2 text-sm font-semibold text-slate-400">{t('Start a call')}</div>
                 {([
                   ['audio', t('Voice call'), PhoneCall],
                   ['video', t('Video call'), VideoCamera],
@@ -1972,7 +2001,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       setIsCallMenuOpen(false);
                       void call.startCall(kind, onlineMembers);
                     }}
-                    className="flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-white hover:bg-white/10"
+                    className="flex min-h-14 w-full items-center gap-3 rounded-xl px-4 text-left text-base font-semibold text-white hover:bg-white/10"
                   >
                     <Icon size={19} className="text-sky-400" />
                     {label}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowCounterClockwise, ArrowLeft, Check, GameController } from '@phosphor-icons/react';
-import { Message, TripMember } from '../../types';
+import { TripMember } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { Avatar } from '../common/Avatar';
 import { useLanguage } from '../../context/LanguageContext';
@@ -18,7 +18,6 @@ type DrawGame = {
   scores: Record<string, number>;
   round_number: number;
   round_limit: number;
-  results_announced: boolean;
   drawer_id: string | null;
   drawing: Stroke[];
   winner_id: string | null;
@@ -44,13 +43,6 @@ interface DrawGuessGameProps {
   userId: string;
   members: TripMember[];
   onClose: () => void;
-  sendMessage: (
-    content: string,
-    imageUrl?: string,
-    replyToId?: string,
-    type?: Message['type'],
-    metadata?: Message['metadata'],
-  ) => Promise<void>;
 }
 
 export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
@@ -58,7 +50,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   userId,
   members,
   onClose,
-  sendMessage,
 }) => {
   const { language, t } = useLanguage();
   const [game, setGame] = useState<DrawGame | null>(null);
@@ -105,7 +96,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     }
     const { data, error: loadError } = await supabase
       .from('draw_games')
-      .select('id, trip_id, creator_id, status, players, participant_ids, scores, round_number, round_limit, results_announced, drawer_id, drawing, winner_id')
+      .select('id, trip_id, creator_id, status, players, participant_ids, scores, round_number, round_limit, drawer_id, drawing, winner_id')
       .eq('id', gameId)
       .maybeSingle();
     if (loadError) {
@@ -256,43 +247,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     }
   };
 
-  const announceResults = useCallback(async (scores: Record<string, number>, participants: string[]) => {
-    if (!supabase) return;
-    const { data: claimed, error: claimError } = await supabase.rpc('claim_draw_game_results_announcement', {
-      p_game_id: gameId,
-    });
-    if (claimError) {
-      console.error('Could not claim Draw and Guess results announcement:', claimError);
-      setError(t('Could not post the final game results.'));
-      return;
-    }
-    if (!claimed) return;
-    const scoreEntries = Object.entries(scores);
-    const highestScore = Math.max(0, ...scoreEntries.map(([, score]) => score));
-    const leaders = scoreEntries.filter(([, score]) => score === highestScore);
-    const winnerId = leaders.length === 1 && highestScore > 0 ? leaders[0][0] : null;
-    const results = participants
-      .map((id) => `${memberName(id)}: ${scores[id] || 0}`)
-      .join('\n');
-    try {
-      await sendMessage(
-        `${t('Draw and Guess')}\n${results}`,
-        undefined,
-        undefined,
-        'text',
-        { gameId, gameName: 'Draw and Guess', gameSummary: true, scores, participants, winnerId },
-      );
-    } catch (sendError) {
-      console.error('Could not post Draw and Guess results:', sendError);
-      setError(t('Could not post the final game results.'));
-    }
-  }, [gameId, memberName, sendMessage, t]);
-
-  useEffect(() => {
-    if (!game || game.status !== 'finished' || game.results_announced) return;
-    void announceResults(game.scores || {}, game.participant_ids || game.players);
-  }, [game?.id, game?.status, game?.results_announced, game?.scores, game?.participant_ids, game?.players, announceResults]);
-
   useEffect(() => {
     if (!game || game.status !== 'playing' || !game.winner_id || game.creator_id !== userId) return;
     if (nextRoundTimerRef.current !== null) window.clearTimeout(nextRoundTimerRef.current);
@@ -324,9 +278,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       return;
     }
     if (game.status === 'finished' || game.status === 'cancelled') {
-      if (game.status === 'finished') {
-        await announceResults(game.scores || {}, game.participant_ids || game.players);
-      }
       onClose();
       return;
     }
@@ -340,29 +291,13 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       onClose();
       return;
     }
-    const { data: finished, error: leaveError } = await supabase.rpc('leave_draw_game', {
+    const { error: leaveError } = await supabase.rpc('leave_draw_game', {
       p_game_id: game.id,
     });
     if (leaveError) {
       console.error('Could not leave Draw and Guess game:', leaveError);
       setError(t('Could not leave the game. Please try again.'));
       return;
-    }
-    if (finished) {
-      const { data: finalGame, error: finalGameError } = await supabase
-        .from('draw_games')
-        .select('scores, participant_ids, players')
-        .eq('id', game.id)
-        .maybeSingle();
-      if (finalGameError) {
-        console.error('Could not load final Draw and Guess scores:', finalGameError);
-        setError(t('Could not load final game results.'));
-        return;
-      }
-      await announceResults(
-        (finalGame?.scores || game.scores || {}) as Record<string, number>,
-        finalGame?.participant_ids || game.participant_ids || game.players,
-      );
     }
     onClose();
   };

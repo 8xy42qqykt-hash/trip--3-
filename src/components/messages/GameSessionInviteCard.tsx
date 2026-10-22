@@ -8,10 +8,10 @@ import { useLanguage } from '../../context/LanguageContext';
 type SessionSummary = {
   game_type: 'connect_four' | 'tic_tac_toe';
   status: string;
-  creator_id: string;
   players: string[];
   participant_ids: string[];
   winner_id: string | null;
+  state: { scores?: Record<string, number> };
 };
 
 const GAME_LABELS: Record<SessionSummary['game_type'], string> = {
@@ -37,7 +37,7 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
     const load = async () => {
       const { data, error } = await client
         .from('trip_game_sessions')
-        .select('game_type, status, creator_id, players, participant_ids, winner_id')
+        .select('game_type, status, players, participant_ids, winner_id, state')
         .eq('id', gameId)
         .maybeSingle();
       if (error) {
@@ -64,7 +64,6 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
 
   if (!session || !gameId) return <p className="text-sm text-white/70">{t('Game invitation')}</p>;
   const title = t(GAME_LABELS[session.game_type] || 'Game invitation');
-  const creator = members.find((member) => member.user_id === session.creator_id);
   const winner = session.winner_id && members.find((member) => member.user_id === session.winner_id);
   const maxPlayers = 2;
   const full = session.players.length >= maxPlayers;
@@ -78,9 +77,6 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
         </span>
         <p className="text-sm font-bold text-white">{title}</p>
       </div>
-      <p className="mt-1 text-xs text-white/70">
-        {t('Started by')} {creator?.profile?.display_name || t('Member')}
-      </p>
       <div className="mt-2 flex items-center gap-2">
         <div className="flex -space-x-2">
           {session.players.slice(0, 4).map((id) => {
@@ -103,15 +99,21 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
       </div>
       {session.status === 'playing' ? (
         <>
-          <p className="mt-2 text-xs font-semibold text-emerald-300">{t('In progress')}</p>
-          {canReopen && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onOpen?.(gameId); }} className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]">{t('Open game')}</button>}
+          {canReopen
+            ? <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onOpen?.(gameId); }} className="mt-2 min-h-11 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]">{t('In progress')}</button>
+            : <p className="mt-2 text-xs font-semibold text-emerald-300">{t('In progress')}</p>}
         </>
       ) : session.status === 'finished' ? (
         <>
-          <p className="mt-2 text-xs font-semibold text-white/80">
+          <p className="mt-2 text-sm font-semibold text-white/85">
             {winner ? `${t('Finished, winner')}: ${winner.profile?.display_name || t('Member')}` : t('Game finished')}
           </p>
-          {canReopen && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onOpen?.(gameId); }} className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF]">{t('View results')}</button>}
+          {session.state?.scores && Object.entries(session.state.scores)
+            .sort((left, right) => right[1] - left[1])
+            .map(([id, score]) => {
+              const member = members.find((item) => item.user_id === id);
+              return <p key={id} className="mt-1 flex justify-between gap-4 text-xs text-white/65"><span>{member?.profile?.display_name || t('Member')}</span><span>{score}</span></p>;
+            })}
         </>
       ) : session.status === 'cancelled' ? (
         <p className="mt-2 text-xs text-white/65">{t('Game cancelled')}</p>
@@ -126,9 +128,9 @@ export const GameSessionInviteCard: React.FC<GameSessionInviteCardProps> = ({ ga
           }}
           className="mt-2 min-h-10 rounded-full bg-white px-4 text-sm font-bold text-[#0A84FF] disabled:bg-white/15 disabled:text-white/45"
         >
-          {session.players.includes(currentUserId || '')
-            ? `${t('Open game')} · ${session.players.length}/${maxPlayers}`
-            : full ? `${t('Game full')} (${session.players.length}/${maxPlayers})` : `${t('Join game')} · ${session.players.length}/${maxPlayers}`}
+          {full && !session.players.includes(currentUserId || '')
+            ? `${t('Game full')} (${session.players.length}/${maxPlayers})`
+            : `${t('Join game')} · ${session.players.length}/${maxPlayers}`}
         </button>
       )}
     </div>
