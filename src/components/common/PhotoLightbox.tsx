@@ -170,32 +170,29 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     >
       {imageFrame && (
         <>
-          <img
-            src={activePhoto.url}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none fixed z-0 max-w-none object-fill blur-[40px]"
-            style={{
-              left: imageFrame.left,
-              top: imageFrame.top - imageFrame.height,
-              width: imageFrame.width,
-              height: imageFrame.height,
-              transform: 'scaleY(-1)',
-            }}
-          />
-          <img
-            src={activePhoto.url}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none fixed z-0 max-w-none object-fill blur-[40px]"
-            style={{
-              left: imageFrame.left,
-              top: imageFrame.top + imageFrame.height,
-              width: imageFrame.width,
-              height: imageFrame.height,
-              transform: 'scaleY(-1)',
-            }}
-          />
+          {[
+            { top: imageFrame.top - imageFrame.height, scaleY: -1 },
+            { top: imageFrame.top + imageFrame.height, scaleY: -1 },
+          ].map(({ top, scaleY }, index) => (
+            <div
+              key={`${activePhoto.id}-extension-${index}`}
+              aria-hidden="true"
+              className="pointer-events-none fixed z-0 overflow-hidden bg-black"
+              style={{
+                left: imageFrame.left,
+                top,
+                width: imageFrame.width,
+                height: imageFrame.height,
+              }}
+            >
+              <img
+                src={activePhoto.url}
+                alt=""
+                className="absolute inset-0 h-full w-full max-w-none object-fill blur-[40px]"
+                style={{ transform: `scale(1.25, ${scaleY * 1.25})` }}
+              />
+            </div>
+          ))}
           <div
             aria-hidden="true"
             className="pointer-events-none fixed inset-x-0 bottom-0 z-[1] bg-gradient-to-b from-transparent to-black"
@@ -235,7 +232,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
             <img
               src={photo.url}
               alt={t('Shared trip photo')}
-              onLoad={photo.id === activePhoto.id ? measureActiveImage : undefined}
+              onLoad={measureActiveImage}
               className="pointer-events-none block h-full w-full select-none object-contain"
               draggable={false}
             />

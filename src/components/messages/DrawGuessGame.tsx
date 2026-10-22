@@ -68,7 +68,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guessInputRef = useRef<HTMLInputElement>(null);
-  const gameContentRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const draftRef = useRef<Stroke | null>(null);
@@ -81,6 +80,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       if (!viewport) return setKeyboardOffset(0);
       setKeyboardOffset(Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop)));
     };
+    updateKeyboardOffset();
     window.visualViewport?.addEventListener('resize', updateKeyboardOffset);
     window.visualViewport?.addEventListener('scroll', updateKeyboardOffset);
     return () => {
@@ -405,18 +405,6 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
     return () => window.cancelAnimationFrame(frame);
   }, [game?.id, game?.status, game?.drawer_id, game?.round_number, game?.winner_id, userId]);
 
-  useEffect(() => {
-    if (!game || game.status !== 'playing' || game.drawer_id === userId || game.winner_id || keyboardOffset <= 0) return;
-    const container = gameContentRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-    const containerBounds = container.getBoundingClientRect();
-    const canvasBounds = canvas.getBoundingClientRect();
-    const scrollTop = container.scrollTop + canvasBounds.top - containerBounds.top
-      - (container.clientHeight - canvasBounds.height) / 2;
-    container.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
-  }, [game?.status, game?.drawer_id, game?.winner_id, keyboardOffset, userId]);
-
   const submitGuess = async (event?: React.FormEvent) => {
     event?.preventDefault();
     const guess = guessText.trim();
@@ -479,11 +467,10 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
       </header>
 
       <div
-        ref={gameContentRef}
         className="flex min-h-0 flex-1 flex-col px-4 pt-3"
         style={{
           paddingBottom: game?.status === 'playing' && !isDrawer && !game.winner_id ? '62px' : '12px',
-          overflowY: game?.status === 'playing' && !isDrawer && !game.winner_id ? 'auto' : 'hidden',
+          overflowY: 'hidden',
           overscrollBehavior: 'contain',
         }}
       >
@@ -544,7 +531,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
                 )}
               </div>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2">
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2 [overflow-anchor:none]">
               {guesses.map((item) => (
                 <p key={item.id} className={`text-sm ${item.correct ? 'font-bold text-emerald-300' : 'text-white/80'}`}>
                   <span className="font-semibold">{memberName(item.user_id)}:</span> {item.guess}

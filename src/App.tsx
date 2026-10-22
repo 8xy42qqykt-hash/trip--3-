@@ -270,11 +270,12 @@ const MainAppContent: React.FC = () => {
       }
     };
     const dismissEmptyInputOnBackspace = (event: KeyboardEvent) => {
-      if (event.key !== 'Backspace' || event.isComposing) return;
+      if (!event.isTrusted || event.key !== 'Backspace' || event.isComposing || event.repeat) return;
       const target = event.target;
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
       if (document.activeElement !== target) return;
-      if (Date.now() - lastInputFocusAt < 600) return;
+      const focusGracePeriod = window.matchMedia('(pointer: coarse)').matches ? 1400 : 350;
+      if (Date.now() - lastInputFocusAt < focusGracePeriod) return;
       if (target.disabled || target.readOnly || target.value.length > 0) return;
       if (window.matchMedia('(pointer: coarse)').matches) {
         const viewport = window.visualViewport;
