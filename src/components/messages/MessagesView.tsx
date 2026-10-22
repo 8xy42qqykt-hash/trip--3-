@@ -892,10 +892,15 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   return (
     <div className="h-full w-full flex flex-col bg-black text-white overflow-hidden relative select-none">
+      <div
+        aria-hidden="true"
+        className="w-full shrink-0"
+        style={{ height: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
+      />
       {/* Top Header - Trip Title & Exit Button (Extended cleanly through top danger zone) */}
       <div
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        className={`relative isolate w-full shrink-0 ${selectedPhoto ? 'z-[11010]' : 'z-20'}`}
+        className={`fixed inset-x-0 top-0 isolate w-full ${selectedPhoto ? 'z-[11010]' : 'z-20'}`}
       >
         <div
           aria-hidden="true"
