@@ -60,7 +60,8 @@ const TripCountdownOverlay: React.FC<{
   startDate: string;
   onDismiss: () => void;
   t: (value: string) => string;
-}> = ({ tripName, startDate, onDismiss, t }) => {
+  language: 'en' | 'fi';
+}> = ({ tripName, startDate, onDismiss, t, language }) => {
   const [now, setNow] = useState(Date.now());
   const [showEntryHint, setShowEntryHint] = useState(false);
 
@@ -79,6 +80,12 @@ const TripCountdownOverlay: React.FC<{
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
+  const countdownUnits = [
+    { value: days, label: 'Days' },
+    { value: hours, label: 'Hours' },
+    { value: minutes, label: 'Minutes' },
+    { value: seconds, label: 'Seconds' },
+  ];
 
   return (
     <motion.div
@@ -102,17 +109,21 @@ const TripCountdownOverlay: React.FC<{
         className="w-full max-w-sm text-center"
       >
         <div className="mb-7 flex items-center justify-center gap-1 text-white sm:gap-2" aria-hidden="true">
-          <CountdownValue value={days} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
-          <CountdownValue value={hours} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
-          <CountdownValue value={minutes} />
-          <span className="pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>
-          <CountdownValue value={seconds} />
+          {countdownUnits.map((unit, index) => (
+            <React.Fragment key={unit.label}>
+              {index > 0 && <span className="self-start pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>}
+              <span className="flex min-w-0 flex-col items-center">
+                <CountdownValue value={unit.value} />
+                <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/65 sm:text-xs">
+                  {t(unit.label)}
+                </span>
+              </span>
+            </React.Fragment>
+          ))}
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">{tripName}</h2>
         <p className="mt-2 text-sm text-slate-400">
-          {new Date(`${startDate}T12:00:00`).toLocaleDateString(undefined, { dateStyle: 'full' })}
+          {new Date(`${startDate}T12:00:00`).toLocaleDateString(language === 'fi' ? 'fi-FI' : 'en-US', { dateStyle: 'full' })}
         </p>
         <AnimatePresence>
           {showEntryHint && (
@@ -134,7 +145,7 @@ const TripCountdownOverlay: React.FC<{
 };
 
 const MainAppContent: React.FC = () => {
-  const { setLanguage, t } = useLanguage();
+  const { setLanguage, t, language } = useLanguage();
   const { user, profile, isLoading } = useAuth();
   const { currentTrip, userTrips, selectTrip, exitTrip, isLoadingTrips, isLoadingMessages } = useTrip();
   const [activeTab, setActiveTab] = useState<TabKey>('messages');
@@ -638,6 +649,7 @@ const MainAppContent: React.FC = () => {
             startDate={currentTrip.start_date}
             onDismiss={() => setShowTripCountdown(false)}
             t={t}
+            language={language}
           />
         )}
       </AnimatePresence>

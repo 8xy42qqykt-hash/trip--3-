@@ -41,8 +41,11 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const [decodedPhotoIds, setDecodedPhotoIds] = useState<Set<string>>(() => new Set());
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+  const [isZoomGestureActive, setIsZoomGestureActive] = useState(false);
   const pinchStartDistance = useRef<number | null>(null);
   const pinchStartScale = useRef(1);
+  const pinchStartOffset = useRef({ x: 0, y: 0 });
+  const pinchStartMidpoint = useRef<{ x: number; y: number } | null>(null);
   const panStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const scrollTimer = useRef<number | null>(null);
@@ -165,6 +168,9 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     setZoomScale(1);
     setZoomOffset({ x: 0, y: 0 });
     pinchStartDistance.current = null;
+    pinchStartMidpoint.current = null;
+    panStart.current = null;
+    setIsZoomGestureActive(false);
   }, [activePhoto?.id]);
 
   useEffect(() => {
@@ -187,6 +193,7 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
 
   const handlePinchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
+    setIsZoomGestureActive(true);
     if (event.touches.length === 1 && zoomScale > 1) {
       const touch = event.touches[0];
       panStart.current = {
@@ -201,7 +208,21 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     const [first, second] = Array.from(event.touches);
     pinchStartDistance.current = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
     pinchStartScale.current = zoomScale;
+    pinchStartOffset.current = zoomOffset;
+    pinchStartMidpoint.current = {
+      x: (first.clientX + second.clientX) / 2,
+      y: (first.clientY + second.clientY) / 2,
+    };
     panStart.current = null;
+  };
+
+  const clampZoomOffset = (offset: { x: number; y: number }, scale: number, photoId: string) => {
+    const frame = imageFrames[photoId];
+    if (!frame) return offset;
+    return {
+      x: Math.min(frame.width * (scale - 1) / 2, Math.max(-frame.width * (scale - 1) / 2, offset.x)),
+      y: Math.min(frame.height * (scale - 1) / 2, Math.max(-frame.height * (scale - 1) / 2, offset.y)),
+    };
   };
 
   const handlePinchMove = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -210,26 +231,55 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       event.preventDefault();
       const [first, second] = Array.from(event.touches);
       const distance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
-      setZoomScale(Math.min(4, Math.max(1, pinchStartScale.current * distance / pinchStartDistance.current)));
+      const nextScale = Math.min(4, Math.max(1, pinchStartScale.current * distance / pinchStartDistance.current));
+      const rect = event.currentTarget.getBoundingClientRect();
+      const midpoint = { x: (first.clientX + second.clientX) / 2, y: (first.clientY + second.clientY) / 2 };
+      const start = pinchStartMidpoint.current || midpoint;
+      const offset = {
+        x: midpoint.x - rect.left - rect.width / 2
+          - (start.x - rect.left - rect.width / 2 - pinchStartOffset.current.x) * nextScale / pinchStartScale.current,
+        y: midpoint.y - rect.top - rect.height / 2
+          - (start.y - rect.top - rect.height / 2 - pinchStartOffset.current.y) * nextScale / pinchStartScale.current,
+      };
+      setZoomScale(nextScale);
+      setZoomOffset(clampZoomOffset(offset, nextScale, activePhoto.id));
       return;
     }
     if (event.touches.length === 1 && zoomScale > 1 && panStart.current) {
       event.preventDefault();
       const touch = event.touches[0];
-      setZoomOffset({
+      setZoomOffset(clampZoomOffset({
         x: panStart.current.offsetX + touch.clientX - panStart.current.x,
         y: panStart.current.offsetY + touch.clientY - panStart.current.y,
-      });
+      }, zoomScale, activePhoto.id));
     }
   };
 
   const handlePinchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.currentTarget.dataset.photoId !== activePhoto?.id) return;
-    if (event.touches.length < 2) pinchStartDistance.current = null;
+    if (event.touches.length < 2) {
+      pinchStartDistance.current = null;
+      pinchStartMidpoint.current = null;
+    }
     if (event.touches.length === 0) {
       panStart.current = null;
       if (zoomScale <= 1) setZoomOffset({ x: 0, y: 0 });
+      setIsZoomGestureActive(false);
     }
+  };
+
+  const zoomAtPoint = (scale: number, clientX: number, clientY: number, slide: HTMLDivElement) => {
+    const nextScale = Math.min(4, Math.max(1, scale));
+    const rect = slide.getBoundingClientRect();
+    const point = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 };
+    const offset = nextScale === 1
+      ? { x: 0, y: 0 }
+      : {
+        x: point.x - (point.x - zoomOffset.x) * nextScale / zoomScale,
+        y: point.y - (point.y - zoomOffset.y) * nextScale / zoomScale,
+      };
+    setZoomScale(nextScale);
+    setZoomOffset(clampZoomOffset(offset, nextScale, activePhoto.id));
   };
 
   if (!activePhoto) return null;
@@ -280,10 +330,14 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
               onTouchMove={handlePinchMove}
               onTouchEnd={handlePinchEnd}
               onTouchCancel={handlePinchEnd}
-              onDoubleClick={() => {
+              onDoubleClick={(event) => {
                 if (!isActive) return;
-                setZoomScale((current) => current > 1 ? 1 : 2);
-                setZoomOffset({ x: 0, y: 0 });
+                zoomAtPoint(zoomScale > 1 ? 1 : 2, event.clientX, event.clientY, event.currentTarget);
+              }}
+              onWheel={(event) => {
+                if (!isActive || (!event.ctrlKey && zoomScale <= 1)) return;
+                event.preventDefault();
+                zoomAtPoint(zoomScale * (event.deltaY < 0 ? 1.12 : 0.89), event.clientX, event.clientY, event.currentTarget);
               }}
               className="relative flex h-full w-full flex-[0_0_100%] snap-center snap-always items-center justify-center overflow-visible"
               style={{ touchAction: isActive && zoomScale > 1 ? 'none' : 'pan-x pan-y' }}
@@ -347,9 +401,11 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
                 className="pointer-events-none relative z-[2] block h-full w-full select-none object-contain"
                 style={{
                   transform: isActive && zoomScale > 1
-                    ? `translate(${zoomOffset.x}px, ${zoomOffset.y}px) scale(${zoomScale})`
+                    ? `translate3d(${zoomOffset.x}px, ${zoomOffset.y}px, 0) scale(${zoomScale})`
                     : undefined,
-                  transition: 'transform 120ms ease-out',
+                  transformOrigin: 'center center',
+                  transition: isZoomGestureActive ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  willChange: isActive && zoomScale > 1 ? 'transform' : undefined,
                 }}
                 draggable={false}
               />

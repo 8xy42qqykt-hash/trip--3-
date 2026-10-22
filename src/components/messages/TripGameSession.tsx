@@ -142,10 +142,6 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const playerProfiles = useMemo(() => (
     (session?.players || []).map((id) => members.find((member) => member.user_id === id)).filter((member) => member?.profile)
   ), [members, session?.players]);
-  const winningCells = useMemo(() => {
-    const source = session?.state.winningLine || [];
-    return new Set((source as number[][]).map((cell) => cell.join(',')));
-  }, [session?.state.winningLine]);
   const winningLine = (session?.state.winningLine as number[][] | undefined) || [];
   const currentPlayer = session?.players[((session.state.moveCount || 0) % 2)];
 
@@ -259,12 +255,6 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
   const isTicTacToe = session.game_type === 'tic_tac_toe';
   const cells = isTicTacToe ? (board as Array<string | null> | undefined) || [] : [];
   const connectBoard = !isTicTacToe ? (board as Array<Array<string | null>> | undefined) || [] : [];
-  const winningMarker = winningLine.length > 0
-    ? isTicTacToe
-      ? cells[winningLine[0][0] * 3 + winningLine[0][1]]
-      : connectBoard[winningLine[0][0]]?.[winningLine[0][1]]
-    : null;
-  const winningColor = winningMarker === 'O' ? '#FF453A' : '#0A84FF';
   return (
     <div data-no-edge-swipe className="fixed inset-0 z-[12000] flex flex-col bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <header className="flex min-h-14 shrink-0 items-center gap-3 px-4">
@@ -327,69 +317,58 @@ export const TripGameSession: React.FC<TripGameSessionProps> = ({
                       type="button"
                       disabled={session.status !== 'playing' || currentPlayer !== userId || Boolean(cell)}
                       onClick={() => playMove(index)}
-                      className={`relative flex min-h-0 min-w-0 items-center justify-center border border-black/40 bg-[#2a2a2e] transition-colors disabled:cursor-default ${winningCells.has(`${Math.floor(index / 3)},${index % 3}`) ? 'bg-[#0A84FF]/30' : ''}`}
+                      className="relative flex min-h-0 min-w-0 items-center justify-center border border-black/40 bg-[#2a2a2e] transition-colors disabled:cursor-default"
                     >
-                      {cell === 'X' && <X size={44} weight="bold" className="h-11 w-11 shrink-0 text-[#0A84FF]" />}
-                      {cell === 'O' && <Circle size={42} weight="bold" className="h-11 w-11 shrink-0 text-[#FF453A]" />}
+                      {cell && (
+                        <motion.span
+                          animate={winningLine.some(([row, column]) => row * 3 + column === index)
+                            ? { scale: [1, 1.34, 0.96, 1] }
+                            : { scale: 1 }}
+                          transition={{
+                            duration: 0.56,
+                            delay: Math.max(0, winningLine.findIndex(([row, column]) => row * 3 + column === index)) * 0.2,
+                            ease: 'easeInOut',
+                          }}
+                          className="flex items-center justify-center"
+                        >
+                          {cell === 'X'
+                            ? <X size={44} weight="bold" className="h-11 w-11 shrink-0 text-[#0A84FF]" />
+                            : <Circle size={42} weight="bold" className="h-11 w-11 shrink-0 text-[#FF453A]" />}
+                        </motion.span>
+                      )}
                     </button>
                   ))}
                 </div>
-                {winningLine.length === 3 && (
-                  <motion.svg
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    className="pointer-events-none absolute inset-3 z-10 h-[calc(100%-24px)] w-[calc(100%-24px)] overflow-visible"
-                    aria-hidden="true"
-                  >
-                    <motion.path
-                      d={`M ${(winningLine[0][1] + 0.5) * 100 / 3} ${(winningLine[0][0] + 0.5) * 100 / 3} L ${(winningLine[2][1] + 0.5) * 100 / 3} ${(winningLine[2][0] + 0.5) * 100 / 3}`}
-                      initial={{ pathLength: 0 }}
-                      animate={{ pathLength: 1 }}
-                      transition={{ duration: 0.65, ease: 'easeInOut' }}
-                      fill="none"
-                      stroke={winningColor}
-                      strokeWidth="6"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  </motion.svg>
-                )}
               </div>
             ) : (
               <div className="w-full max-w-[min(94vw,560px)] rounded-[24px] border border-white/[0.1] bg-[#1c1c1e] p-3">
                 <div className="relative">
                   <div className="grid aspect-[7/6] grid-cols-7 grid-rows-6 gap-0 overflow-hidden rounded-xl">
-                    {connectBoard.flatMap((row, rowIndex) => row.map((cell, columnIndex) => (
-                      <div
-                        key={`${rowIndex}-${columnIndex}`}
-                        className={`relative min-h-0 min-w-0 overflow-hidden border border-[#1c1c1e] bg-[#2a2a2e] ${winningCells.has(`${rowIndex},${columnIndex}`) ? 'bg-[#0A84FF]/25' : ''}`}
-                      >
-                        {cell && (
-                          <motion.span
-                            initial={{ y: -60, opacity: 0.8 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-                            className={`pointer-events-none absolute inset-1 rounded-full ${cell === 'X' ? 'bg-[#0A84FF]' : 'bg-[#FF453A]'}`}
-                          />
-                        )}
-                      </div>
-                    )))}
+                    {connectBoard.flatMap((row, rowIndex) => row.map((cell, columnIndex) => {
+                      const winningOrder = winningLine.findIndex(([lineRow, lineColumn]) => lineRow === rowIndex && lineColumn === columnIndex);
+                      return (
+                        <div
+                          key={`${rowIndex}-${columnIndex}`}
+                          className="relative min-h-0 min-w-0 overflow-hidden border border-[#1c1c1e] bg-[#2a2a2e]"
+                        >
+                          {cell && (
+                            <motion.span
+                              initial={{ y: -60, opacity: 0.8 }}
+                              animate={{
+                                y: 0,
+                                opacity: 1,
+                                scale: winningOrder >= 0 ? [1, 1.34, 0.96, 1] : 1,
+                              }}
+                              transition={winningOrder >= 0
+                                ? { duration: 0.56, delay: winningOrder * 0.2, ease: 'easeInOut' }
+                                : { type: 'spring', stiffness: 320, damping: 22 }}
+                              className={`pointer-events-none absolute inset-1 rounded-full ${cell === 'X' ? 'bg-[#0A84FF]' : 'bg-[#FF453A]'}`}
+                            />
+                          )}
+                        </div>
+                      );
+                    }))}
                   </div>
-                  {winningLine.length === 4 && (
-                    <motion.svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
-                      <motion.path
-                        d={`M ${(winningLine[0][1] + 0.5) * 100 / 7} ${(winningLine[0][0] + 0.5) * 100 / 6} L ${(winningLine[3][1] + 0.5) * 100 / 7} ${(winningLine[3][0] + 0.5) * 100 / 6}`}
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 0.75, ease: 'easeInOut' }}
-                        fill="none"
-                        stroke={winningColor}
-                        strokeWidth="6"
-                        strokeLinecap="round"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </motion.svg>
-                  )}
                   <div className="absolute inset-0 grid grid-cols-7" aria-label={t('Choose a column')}>
                     {Array.from({ length: 7 }).map((_, column) => (
                       <button

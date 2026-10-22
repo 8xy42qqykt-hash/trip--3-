@@ -129,7 +129,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
   const callButtonRef = useRef<HTMLButtonElement>(null);
-  const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number; width: number; height: number } | null>(null);
+  const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const uploadInProgressRef = useRef(false);
   const sendInProgressRef = useRef(false);
@@ -1133,9 +1133,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   const rect = callButtonRef.current?.getBoundingClientRect();
                   if (rect) setCallMenuPosition({
                     top: rect.bottom + 8,
-                    right: window.innerWidth - rect.right,
-                    width: rect.width,
-                    height: rect.height,
+                    right: Math.max(12, window.innerWidth - rect.right),
                   });
                   setIsCallMenuOpen(true);
                 }}
@@ -1811,7 +1809,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             className="fixed inset-0 z-[12010] flex flex-col bg-black text-white"
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            <header className="relative flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] px-3.5">
+            <header className="relative flex h-14 shrink-0 items-center justify-between px-3.5">
               <div className="h-11 w-11 shrink-0" />
               <div className="absolute left-1/2 flex max-w-[220px] -translate-x-1/2 flex-col items-center truncate text-center">
                 <h2 className="truncate text-base font-bold">{t('Game leaderboard')}</h2>
@@ -1839,7 +1837,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     initial={{ opacity: 0, y: 18, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ type: 'spring', stiffness: 280, damping: 24 }}
-                    className="mx-auto flex max-w-sm flex-col items-center rounded-[28px] border border-white/[0.1] bg-[#171719] px-5 py-7 text-center"
+                    className="mx-auto flex max-w-sm flex-col items-center px-5 py-7 text-center"
                   >
                     <Avatar
                       name={gameScores[0].name}
@@ -1860,9 +1858,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                         initial={{ opacity: 0, x: 18 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.28, delay: index * 0.07, ease: 'easeOut' }}
-                        className="flex min-h-[66px] items-center gap-3 rounded-[20px] border border-white/[0.08] bg-[#171719] px-3.5"
+                        className="flex min-h-[66px] items-center gap-3 px-3.5"
                       >
-                        <span className="w-6 text-center text-sm font-bold tabular-nums text-white/45">{index + 2}</span>
                         <Avatar name={entry.name} avatarUrl={entry.avatarUrl} color={entry.color} size={40} />
                         <span className="min-w-0 flex-1 truncate text-base font-semibold">{entry.name}</span>
                         <span className="text-lg font-bold tabular-nums text-white"><AnimatedScore score={entry.score} /></span>
@@ -1972,22 +1969,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   backgroundColor: 'rgba(32, 32, 36, 0.88)',
                   backdropFilter: 'blur(24px) saturate(180%)',
                   WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+                  width: 'min(18rem, calc(100vw - 1.5rem))',
                 }}
-                initial={{
-                  opacity: 0,
-                  scaleX: Math.min(1, callMenuPosition.width / 256),
-                  scaleY: Math.min(1, callMenuPosition.height / 190),
-                  y: -4,
-                }}
+                initial={{ opacity: 0, scale: 0.92, y: -5 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{
-                  opacity: 0,
-                  scaleX: Math.min(1, callMenuPosition.width / 256),
-                  scaleY: Math.min(1, callMenuPosition.height / 190),
-                  y: -4,
-                }}
+                exit={{ opacity: 0, scale: 0.92, y: -5 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
-                className="fixed z-[10001] w-64 rounded-2xl border border-white/10 bg-[#202024]/90 p-2.5 shadow-2xl"
+                className="fixed z-[10001] box-border rounded-2xl border border-white/10 bg-[#202024]/90 p-2.5 shadow-2xl"
               >
                 <div className="px-3 py-2 text-sm font-semibold text-slate-400">{t('Start a call')}</div>
                 {([
