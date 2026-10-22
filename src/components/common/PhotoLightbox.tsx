@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DownloadSimple, X } from '@phosphor-icons/react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { useLanguage } from '../../context/LanguageContext';
 
 export interface LightboxPhoto {
@@ -31,11 +31,14 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
   const activePhoto = photos.find((photo) => photo.id === selectedPhotoId) || photos[0];
   const [downloading, setDownloading] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
-  const touchStartX = useRef<number | null>(null);
+  const mainCarouselRef = useRef<HTMLDivElement>(null);
   const stripScrollTimer = useRef<number | null>(null);
   const programmaticScrollTimer = useRef<number | null>(null);
+  const mainScrollTimer = useRef<number | null>(null);
+  const programmaticMainScrollTimer = useRef<number | null>(null);
   const isStripScrollingRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
+  const isMainScrollingRef = useRef(false);
 
   useLayoutEffect(() => {
     if (!selectedPhotoId || !stripRef.current || isStripScrollingRef.current) return;
@@ -43,7 +46,11 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
       .find((photo) => photo.dataset.photoId === selectedPhotoId);
     if (!selected) return;
     const strip = stripRef.current;
-    const targetLeft = selected.offsetLeft + selected.offsetWidth / 2 - strip.clientWidth / 2;
+    const stripRect = strip.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    const targetLeft = strip.scrollLeft
+      + selectedRect.left + selectedRect.width / 2
+      - stripRect.left - strip.clientWidth / 2;
     isProgrammaticScrollRef.current = true;
     strip.scrollTo({ left: targetLeft, behavior: 'smooth' });
     if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
@@ -52,9 +59,27 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     }, 450);
   }, [selectedPhotoId, photos.length]);
 
+  useLayoutEffect(() => {
+    const carousel = mainCarouselRef.current;
+    if (!carousel || !selectedPhotoId || isMainScrollingRef.current) return;
+    const index = photos.findIndex((photo) => photo.id === selectedPhotoId);
+    if (index < 0) return;
+    const targetLeft = index * carousel.clientWidth;
+    if (Math.abs(carousel.scrollLeft - targetLeft) > 2) {
+      isMainScrollingRef.current = true;
+      carousel.scrollTo({ left: targetLeft, behavior: 'smooth' });
+      if (programmaticMainScrollTimer.current !== null) window.clearTimeout(programmaticMainScrollTimer.current);
+      programmaticMainScrollTimer.current = window.setTimeout(() => {
+        isMainScrollingRef.current = false;
+      }, 450);
+    }
+  }, [selectedPhotoId, photos]);
+
   useEffect(() => () => {
     if (stripScrollTimer.current !== null) window.clearTimeout(stripScrollTimer.current);
     if (programmaticScrollTimer.current !== null) window.clearTimeout(programmaticScrollTimer.current);
+    if (mainScrollTimer.current !== null) window.clearTimeout(mainScrollTimer.current);
+    if (programmaticMainScrollTimer.current !== null) window.clearTimeout(programmaticMainScrollTimer.current);
   }, []);
 
   useEffect(() => {
@@ -118,6 +143,17 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
     }, 140);
   };
 
+  const handleMainScroll = () => {
+    const carousel = mainCarouselRef.current;
+    if (!carousel || !onSelectPhoto || isMainScrollingRef.current) return;
+    if (mainScrollTimer.current !== null) window.clearTimeout(mainScrollTimer.current);
+    mainScrollTimer.current = window.setTimeout(() => {
+      const index = Math.max(0, Math.min(photos.length - 1, Math.round(carousel.scrollLeft / carousel.clientWidth)));
+      const photoId = photos[index]?.id;
+      if (photoId && photoId !== activePhoto?.id) onSelectPhoto(photoId);
+    }, 100);
+  };
+
   if (!activePhoto) return null;
 
   return (
@@ -139,7 +175,10 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
         transition={{ duration: 0.3 }}
         className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[40px]"
       />
-      <div className="pointer-events-none absolute inset-0 bg-black/45" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 bg-gradient-to-b from-transparent to-black"
+      />
 
       {showCloseButton && (
         <button
@@ -157,41 +196,34 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({
         style={{ top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}
       >
         <div
-          className="relative flex min-h-0 flex-1 items-center justify-center px-2 py-3"
-          onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
-          onTouchEnd={(event) => {
-            if (touchStartX.current === null) return;
-            const delta = event.changedTouches[0].clientX - touchStartX.current;
-            touchStartX.current = null;
-            if (Math.abs(delta) > 55) stepPhoto(delta < 0 ? 1 : -1);
-          }}
+          ref={mainCarouselRef}
+          onScroll={handleMainScroll}
+          className="relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
+          style={{ scrollbarWidth: 'none', touchAction: 'pan-x pan-y' }}
         >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activePhoto.id}
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="relative flex max-h-full max-w-full items-center justify-center"
+          {photos.map((photo) => (
+            <div
+              key={photo.id}
+              data-main-photo-id={photo.id}
+              className="relative flex h-full w-full shrink-0 snap-center items-center justify-center overflow-hidden"
             >
               <img
-                src={activePhoto.url}
+                src={photo.url}
                 alt={t('Shared trip photo')}
-                className="block max-h-full max-w-full select-none object-contain"
+                className="block h-full w-full select-none object-contain"
                 draggable={false}
               />
-              <button
-                type="button"
-                aria-label={t('Download photo')}
-                onClick={() => void downloadPhoto()}
-                disabled={downloading}
-                className="absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
-              >
-                <DownloadSimple size={21} weight="bold" />
-              </button>
-            </motion.div>
-          </AnimatePresence>
+            </div>
+          ))}
+          <button
+            type="button"
+            aria-label={t('Download photo')}
+            onClick={() => void downloadPhoto()}
+            disabled={downloading}
+            className="pointer-events-auto absolute bottom-3 right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-xl backdrop-blur-xl active:scale-95 disabled:opacity-60"
+          >
+            <DownloadSimple size={21} weight="bold" />
+          </button>
         </div>
 
         {photos.length > 0 && (
