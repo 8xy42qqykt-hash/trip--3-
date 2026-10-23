@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Heart,
   Check,
@@ -354,7 +355,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showReactionDetails, setShowReactionDetails] = useState(false);
-  const [reactionDetailsPosition, setReactionDetailsPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [reactionDetailsPosition, setReactionDetailsPosition] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+    placement: 'above' | 'below';
+  } | null>(null);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
@@ -448,8 +454,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       reactionDetailsPosition.top !== top
       || reactionDetailsPosition.left !== left
       || reactionDetailsPosition.maxHeight !== maxHeight
+      || reactionDetailsPosition.placement !== (openBelow ? 'below' : 'above')
     ) {
-      setReactionDetailsPosition({ top, left, maxHeight });
+      setReactionDetailsPosition({ top, left, maxHeight, placement: openBelow ? 'below' : 'above' });
     }
   }, [showReactionDetails, reactionDetailsPosition, isOwn]);
 
@@ -462,7 +469,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     if (!badge) return;
     const margin = 12;
     const maxHeight = window.innerHeight - margin * 2;
-    setReactionDetailsPosition({ top: badge.bottom + 8, left: badge.left, maxHeight });
+    setReactionDetailsPosition({
+      top: badge.bottom + 8,
+      left: badge.left,
+      maxHeight,
+      placement: 'below',
+    });
     setShowReactionDetails(true);
   };
 
@@ -682,6 +694,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         : 'rounded-[22px] rounded-tl-[6px] rounded-bl-[6px]';
     }
   };
+  const hasScheduledDateTime = Boolean(
+    message.metadata?.time || (message.type === 'plan' && message.metadata?.date),
+  );
 
   return (
     <div
@@ -981,49 +996,66 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   );
                 })}
               </button>
-              {showReactionDetails && reactionDetailsPosition && createPortal(
-                <div
-                  ref={reactionPopupRef}
-                  className="fixed z-[13000] box-border w-max max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in"
-                  style={{
-                    top: reactionDetailsPosition.top,
-                    left: reactionDetailsPosition.left,
-                    maxHeight: reactionDetailsPosition.maxHeight,
-                  }}
-                >
-                  {groupedReactions.map(({ kind, userIds }) => {
-                    const Icon = REACTION_ICON_MAP[kind];
-                    const profiles = userIds
-                      .map((id) => members.find((member) => member.user_id === id)?.profile)
-                      .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
-                    return (
-                      <div key={kind} className="flex items-center gap-2.5">
-                        <Icon size={17} weight="fill" className="shrink-0 text-[#0A84FF]" />
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          {profiles.map((profile) => (
-                            <button
-                              key={profile.id}
-                              type="button"
-                              aria-label={`${t('View profile')}: ${profile.display_name}`}
-                              onClick={() => {
-                                setShowReactionDetails(false);
-                                onProfileClick?.(profile.id);
-                              }}
-                              className="rounded-full"
-                            >
-                              <Avatar
-                                name={profile.display_name}
-                                avatarUrl={profile.avatar_url}
-                                color={profile.color}
-                                size={28}
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>,
+              {reactionDetailsPosition && createPortal(
+                <AnimatePresence>
+                  {showReactionDetails && (
+                    <motion.div
+                      ref={reactionPopupRef}
+                      initial={{
+                        opacity: 0,
+                        scale: 0.92,
+                        y: reactionDetailsPosition.placement === 'below' ? -5 : 5,
+                      }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{
+                        opacity: 0,
+                        scale: 0.92,
+                        y: reactionDetailsPosition.placement === 'below' ? -5 : 5,
+                      }}
+                      transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                      className="fixed z-[13000] box-border w-max max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+                      style={{
+                        top: reactionDetailsPosition.top,
+                        left: reactionDetailsPosition.left,
+                        maxHeight: reactionDetailsPosition.maxHeight,
+                        transformOrigin: `${isOwn ? 'left' : 'right'} ${reactionDetailsPosition.placement === 'below' ? 'top' : 'bottom'}`,
+                      }}
+                    >
+                      {groupedReactions.map(({ kind, userIds }) => {
+                        const Icon = REACTION_ICON_MAP[kind];
+                        const profiles = userIds
+                          .map((id) => members.find((member) => member.user_id === id)?.profile)
+                          .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
+                        return (
+                          <div key={kind} className="flex items-center gap-2.5">
+                            <Icon size={17} weight="fill" className="shrink-0 text-[#0A84FF]" />
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              {profiles.map((profile) => (
+                                <button
+                                  key={profile.id}
+                                  type="button"
+                                  aria-label={`${t('View profile')}: ${profile.display_name}`}
+                                  onClick={() => {
+                                    setShowReactionDetails(false);
+                                    onProfileClick?.(profile.id);
+                                  }}
+                                  className="rounded-full"
+                                >
+                                  <Avatar
+                                    name={profile.display_name}
+                                    avatarUrl={profile.avatar_url}
+                                    color={profile.color}
+                                    size={28}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>,
                 document.body,
               )}
             </div>
@@ -1037,13 +1069,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         }`}>
           {(message.type === 'meal' || message.type === 'plan') ? (
             <>
-              {(message.type === 'plan' && message.metadata?.date) || message.metadata?.time ? (
-                <div className="flex min-h-5 items-center gap-2">
-                  {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
-                  {message.metadata?.time && <span>{message.metadata.time}</span>}
-                </div>
-              ) : null}
-              {isLastInGroup && (
+              {isLastInGroup && (!hasScheduledDateTime || !isOwn) && (
                 <span className="flex min-h-6 items-center gap-1.5">
                   {!isOwn && (
                     <button
@@ -1061,16 +1087,22 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                     </button>
                   )}
                   <span className="flex items-center gap-1">
-                    {!isOwn && (
+                    {!isOwn && <span>{message.sender?.display_name || t('Member')}</span>}
+                    {!hasScheduledDateTime && (
                       <>
-                        <span>{message.sender?.display_name || t('Member')}</span>
-                        <span aria-hidden="true">•</span>
+                        {!isOwn && <span aria-hidden="true">•</span>}
+                        <span>{formatMessageTime(message.created_at)}</span>
                       </>
                     )}
-                    <span>{formatMessageTime(message.created_at)}</span>
                   </span>
                 </span>
               )}
+              {(message.type === 'plan' && message.metadata?.date) || message.metadata?.time ? (
+                <div className="flex min-h-5 items-center gap-2">
+                  {message.type === 'plan' && message.metadata?.date && <span>{formatTripDate(message.metadata.date)}</span>}
+                  {message.metadata?.time && <span>{message.metadata.time}</span>}
+                </div>
+              ) : null}
             </>
           ) : isLastInGroup && (
             <span className="flex min-h-6 items-center gap-1.5">

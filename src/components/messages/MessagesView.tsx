@@ -633,6 +633,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
   }, [pendingPhoto]);
 
+  const syncComposerTextareaHeight = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto';
+    const height = Math.max(40, textarea.scrollHeight);
+    textarea.style.height = `${height}px`;
+    setIsTextareaMultiline(height > 48);
+  };
+
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -656,23 +663,26 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
 
     const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      const scrollH = textarea.scrollHeight;
-      const height = Math.max(40, scrollH);
-      textarea.style.height = `${height}px`;
-      setIsTextareaMultiline(height > 42);
-    }
+    if (textarea) syncComposerTextareaHeight(textarea);
   };
 
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    textarea.style.height = 'auto';
-    const height = Math.max(40, textarea.scrollHeight);
-    textarea.style.height = `${height}px`;
-    setIsTextareaMultiline(height > 42);
+    syncComposerTextareaHeight(textarea);
   }, [inputText, composerMode]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const updateHeight = () => syncComposerTextareaHeight(textarea);
+    window.addEventListener('resize', updateHeight);
+    window.visualViewport?.addEventListener('resize', updateHeight);
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      window.visualViewport?.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   const handleSelectMention = (member: TripMember) => {
     const name = member.profile?.display_name || t('Member');
@@ -1808,7 +1818,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     transition={{ duration: 0.22, ease: 'easeOut' }}
                     className="pointer-events-auto min-w-0"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-1">
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
                   <>
                     <button
@@ -1817,7 +1827,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Insert hashtag')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('#')}
-                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
+                      className="flex min-h-8 items-center gap-1 px-0.5 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       #
                       <span>{t('Hashtag')}</span>
@@ -1828,7 +1838,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Mention a member')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('@')}
-                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
+                      className="flex min-h-8 items-center gap-1 px-0.5 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       @
                       <span>{t('Mention')}</span>
