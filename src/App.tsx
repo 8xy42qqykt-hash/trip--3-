@@ -360,41 +360,6 @@ const MainAppContent: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let lastInputFocusAt = 0;
-    const trackInputFocus = (event: FocusEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        lastInputFocusAt = Date.now();
-      }
-    };
-    const dismissEmptyInputOnBackspace = (event: KeyboardEvent) => {
-      if (!event.isTrusted || event.key !== 'Backspace' || event.isComposing || event.repeat) return;
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-      if (document.activeElement !== target) return;
-      const focusGracePeriod = window.matchMedia('(pointer: coarse)').matches ? 1400 : 350;
-      if (Date.now() - lastInputFocusAt < focusGracePeriod) return;
-      if (target.disabled || target.readOnly || target.value.length > 0) return;
-      if (window.matchMedia('(pointer: coarse)').matches) {
-        const viewport = window.visualViewport;
-        const keyboardHeight = viewport
-          ? window.innerHeight - viewport.height - viewport.offsetTop
-          : 0;
-        if (keyboardHeight < 120) return;
-      }
-
-      event.preventDefault();
-      target.blur();
-    };
-
-    window.addEventListener('focusin', trackInputFocus, true);
-    window.addEventListener('keydown', dismissEmptyInputOnBackspace, true);
-    return () => {
-      window.removeEventListener('focusin', trackInputFocus, true);
-      window.removeEventListener('keydown', dismissEmptyInputOnBackspace, true);
-    };
-  }, []);
-
   // Animate slide when selecting or exiting trips (in opposite direction as requested)
   useEffect(() => {
     const currentTripId = currentTrip?.id || null;

@@ -23,7 +23,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         src={avatarUrl}
         alt={name}
         referrerPolicy="no-referrer"
-        className={`rounded-full object-cover shrink-0 select-none ${className}`}
+        className={`rounded-full border border-white/20 object-cover shrink-0 select-none ${className}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
@@ -35,7 +35,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   return (
     <div
       aria-label={name}
-      className={`rounded-full flex items-center justify-center font-bold text-white shrink-0 select-none shadow-xs ${className}`}
+      className={`rounded-full border border-white/20 flex items-center justify-center font-bold text-white shrink-0 select-none shadow-xs ${className}`}
       style={{
         width: `${size}px`,
         height: `${size}px`,

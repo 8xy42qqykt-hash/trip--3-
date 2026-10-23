@@ -543,7 +543,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     : message.content;
   const hideLinkOnlyBubble = canShowLinkPreview
     && !displayContent
-    && !replyMessage
     && (message.type === 'text' || message.type === 'meal' || message.type === 'plan');
 
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
@@ -570,6 +569,37 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       <div className={`relative flex max-w-[85%] ${isOwn ? 'flex-row-reverse items-end' : 'flex-col items-start'}`}>
 
         <div className={`relative flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+          {replyMessage && (
+            <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+              <div
+                className={`mb-0.5 max-w-[min(72vw,320px)] overflow-hidden rounded-[13px] border px-3 py-1.5 text-[11px] leading-snug ${
+                  isOwn
+                    ? 'border-white/20 bg-[#202024] text-slate-200'
+                    : 'border-white/15 bg-[#202024] text-slate-200'
+                }`}
+              >
+                <div className="truncate font-semibold text-white/80">
+                  {replyMessage.sender?.display_name || t('Member')}
+                </div>
+                <div className="reply-preview-content line-clamp-2 break-words text-[11px] leading-snug text-white/65">
+                  {replyMessage.content || t('Attachment')}
+                </div>
+              </div>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 30 14"
+                className={`h-3.5 w-[30px] ${isOwn ? 'self-end' : 'self-start'}`}
+                fill="none"
+              >
+                <path
+                  d={isOwn ? 'M1 0 C1 10 29 2 29 14' : 'M29 0 C29 10 1 2 1 14'}
+                  stroke="rgba(255,255,255,0.45)"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          )}
           {/* Reaction Picker overlay */}
           {showReactionPicker && (
             <ReactionPicker
@@ -633,16 +663,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y] select-none"
               style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
             >
-              {replyMessage && (
-                <div className="mb-1 max-w-full min-w-0 px-3.5 py-1.5 rounded-[16px] text-xs bg-white/10 text-slate-200">
-                  <div className="font-bold text-[11px] opacity-80">
-                    {replyMessage.sender?.display_name || t('Member')}
-                  </div>
-                  <div className="reply-preview-content text-[11px] leading-snug">
-                    {replyMessage.content}
-                  </div>
-                </div>
-              )}
               <img
                 src={message.image_url!}
                 alt="Attachment"
@@ -674,24 +694,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                         } ${canShowLinkPreview ? 'min-w-[min(72vw,340px)]' : ''}`
                   }`}
                 >
-                {/* Reply Preview */}
-                {replyMessage && (
-                  <div
-                    className={`mb-2 max-w-full min-w-0 px-3 py-1.5 rounded-[14px] text-xs ${
-                      isOwn
-                        ? 'bg-black/20 text-white/90'
-                        : 'bg-white/10 text-slate-200'
-                    }`}
-                  >
-                    <div className="font-bold text-[11px] opacity-80">
-                      {replyMessage.sender?.display_name || t('Member')}
-                    </div>
-                    <div className="reply-preview-content text-[11px] leading-snug">
-                      {replyMessage.content}
-                    </div>
-                  </div>
-                )}
-
                 {/* Poll Result Message in Chat Log */}
                 {isSticker ? (
                   <StickerArtwork
@@ -970,7 +972,7 @@ const ProfileRow: React.FC<{
             type="button"
             onClick={() => onProfileClick?.(profile.id)}
             aria-label={`${t('View profile')}: ${profile.display_name}`}
-            className="rounded-full border-2 border-black"
+            className="rounded-full"
           >
             <Avatar
               name={profile.display_name}

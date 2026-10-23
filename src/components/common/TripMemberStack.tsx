@@ -18,7 +18,7 @@ export const TripMemberStack: React.FC<TripMemberStackProps> = ({ members }) => 
         avatarUrl={member.profile?.avatar_url}
         color={member.profile?.color}
         size={22}
-        className={`relative ring-2 ring-black ${index > 0 ? '-ml-[11px]' : ''}`}
+        className={`relative ${index > 0 ? '-ml-[11px]' : ''}`}
       />
     ))}
   </div>

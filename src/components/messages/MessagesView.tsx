@@ -1491,7 +1491,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     type="button"
                     onClick={() => setSelectedProfileId(member.userId)}
                     aria-label={`${t('View profile')}: ${member.profile.display_name}`}
-                    className="relative rounded-full border-2 border-black"
+                    className="relative rounded-full"
                   >
                     <Avatar
                       name={member.profile.display_name}
@@ -1502,7 +1502,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   </button>
                 ))}
                 {onlineMembers.length > 7 && (
-                  <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                  <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-white/20 bg-[#303036] px-1 text-[10px] font-bold text-white">
                     +{onlineMembers.length - 7}
                   </span>
                 )}
@@ -1755,9 +1755,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 {(isAtBottom || isComposerFocused) && (
                   <motion.div
                     key="composer-shortcuts"
-                    initial={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
+                    exit={{ opacity: 0, y: 8 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                     className="flex min-w-0 items-center gap-3"
                   >
@@ -1842,7 +1842,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       type="button"
                       onClick={() => setSelectedProfileId(member.userId)}
                       aria-label={`${t('View profile')}: ${member.profile.display_name}`}
-                      className="relative rounded-full border-2 border-black"
+                      className="relative rounded-full"
                     >
                       <Avatar
                         name={member.profile.display_name}
@@ -1853,7 +1853,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     </button>
                   ))}
                   {onlineMembers.length > 7 && (
-                    <span className="flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-black bg-[#303036] px-1 text-[10px] font-bold text-white">
+                    <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-white/20 bg-[#303036] px-1 text-[10px] font-bold text-white">
                       +{onlineMembers.length - 7}
                     </span>
                   )}

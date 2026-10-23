@@ -110,7 +110,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
           <button
             type="button"
             onClick={openPlusPopup}
-            className="w-[38px] h-[38px] min-w-[38px] min-h-[38px] rounded-full bg-[#0A84FF] text-white flex items-center justify-center active-press cursor-pointer shadow-md hover:bg-[#007AFF] transition-colors"
+            className="w-[38px] h-[38px] min-w-[38px] min-h-[38px] rounded-full border border-white/[0.2] bg-[#0A84FF] text-white flex items-center justify-center active-press cursor-pointer shadow-md hover:bg-[#007AFF] transition-colors"
             title={t('New Trip')}
           >
             <Plus size={20} weight="bold" />
@@ -161,7 +161,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                   type="button"
                   disabled={loading}
                   onClick={() => void handleInvitationResponse(invitation.id, true)}
-                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full border border-white/[0.18] bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
                 >
                   <Check size={17} weight="bold" /> {t('Accept')}
                 </button>
@@ -169,7 +169,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                   type="button"
                   disabled={loading}
                   onClick={() => void handleInvitationResponse(invitation.id, false)}
-                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white/10 text-sm font-semibold text-slate-200 disabled:opacity-50"
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-white/10 text-sm font-semibold text-slate-200 disabled:opacity-50"
                 >
                   <X size={16} weight="bold" /> {t('Reject')}
                 </button>
@@ -236,7 +236,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
             <button
               type="button"
               onClick={openPlusPopup}
-              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0A84FF] text-white text-sm font-bold active-press shadow-md cursor-pointer hover:bg-[#007AFF] transition-colors"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/[0.18] bg-[#0A84FF] px-5 py-2.5 text-sm font-bold text-white active-press shadow-md cursor-pointer hover:bg-[#007AFF] transition-colors"
             >
               <Plus size={17} weight="bold" />
               <span>{t('Create or Join Trip')}</span>
@@ -261,7 +261,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
               className="w-full py-3.5 px-1 hover:bg-white/5 active:bg-white/10 cursor-pointer flex items-center justify-between transition-colors text-left"
             >
               <div className="flex items-center gap-3.5">
-                <div className="w-9 h-9 rounded-full bg-[#0A84FF] flex items-center justify-center text-white shrink-0 shadow-sm">
+                <div className="w-9 h-9 rounded-full border border-white/[0.2] bg-[#0A84FF] flex items-center justify-center text-white shrink-0 shadow-sm">
                   <Plus size={20} weight="bold" />
                 </div>
                 <span className="text-base font-bold text-white">
@@ -276,7 +276,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
               className="w-full py-3.5 px-1 hover:bg-white/5 active:bg-white/10 cursor-pointer flex items-center justify-between transition-colors text-left"
             >
               <div className="flex items-center gap-3.5">
-                <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center text-white shrink-0">
+                <div className="w-9 h-9 rounded-full border border-white/[0.16] bg-white/15 flex items-center justify-center text-white shrink-0">
                   <Hash size={20} weight="bold" />
                 </div>
                 <span className="text-base font-bold text-white">
@@ -292,7 +292,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
               <button
                 type="button"
                 onClick={() => setActiveForm(null)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-full active-press cursor-pointer"
+                className="rounded-full border border-white/[0.16] p-2 text-slate-400 hover:text-white active-press cursor-pointer"
               >
                 <CaretLeft size={20} weight="bold" />
               </button>
@@ -313,13 +313,13 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full h-12 px-4 rounded-[18px] bg-white/10 text-white placeholder:text-slate-500 text-[17px] outline-none border border-white/[0.08]"
+                className="w-full h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-[17px] text-white placeholder:text-slate-500 outline-none"
               />
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('start')}
-                  className="w-full h-12 px-3.5 rounded-[18px] bg-white/10 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active-press cursor-pointer border border-white/[0.08]"
+                  className="w-full h-12 rounded-full border border-white/[0.16] bg-white/10 px-3.5 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active-press cursor-pointer"
                 >
                   <CalendarBlank size={16} weight="regular" />
                   <span>{formatTripDate(startDate)}</span>
@@ -327,7 +327,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('end')}
-                  className="w-full h-12 px-3.5 rounded-[18px] bg-white/10 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active-press cursor-pointer border border-white/[0.08]"
+                  className="w-full h-12 rounded-full border border-white/[0.16] bg-white/10 px-3.5 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 active-press cursor-pointer"
                 >
                   <CalendarBlank size={16} weight="regular" />
                   <span>{formatTripDate(endDate)}</span>
@@ -337,14 +337,14 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                 <button
                   type="button"
                   onClick={() => setActiveForm(null)}
-                  className="flex-1 h-12 rounded-[20px] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
+                  className="flex-1 h-12 rounded-full border border-white/[0.16] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
                 >
                   {t('Back')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !name.trim()}
-                  className="flex-1 h-12 rounded-[20px] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
+                  className="flex-1 h-12 rounded-full border border-white/[0.18] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
                   {t(loading ? 'Creating...' : 'Create Trip')}
                 </button>
@@ -357,7 +357,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
               <button
                 type="button"
                 onClick={() => setActiveForm(null)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-full active-press cursor-pointer"
+                className="rounded-full border border-white/[0.16] p-2 text-slate-400 hover:text-white active-press cursor-pointer"
               >
                 <CaretLeft size={20} weight="bold" />
               </button>
@@ -382,7 +382,7 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                   setJoinError(null);
                 }}
                 required
-                className="w-full h-13 px-4 rounded-[18px] bg-white/10 text-white placeholder:text-slate-500 text-center font-bold tracking-widest text-[20px] outline-none border border-white/[0.08]"
+                className="w-full h-13 rounded-full border border-white/[0.16] bg-white/10 px-4 text-center text-[20px] font-bold tracking-widest text-white placeholder:text-slate-500 outline-none"
               />
               {joinError && (
                 <div className="text-xs text-red-400 text-center py-2.5 px-3.5 bg-red-500/15 rounded-[16px] border border-red-500/20">
@@ -393,14 +393,14 @@ export const TripGate: React.FC<{ onTripSelecting?: () => void; onTripSelected?:
                 <button
                   type="button"
                   onClick={() => setActiveForm(null)}
-                  className="flex-1 h-12 rounded-[20px] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
+                  className="flex-1 h-12 rounded-full border border-white/[0.16] bg-white/10 text-slate-300 font-bold text-sm flex items-center justify-center active-press cursor-pointer"
                 >
                   {t('Back')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading || inviteCode.trim().length !== 6}
-                  className="flex-1 h-12 rounded-[20px] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
+                  className="flex-1 h-12 rounded-full border border-white/[0.18] bg-[#0A84FF] disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
                   {t(loading ? 'Joining...' : 'Join Trip')}
                 </button>

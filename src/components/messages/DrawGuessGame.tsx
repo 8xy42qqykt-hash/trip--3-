@@ -428,7 +428,7 @@ export const DrawGuessGame: React.FC<DrawGuessGameProps> = ({
         {game?.status === 'playing' && (
           <div className="flex min-w-0 flex-1 items-center -space-x-2 overflow-hidden">
             {playerProfiles.map((member) => member?.profile && (
-              <span key={member.user_id} className="shrink-0 rounded-full border-2 border-black">
+              <span key={member.user_id} className="shrink-0 rounded-full">
                 <Avatar name={member.profile.display_name} avatarUrl={member.profile.avatar_url} color={member.profile.color} size={30} />
               </span>
             ))}

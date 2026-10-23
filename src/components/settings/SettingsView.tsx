@@ -83,7 +83,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Long press refs
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const longPressCleanupRef = useRef<(() => void) | null>(null);
   const didLongPressRef = useRef(false);
+  const memberGestureCancelledRef = useRef(false);
+
+  React.useEffect(() => () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressCleanupRef.current?.();
+  }, []);
 
   React.useEffect(() => {
     if (!currentTrip || !supabase || !isCloudActive) {
@@ -207,8 +215,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setConfirmRemove(false);
   };
 
-  const handleMemberPointerDown = (m: TripMember) => {
+  const cancelMemberLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressCleanupRef.current?.();
+    longPressCleanupRef.current = null;
+    longPressStartRef.current = null;
+  };
+
+  const handleMemberPointerDown = (m: TripMember, event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    cancelMemberLongPress();
     didLongPressRef.current = false;
+    memberGestureCancelledRef.current = false;
+    const pointerId = event.pointerId;
+    longPressStartRef.current = { x: event.clientX, y: event.clientY };
+    const cancelForMovement = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId || !longPressStartRef.current) return;
+      const dx = Math.abs(moveEvent.clientX - longPressStartRef.current.x);
+      const dy = Math.abs(moveEvent.clientY - longPressStartRef.current.y);
+      if (dx > 10 || dy > 10) {
+        memberGestureCancelledRef.current = true;
+        cancelMemberLongPress();
+      }
+    };
+    const cancelForRelease = (releaseEvent: PointerEvent) => {
+      if (releaseEvent.pointerId !== pointerId) return;
+      if (releaseEvent.type === 'pointercancel') memberGestureCancelledRef.current = true;
+      cancelMemberLongPress();
+    };
+    const cancelForScroll = () => {
+      memberGestureCancelledRef.current = true;
+      cancelMemberLongPress();
+    };
+    window.addEventListener('pointermove', cancelForMovement, true);
+    window.addEventListener('pointerup', cancelForRelease, true);
+    window.addEventListener('pointercancel', cancelForRelease, true);
+    window.addEventListener('scroll', cancelForScroll, true);
+    longPressCleanupRef.current = () => {
+      window.removeEventListener('pointermove', cancelForMovement, true);
+      window.removeEventListener('pointerup', cancelForRelease, true);
+      window.removeEventListener('pointercancel', cancelForRelease, true);
+      window.removeEventListener('scroll', cancelForScroll, true);
+    };
     longPressTimerRef.current = setTimeout(() => {
       didLongPressRef.current = true;
       openMemberSheet(m);
@@ -216,14 +267,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleMemberPointerUp = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
+    cancelMemberLongPress();
   };
 
   const handleMemberClick = (m: TripMember) => {
-    // Allows opening via click or after long press release
+    if (didLongPressRef.current || memberGestureCancelledRef.current) {
+      didLongPressRef.current = false;
+      memberGestureCancelledRef.current = false;
+      return;
+    }
     openMemberSheet(m);
   };
 
@@ -368,7 +420,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               type="button"
               disabled={uploadingAvatar}
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#0A84FF] text-white flex items-center justify-center border-2 border-black active:scale-90 cursor-pointer shadow-md transition-transform"
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-white/20 bg-[#0A84FF] text-white flex items-center justify-center active:scale-90 cursor-pointer shadow-md transition-transform"
               title={t('Change avatar')}
             >
               <Camera size={15} weight="bold" />
@@ -402,7 +454,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleSaveName}
-                className="text-sm font-bold text-[#0A84FF] active-press cursor-pointer px-3 py-1.5"
+                className="rounded-full border border-white/[0.16] px-4 py-2 text-sm font-bold text-[#0A84FF] active-press cursor-pointer"
               >
                 {t('Save')}
               </button>
@@ -471,7 +523,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') setIsLanguageMenuOpen(false);
                 }}
-                className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-white/[0.1] bg-[#1c1c1e] px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
+                className="flex min-h-12 w-full items-center justify-between rounded-full border border-white/[0.16] bg-[#1c1c1e] px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
               >
                 <span>{language === 'fi' ? 'Suomi' : 'English'}</span>
                 <CaretDown
@@ -484,7 +536,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div
                   role="listbox"
                   aria-label={t('Language')}
-                  className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-white/[0.12] bg-[#242428]/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-2xl animate-spring-in"
+                  className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-3xl border border-white/[0.16] bg-[#242428]/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-2xl animate-spring-in"
                 >
                   {([
                     { value: 'en', label: 'English' },
@@ -500,7 +552,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         void updateProfile({ language: option.value });
                         setIsLanguageMenuOpen(false);
                       }}
-                      className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-sm font-medium transition-colors ${
+                      className={`flex min-h-11 w-full items-center justify-between rounded-full px-4 text-left text-sm font-medium transition-colors ${
                         language === option.value ? 'bg-white/[0.1] text-white' : 'text-slate-300 hover:bg-white/[0.06]'
                       }`}
                     >
@@ -525,13 +577,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             rows={2}
             inputMode="email"
             autoCapitalize="none"
-            className="w-full resize-none rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[16px] text-white outline-none placeholder:text-slate-500"
+            className="w-full resize-none rounded-3xl border border-white/[0.16] bg-white/[0.06] px-4 py-3 text-[16px] text-white outline-none placeholder:text-slate-500"
           />
           <button
             type="button"
             onClick={() => void handleInvite()}
             disabled={isInviting || !inviteEmails.trim()}
-            className="min-h-11 w-full rounded-full bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
+            className="min-h-11 w-full rounded-full border border-white/[0.18] bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
           >
             {t(isInviting ? 'Sending…' : 'Send invitations')}
           </button>
@@ -599,14 +651,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   value={tripName}
                   onChange={(e) => setTripName(e.target.value)}
                   placeholder={t('e.g. Hawaii Summer 2026')}
-                  className="w-full h-12 px-3.5 rounded-[16px] bg-white/10 text-white text-[16px] outline-none"
+                  className="w-full h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-white text-[16px] outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('start')}
-                  className="h-12 px-3.5 rounded-[16px] bg-white/10 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
+                  className="h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
                     <span className="text-[10px] text-slate-400 block leading-tight">{t('Start Date')}</span>
@@ -619,7 +671,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('end')}
-                  className="h-12 px-3.5 rounded-[16px] bg-white/10 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
+                  className="h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
                     <span className="text-[10px] text-slate-400 block leading-tight">{t('End Date')}</span>
@@ -634,7 +686,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveTrip}
-                  className="w-full h-12 rounded-[18px] bg-[#0A84FF] text-white font-bold text-sm active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
+                  className="w-full h-12 rounded-full border border-white/[0.18] bg-[#0A84FF] text-white font-bold text-sm active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
                   {t(savedTripNotice ? 'Saved!' : 'Save Changes')}
                 </button>
@@ -672,7 +724,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {tripMembers.map((m) => (
               <div
                 key={m.user_id}
-                onPointerDown={() => handleMemberPointerDown(m)}
+                onPointerDown={(event) => handleMemberPointerDown(m, event)}
                 onPointerUp={handleMemberPointerUp}
                 onPointerCancel={handleMemberPointerUp}
                 onClick={() => handleMemberClick(m)}
