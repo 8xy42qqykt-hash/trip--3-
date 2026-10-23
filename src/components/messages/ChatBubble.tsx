@@ -53,7 +53,7 @@ const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
 };
 
 type LinkPreviewData = {
-  status: 'pending' | 'ready';
+  status: 'pending' | 'ready' | 'error';
   url: string;
   title?: string;
   description?: string | null;
@@ -471,7 +471,17 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const canShowLinkPreview = !isImageOnly
     && Boolean(firstLink)
     && (message.type === 'text' || message.type === 'grocery_list' || message.type === 'meal' || message.type === 'plan')
-    && (linkPreview?.status === 'pending' || linkPreview?.status === 'ready');
+    && !isSticker;
+  const visibleLinkPreview: LinkPreviewData | undefined = canShowLinkPreview && firstLink
+    ? linkPreview?.status === 'ready' || linkPreview?.status === 'pending'
+      ? linkPreview
+      : {
+          status: linkPreview?.status === 'error' ? 'error' : 'pending',
+          url: firstLink.href,
+          title: firstLink.host,
+          siteName: firstLink.host,
+        }
+    : undefined;
   const displayContent = canShowLinkPreview && firstLink
     ? removeFirstLink(message.content, firstLink)
     : message.content;
@@ -738,9 +748,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 )}
                 </div>
               )}
-              {canShowLinkPreview && firstLink && linkPreview && (
+              {canShowLinkPreview && firstLink && visibleLinkPreview && (
                 <LinkPreview
-                  preview={linkPreview}
+                  preview={visibleLinkPreview}
                   fallbackLink={firstLink}
                   anchorRef={linkPreviewRef}
                   onPointerDown={handlePointerDown}

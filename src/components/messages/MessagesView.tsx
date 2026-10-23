@@ -116,6 +116,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const sharedLocations = useTripLocations(currentTrip?.id);
 
   const [inputText, setInputText] = useState('');
+  const [resolvedLinkPreviews, setResolvedLinkPreviews] = useState<Record<string, Record<string, unknown>>>({});
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -493,28 +494,39 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }, [messageRevealPhase, messages.length]);
 
   useEffect(() => {
-    if (!user) return;
-    const pendingMessages = messages.filter((message) => (
-      message.user_id === user.id
-      && message.metadata?.linkPreview?.status === 'pending'
-      && typeof message.metadata?.linkPreview?.requestId === 'string'
-      && typeof message.metadata?.linkPreview?.url === 'string'
+    const previewableMessages = messages.filter((message) => (
+      ['text', 'grocery_list', 'meal', 'plan'].includes(message.type)
+      && Boolean(findFirstLink(message.content))
     ));
 
-    for (const message of pendingMessages) {
-      const previewRequest = message.metadata!.linkPreview;
-      const requestId = previewRequest.requestId as string;
-      if (pendingLinkPreviewRequestsRef.current.has(requestId)) continue;
-      pendingLinkPreviewRequestsRef.current.add(requestId);
+    for (const message of previewableMessages) {
+      const firstLink = findFirstLink(message.content);
+      if (!firstLink) continue;
+      const existingPreview = message.metadata?.linkPreview;
+      if (
+        existingPreview?.status === 'ready'
+        && typeof existingPreview.title === 'string'
+        && typeof existingPreview.siteName === 'string'
+      ) continue;
+      if (existingPreview?.status === 'pending' && message.user_id !== user?.id) continue;
+
+      const requestKey = `${message.id}:${firstLink.href}`;
+      if (pendingLinkPreviewRequestsRef.current.has(requestKey)) continue;
+      pendingLinkPreviewRequestsRef.current.add(requestKey);
 
       const resolvePreview = async () => {
         let linkPreview: Record<string, unknown>;
         if (!supabase) {
-          linkPreview = { status: 'error', requestId };
+          linkPreview = {
+            status: 'error',
+            url: firstLink.href,
+            title: firstLink.host,
+            siteName: firstLink.host,
+          };
         } else {
           try {
             const { data, error } = await supabase.functions.invoke('link-preview', {
-              body: { url: previewRequest.url },
+              body: { url: firstLink.href },
             });
             if (
               error
@@ -523,22 +535,45 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
               || typeof data.siteName !== 'string'
             ) {
               if (error) console.warn('Could not load link preview:', error.message);
-              linkPreview = { status: 'error', requestId };
+              linkPreview = {
+                status: 'error',
+                url: firstLink.href,
+                title: firstLink.host,
+                siteName: firstLink.host,
+              };
             } else {
-              linkPreview = { ...data, status: 'ready', requestId };
+              linkPreview = { ...data, status: 'ready' };
             }
           } catch (error) {
             console.warn('Could not load link preview:', error);
-            linkPreview = { status: 'error', requestId };
+            linkPreview = {
+              status: 'error',
+              url: firstLink.href,
+              title: firstLink.host,
+              siteName: firstLink.host,
+            };
           }
         }
 
+        setResolvedLinkPreviews((previous) => ({
+          ...previous,
+          [message.id]: linkPreview,
+        }));
+
         const latestMessage = latestMessagesRef.current.find((candidate) => candidate.id === message.id);
         if (
-          !latestMessage
-          || latestMessage.metadata?.linkPreview?.requestId !== requestId
-          || latestMessage.metadata?.linkPreview?.status !== 'pending'
+          !user
+          || message.user_id !== user.id
+          || !latestMessage
+          || findFirstLink(latestMessage.content)?.href !== firstLink.href
         ) return;
+        const latestPreview = latestMessage.metadata?.linkPreview;
+        if (
+          latestPreview?.status === 'ready'
+          && typeof latestPreview.title === 'string'
+          && typeof latestPreview.siteName === 'string'
+        ) return;
+
         try {
           await updateMessage(latestMessage.id, {
             content: latestMessage.content,
@@ -1034,13 +1069,27 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const visibleMessages = isGamesView
+  const filteredMessages = isGamesView
     ? messages.filter((message) => message.type === 'draw_game' || message.type === 'game_session')
     : isFilteredView
     ? messages.filter((message) => message.type === viewMode)
     : messages.filter((message) => message.type !== 'grocery_list' && message.type !== 'plan'
       && message.type !== 'draw_game' && message.type !== 'game_session'
       && message.metadata?.gameSummary !== true);
+  const visibleMessages = filteredMessages.map((message) => {
+    const resolvedPreview = resolvedLinkPreviews[message.id];
+    if (!resolvedPreview || !findFirstLink(message.content)) return message;
+    const resolvedUrl = resolvedPreview.url;
+    const messageUrl = findFirstLink(message.content)?.href;
+    if (resolvedUrl !== messageUrl) return message;
+    return {
+      ...message,
+      metadata: {
+        ...message.metadata,
+        linkPreview: resolvedPreview,
+      },
+    };
+  });
 
   // Calculate day separators & consecutive grouping
   const messageGroups: Array<{
