@@ -7,7 +7,6 @@ import {
   Smiley,
   HandsClapping,
   Question,
-  LinkSimple,
   ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
@@ -73,9 +72,14 @@ const findFirstLink = (content: string) => {
   return match ? parseLink(match[0]) : null;
 };
 
-const LinkPreview: React.FC<{ content: string; isOwn: boolean }> = ({ content, isOwn }) => {
+const LinkPreview: React.FC<{ content: string }> = ({ content }) => {
   const link = findFirstLink(content);
   if (!link) return null;
+  const host = link.host.toLowerCase();
+  const isSpotify = host === 'spotify.com' || host.endsWith('.spotify.com');
+  const isYouTube = host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+  const isInstagram = host === 'instagram.com' || host.endsWith('.instagram.com');
+  const isTikTok = host === 'tiktok.com' || host.endsWith('.tiktok.com');
   return (
     <a
       href={link.href}
@@ -84,24 +88,58 @@ const LinkPreview: React.FC<{ content: string; isOwn: boolean }> = ({ content, i
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      className={`mb-2 block w-[min(72vw,260px)] max-w-full overflow-hidden rounded-[16px] border ${
-        isOwn ? 'border-white/15 bg-black/15' : 'border-white/10 bg-white/[0.06]'
-      }`}
+      className="mb-1.5 block w-[min(72vw,260px)] max-w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)]"
       aria-label={`Open link to ${link.host}`}
     >
-      <div className="relative flex h-24 items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_20%_25%,rgba(130,190,255,0.6),transparent_52%),radial-gradient(ellipse_at_80%_75%,rgba(10,132,255,0.55),transparent_55%),linear-gradient(135deg,#20232c,#111318)]">
-        <span className="absolute -right-3 -top-8 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
-        <span className="absolute -bottom-10 -left-5 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
-        <span className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-black/20 text-white shadow-lg backdrop-blur-sm">
-          <LinkSimple size={25} weight="bold" />
-        </span>
+      <div
+        className={`relative flex h-28 items-center justify-center overflow-hidden ${
+          isSpotify
+            ? 'bg-[radial-gradient(ellipse_at_50%_110%,rgba(35,215,96,0.52),transparent_62%),linear-gradient(135deg,#182922,#101312)]'
+            : isYouTube
+              ? 'bg-[radial-gradient(ellipse_at_50%_110%,rgba(255,30,30,0.42),transparent_60%),linear-gradient(135deg,#2a1719,#111113)]'
+              : isInstagram
+                ? 'bg-[linear-gradient(125deg,#612bc2,#d12c84,#f2a13b)]'
+                : isTikTok
+                  ? 'bg-[radial-gradient(ellipse_at_25%_70%,rgba(37,244,238,0.32),transparent_52%),radial-gradient(ellipse_at_78%_25%,rgba(254,44,85,0.35),transparent_52%),#111113]'
+                  : 'bg-[radial-gradient(ellipse_at_20%_25%,rgba(130,190,255,0.6),transparent_52%),radial-gradient(ellipse_at_80%_75%,rgba(10,132,255,0.55),transparent_55%),linear-gradient(135deg,#20232c,#111318)]'
+        }`}
+      >
+        {isSpotify ? (
+          <svg aria-label="Spotify" role="img" viewBox="0 0 64 64" className="relative h-[66px] w-[66px] drop-shadow-xl">
+            <circle cx="32" cy="32" r="31" fill="#1ED760" />
+            <path d="M15 25c11-3 24-2 34 4" fill="none" stroke="#102117" strokeWidth="5" strokeLinecap="round" />
+            <path d="M18 33c9-2 20-1 28 4" fill="none" stroke="#102117" strokeWidth="4.5" strokeLinecap="round" />
+            <path d="M21 41c7-1 14 0 21 4" fill="none" stroke="#102117" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+        ) : isYouTube ? (
+          <span className="relative flex h-[52px] w-[74px] items-center justify-center rounded-[17px] bg-[#FF0033] shadow-xl">
+            <span className="ml-1 h-0 w-0 border-y-[12px] border-y-transparent border-l-[18px] border-l-white" />
+          </span>
+        ) : isInstagram ? (
+          <span className="relative flex h-[66px] w-[66px] items-center justify-center rounded-[21px] border-[5px] border-white shadow-xl">
+            <span className="h-7 w-7 rounded-full border-[4px] border-white" />
+            <span className="absolute right-[9px] top-[9px] h-2 w-2 rounded-full bg-white" />
+          </span>
+        ) : isTikTok ? (
+          <span className="relative text-[76px] font-black leading-none text-white drop-shadow-[3px_3px_0_#25F4EE] [text-shadow:-3px_-3px_0_#FE2C55]">♪</span>
+        ) : (
+          <>
+            <span className="absolute -right-3 -top-8 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
+            <span className="absolute -bottom-10 -left-5 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
+            <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-black/20 text-white shadow-lg backdrop-blur-sm">
+              <span className="text-2xl font-black">{link.host.charAt(0).toUpperCase()}</span>
+            </span>
+          </>
+        )}
         <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/35 text-white/80">
           <ArrowSquareOut size={15} weight="bold" />
         </span>
       </div>
-      <div className="min-w-0 px-3 py-2">
-        <span className="block truncate text-xs font-bold text-white">{link.host}</span>
-        <span className="mt-0.5 block truncate text-[11px] text-white/65">{link.path || link.displayUrl}</span>
+      <div className="min-w-0 px-3.5 py-2.5">
+        <span className="block truncate text-sm font-bold text-white">
+          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : isInstagram ? 'Instagram' : isTikTok ? 'TikTok' : link.host}
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-white/65">{link.path || link.displayUrl}</span>
       </div>
     </a>
   );
@@ -439,6 +477,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               })}
             </div>
           )}
+          {!isImageOnly && (message.type === 'text' || message.type === 'meal' || message.type === 'plan') && (
+            <LinkPreview content={message.content} />
+          )}
 
           {/* Image Bubble */}
           {isImageOnly ? (
@@ -575,7 +616,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : message.type === 'meal' || message.type === 'plan' ? (
                   <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
-                    <LinkPreview content={message.content} isOwn={isOwn} />
                     <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn, members)}</p>
                   </div>
                 ) : message.type === 'draw_game' ? (
@@ -623,12 +663,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                       )}
                   </div>
                 ) : (
-                  <>
-                    <LinkPreview content={message.content} isOwn={isOwn} />
-                    <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                      {renderContentWithMentions(message.content, isOwn, members)}
-                    </p>
-                  </>
+                  <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                    {renderContentWithMentions(message.content, isOwn, members)}
+                  </p>
                 )}
               </div>
             </div>
