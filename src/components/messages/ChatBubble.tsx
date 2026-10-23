@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Heart,
@@ -354,7 +354,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showReactionDetails, setShowReactionDetails] = useState(false);
-  const [reactionDetailsPosition, setReactionDetailsPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [reactionDetailsPosition, setReactionDetailsPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
@@ -418,6 +418,41 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     };
   }, [showReactionDetails]);
 
+  useLayoutEffect(() => {
+    if (!showReactionDetails || !reactionDetailsPosition) return;
+    const popup = reactionPopupRef.current;
+    const badge = reactionBadgeRef.current?.getBoundingClientRect();
+    if (!popup || !badge) return;
+
+    const margin = 16;
+    const gap = 8;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const popupRect = popup.getBoundingClientRect();
+    const availableBelow = Math.max(0, viewportHeight - margin - badge.bottom - gap);
+    const availableAbove = Math.max(0, badge.top - gap - margin);
+    const fitsBelow = popupRect.height <= availableBelow;
+    const fitsAbove = popupRect.height <= availableAbove;
+    const openBelow = fitsBelow || (!fitsAbove && availableBelow >= availableAbove);
+    const maxHeight = openBelow ? availableBelow : availableAbove;
+    const top = openBelow
+      ? badge.bottom + gap
+      : Math.max(margin, badge.top - gap - Math.min(popupRect.height, maxHeight));
+    const preferredLeft = isOwn ? badge.left : badge.right - popupRect.width;
+    const left = Math.min(
+      Math.max(margin, preferredLeft),
+      Math.max(margin, viewportWidth - popupRect.width - margin),
+    );
+
+    if (
+      reactionDetailsPosition.top !== top
+      || reactionDetailsPosition.left !== left
+      || reactionDetailsPosition.maxHeight !== maxHeight
+    ) {
+      setReactionDetailsPosition({ top, left, maxHeight });
+    }
+  }, [showReactionDetails, reactionDetailsPosition, isOwn]);
+
   const toggleReactionDetails = () => {
     if (showReactionDetails) {
       setShowReactionDetails(false);
@@ -426,17 +461,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     const badge = reactionBadgeRef.current?.getBoundingClientRect();
     if (!badge) return;
     const margin = 12;
-    const width = Math.min(300, window.innerWidth - margin * 2);
     const maxHeight = window.innerHeight - margin * 2;
-    const popupHeight = Math.min(320, maxHeight);
-    const left = Math.min(
-      Math.max(margin, isOwn ? badge.left : badge.right - width),
-      window.innerWidth - width - margin,
-    );
-    const top = badge.bottom + 8 + popupHeight <= window.innerHeight - margin
-      ? badge.bottom + 8
-      : Math.max(margin, badge.top - popupHeight - 8);
-    setReactionDetailsPosition({ top, left, width, maxHeight });
+    setReactionDetailsPosition({ top: badge.bottom + 8, left: badge.left, maxHeight });
     setShowReactionDetails(true);
   };
 
@@ -958,11 +984,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               {showReactionDetails && reactionDetailsPosition && createPortal(
                 <div
                   ref={reactionPopupRef}
-                  className="fixed z-[13000] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in"
+                  className="fixed z-[13000] box-border w-max max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in"
                   style={{
                     top: reactionDetailsPosition.top,
                     left: reactionDetailsPosition.left,
-                    width: reactionDetailsPosition.width,
                     maxHeight: reactionDetailsPosition.maxHeight,
                   }}
                 >

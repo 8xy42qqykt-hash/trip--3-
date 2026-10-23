@@ -419,7 +419,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
     const handleViewportChange = () => {
       const offset = calcKeyboardOffset();
-      const isFocused = document.activeElement === textareaRef.current || isInputFocusedRef.current;
+      const isFocused = document.activeElement === textareaRef.current;
       const isOpen = isFocused || offset > 30;
 
       setIsKeyboardOpen(isOpen);
@@ -1789,8 +1789,15 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
           {((!isFilteredView && !isGamesView && composerMode !== 'grocery_list' && !isMentionListVisible)
             || (onlineMembers.length > 0 && !isMentionListVisible)) && (
-            <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-between">
-              <div className="flex min-w-0 items-center gap-3 pl-1">
+            <div className="pointer-events-none absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center">
+              <motion.div
+                initial={{ left: 0 }}
+                animate={{
+                  left: !isFilteredView && isTextareaMultiline ? 58 : 0,
+                }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="pointer-events-none absolute left-0 top-0"
+              >
                 <AnimatePresence initial={false}>
                 {(isAtBottom || isComposerFocused) && (
                   <motion.div
@@ -1799,14 +1806,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.22, ease: 'easeOut' }}
-                    className="min-w-0"
+                    className="pointer-events-auto min-w-0"
                   >
-                    <motion.div
-                      initial={{ x: !isFilteredView && isTextareaMultiline ? 58 : 0, y: 8 }}
-                      animate={{ marginLeft: !isFilteredView && isTextareaMultiline ? 58 : 0 }}
-                      transition={{ duration: 0.22, ease: 'easeOut' }}
-                      className="flex min-w-0 items-center gap-3"
-                    >
+                    <div className="flex min-w-0 items-center gap-3">
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
                   <>
                     <button
@@ -1815,10 +1817,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       title={t('Insert hashtag')}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => insertComposerToken('#')}
-                      className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
+                      className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       #
-                      <span className="hidden sm:inline">{t('Hashtag')}</span>
+                      <span>{t('Hashtag')}</span>
                     </button>
                     <button
                       type="button"
@@ -1829,7 +1831,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       @
-                      <span className="hidden sm:inline">{t('Mention')}</span>
+                      <span>{t('Mention')}</span>
                     </button>
                   </>
                 )}
@@ -1872,20 +1874,19 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     />
                   </label>
                 )}
-                    </motion.div>
+                    </div>
                   </motion.div>
                 )}
                 </AnimatePresence>
-              </div>
+              </motion.div>
               {onlineMembers.length > 0 && (
                 <motion.div
                   aria-label={`${onlineMembers.length} members currently active`}
                   title={`${onlineMembers.length} members currently active`}
-                  animate={{
-                    marginRight: !isFilteredView && isTextareaMultiline ? 58 : 0,
-                  }}
+                  initial={{ right: 0 }}
+                  animate={{ right: !isFilteredView && isTextareaMultiline ? 58 : 0 }}
                   transition={{ duration: 0.22, ease: 'easeOut' }}
-                  className="flex shrink-0 items-center justify-end -space-x-2"
+                  className="pointer-events-auto absolute right-0 top-0 flex shrink-0 items-center justify-end -space-x-2"
                 >
                   {onlineMembers.slice(0, activeAvatarLimit).map((member) => (
                     <button
