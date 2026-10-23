@@ -774,7 +774,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             type="button"
             onClick={() => void handleAppUpdate()}
             disabled={isCheckingForUpdate}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.08] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.12] active-press disabled:opacity-60"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.08] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.12] active-press disabled:opacity-60"
           >
             <ArrowClockwise size={18} weight="bold" className={isCheckingForUpdate ? 'animate-spin' : ''} />
             <span>{t('Update App')}</span>
@@ -787,7 +787,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             type="button"
             onClick={signOut}
-            className="w-full min-h-[48px] px-4 rounded-[18px] bg-red-500/15 hover:bg-red-500/25 flex items-center justify-center gap-2 text-red-400 font-bold text-sm active-press cursor-pointer transition-colors"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/15 px-4 text-sm font-bold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/25"
           >
             <SignOut size={18} weight="bold" />
             <span>{t('Sign Out')}</span>
@@ -844,7 +844,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleChatWithMember}
-                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.18] bg-[#0A84FF] text-sm font-semibold text-white active-press cursor-pointer shadow-sm transition-colors hover:bg-[#007AFF]"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.18] bg-[#0A84FF] px-4 text-sm font-semibold text-white active-press cursor-pointer shadow-sm transition-colors hover:bg-[#007AFF]"
               >
                 <PaperPlaneTilt size={18} weight="bold" />
                 <span>{t('Send Message / Mention')}</span>
@@ -854,7 +854,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleCopyMemberName}
-                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.16] bg-white/10 text-sm font-semibold text-white active-press cursor-pointer transition-colors hover:bg-white/15"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.16] bg-white/10 px-4 text-sm font-semibold text-white active-press cursor-pointer transition-colors hover:bg-white/15"
               >
                 {copiedMemberName ? (
                   <>
@@ -882,7 +882,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           type="button"
                           disabled={isRemoving}
                           onClick={handleRemoveMember}
-                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.18] bg-red-600 text-xs font-bold text-white active-press cursor-pointer hover:bg-red-700"
+                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.18] bg-red-600 px-4 text-xs font-bold text-white active-press cursor-pointer hover:bg-red-700"
                         >
                           <Trash size={14} weight="bold" />
                           {t(isRemoving ? 'Removing...' : 'Yes, Remove')}
@@ -900,7 +900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setConfirmRemove(true)}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/10 text-sm font-semibold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/20"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/10 px-4 text-sm font-semibold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/20"
                     >
                       <Trash size={18} weight="bold" />
                       <span>{t('Remove from Trip')}</span>

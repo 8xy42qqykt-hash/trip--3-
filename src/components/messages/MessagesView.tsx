@@ -1904,6 +1904,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <Smiley size={21} weight="duotone" />
                 </button>
               )}
+              {!isFilteredView && !isGamesView && composerMode === 'message' && !isComposerFocused && (
+                <button
+                  type="button"
+                  aria-label={t('Focus message input')}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    textareaRef.current?.focus({ preventScroll: true });
+                  }}
+                  onClick={() => textareaRef.current?.focus({ preventScroll: true })}
+                  className="absolute inset-y-0 left-10 right-0 z-10 cursor-text rounded-r-[23px] bg-transparent"
+                />
+              )}
               <textarea
                 ref={textareaRef}
                 id="chat-message-input"

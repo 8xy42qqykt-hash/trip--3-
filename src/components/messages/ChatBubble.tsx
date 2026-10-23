@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Heart,
   Check,
@@ -355,7 +355,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
+  const [replyWidthRelation, setReplyWidthRelation] = useState<'quote-wider' | 'message-wider' | 'similar'>('similar');
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const replyPreviewRef = useRef<HTMLDivElement>(null);
   const linkPreviewRef = useRef<HTMLAnchorElement>(null);
   const activeBubbleRef = useRef<HTMLElement | null>(null);
 
@@ -363,6 +365,23 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const holdPointerIdRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!replyMessage) return;
+    const updateWidths = () => {
+      const quoteWidth = replyPreviewRef.current?.getBoundingClientRect().width ?? 0;
+      const messageWidth = bubbleRef.current?.getBoundingClientRect().width ?? 0;
+      if (!quoteWidth || !messageWidth) return;
+      const difference = quoteWidth - messageWidth;
+      const relation = difference > 20 ? 'quote-wider' : difference < -20 ? 'message-wider' : 'similar';
+      setReplyWidthRelation((current) => current === relation ? current : relation);
+    };
+    updateWidths();
+    const observer = new ResizeObserver(updateWidths);
+    if (replyPreviewRef.current) observer.observe(replyPreviewRef.current);
+    if (bubbleRef.current) observer.observe(bubbleRef.current);
+    return () => observer.disconnect();
+  }, [message.id, replyMessage?.id, replyMessage?.content]);
   const holdListenersCleanupRef = useRef<(() => void) | null>(null);
   const didLongPressRef = useRef(false);
   const didMoveDuringPressRef = useRef(false);
@@ -572,6 +591,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {replyMessage && (
             <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
               <div
+                ref={replyPreviewRef}
                 className={`mb-0.5 max-w-[min(72vw,320px)] overflow-hidden rounded-[13px] border px-3 py-1.5 text-[11px] leading-snug ${
                   isOwn
                     ? 'border-white/20 bg-[#202024] text-slate-200'
@@ -592,7 +612,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 fill="none"
               >
                 <path
-                  d={isOwn ? 'M1 0 C1 10 29 2 29 14' : 'M29 0 C29 10 1 2 1 14'}
+                  d={(() => {
+                    if (replyWidthRelation === 'similar') {
+                      return isOwn ? 'M29 0 C29 9 20 5 20 14' : 'M1 0 C1 9 10 5 10 14';
+                    }
+                    if (replyWidthRelation === 'quote-wider') {
+                      return isOwn ? 'M29 0 C29 10 14 4 14 14' : 'M1 0 C1 10 16 4 16 14';
+                    }
+                    return isOwn ? 'M14 0 C14 10 29 4 29 14' : 'M16 0 C16 10 1 4 1 14';
+                  })()}
                   stroke="rgba(255,255,255,0.45)"
                   strokeWidth="1.5"
                   strokeLinecap="round"
