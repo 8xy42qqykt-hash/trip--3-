@@ -583,7 +583,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             type="button"
             onClick={() => void handleInvite()}
             disabled={isInviting || !inviteEmails.trim()}
-            className="min-h-11 w-full rounded-full border border-white/[0.18] bg-[#0A84FF] text-sm font-bold text-white disabled:opacity-50"
+            className="h-12 w-full rounded-full border border-white/[0.18] bg-[#0A84FF] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#007AFF] disabled:opacity-50"
           >
             {t(isInviting ? 'Sending…' : 'Send invitations')}
           </button>
@@ -844,7 +844,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleChatWithMember}
-                className="w-full h-12 rounded-[18px] bg-[#0A84FF] hover:bg-[#007AFF] text-white font-semibold text-sm flex items-center justify-center gap-2.5 active-press cursor-pointer transition-colors"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.18] bg-[#0A84FF] text-sm font-semibold text-white active-press cursor-pointer shadow-sm transition-colors hover:bg-[#007AFF]"
               >
                 <PaperPlaneTilt size={18} weight="bold" />
                 <span>{t('Send Message / Mention')}</span>
@@ -854,7 +854,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleCopyMemberName}
-                className="w-full h-12 rounded-[18px] bg-white/10 hover:bg-white/15 text-white font-semibold text-sm flex items-center justify-center gap-2.5 active-press cursor-pointer transition-colors"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.16] bg-white/10 text-sm font-semibold text-white active-press cursor-pointer transition-colors hover:bg-white/15"
               >
                 {copiedMemberName ? (
                   <>
@@ -873,7 +873,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {isOwner && user?.id !== selectedMember.user_id && (
                 <div className="pt-2">
                   {confirmRemove ? (
-                    <div className="p-3.5 rounded-[18px] bg-red-500/15 border border-red-500/20 text-left space-y-3">
+                    <div className="space-y-3 rounded-3xl border border-red-500/20 bg-red-500/15 p-3.5 text-left">
                       <div className="text-xs text-red-300">
                         {t('Remove')} <strong className="text-white">{selectedMember.profile?.display_name}</strong> {t('from this trip? They will lose access to all trip data.')}
                       </div>
@@ -882,7 +882,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           type="button"
                           disabled={isRemoving}
                           onClick={handleRemoveMember}
-                          className="flex-1 h-10 rounded-[14px] bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 active-press cursor-pointer"
+                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.18] bg-red-600 text-xs font-bold text-white active-press cursor-pointer hover:bg-red-700"
                         >
                           <Trash size={14} weight="bold" />
                           {t(isRemoving ? 'Removing...' : 'Yes, Remove')}
@@ -890,7 +890,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmRemove(false)}
-                          className="px-4 h-10 rounded-[14px] bg-white/10 text-slate-300 text-xs font-semibold active-press cursor-pointer"
+                          className="h-10 rounded-full border border-white/[0.16] bg-white/10 px-4 text-xs font-semibold text-slate-300 active-press cursor-pointer"
                         >
                           {t('Cancel')}
                         </button>
@@ -900,7 +900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setConfirmRemove(true)}
-                      className="w-full h-12 rounded-[18px] bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm flex items-center justify-center gap-2 active-press cursor-pointer transition-colors"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/10 text-sm font-semibold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/20"
                     >
                       <Trash size={18} weight="bold" />
                       <span>{t('Remove from Trip')}</span>

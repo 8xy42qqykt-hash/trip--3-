@@ -1908,10 +1908,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 ref={textareaRef}
                 id="chat-message-input"
                 name="message"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  textareaRef.current?.focus({ preventScroll: true });
-                }}
                 rows={1}
                 inputMode="text"
                 autoCapitalize="sentences"
