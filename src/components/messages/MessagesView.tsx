@@ -1762,7 +1762,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                className={`flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden ${
+                className={`min-w-0 flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] ${
                   composerMode === 'grocery_list' ? 'pl-8' : composerMode === 'message' && !isFilteredView ? 'pl-9' : ''
                 }`}
                 style={{ minHeight: '40px', height: '40px' }}

@@ -86,12 +86,7 @@ const TripCountdownOverlay: React.FC<{
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  const countdownUnits = [
-    { value: days, label: 'Days' },
-    { value: hours, label: 'Hours' },
-    { value: minutes, label: 'Minutes' },
-    { value: seconds, label: 'Seconds' },
-  ];
+  const countdownValues = [days, hours, minutes, seconds];
 
   return (
     <motion.div
@@ -115,15 +110,10 @@ const TripCountdownOverlay: React.FC<{
         className="w-full max-w-sm text-center"
       >
         <div className="mb-7 flex items-center justify-center gap-1 text-white sm:gap-2" aria-hidden="true">
-          {countdownUnits.map((unit, index) => (
-            <React.Fragment key={unit.label}>
+          {countdownValues.map((value, index) => (
+            <React.Fragment key={index}>
               {index > 0 && <span className="self-start pb-1 text-[clamp(2rem,8vw,4rem)] font-black text-white">.</span>}
-              <span className="flex min-w-0 flex-col items-center">
-                <CountdownValue value={unit.value} />
-                <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/65 sm:text-xs">
-                  {t(unit.label)}
-                </span>
-              </span>
+              <CountdownValue value={value} />
             </React.Fragment>
           ))}
         </div>

@@ -7,6 +7,8 @@ import {
   Smiley,
   HandsClapping,
   Question,
+  LinkSimple,
+  ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -50,6 +52,61 @@ const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
   Question,
 };
 
+const LINK_PATTERN = /(?:https?:\/\/|www\.)[^\s<>"']+/i;
+const TRAILING_LINK_PUNCTUATION = /[),.!?;:]+$/;
+
+const parseLink = (rawUrl: string) => {
+  const displayUrl = rawUrl.replace(TRAILING_LINK_PUNCTUATION, '');
+  if (!displayUrl) return null;
+  const href = displayUrl.startsWith('www.') ? `https://${displayUrl}` : displayUrl;
+  try {
+    const parsed = new URL(href);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return { href: parsed.href, displayUrl, host: parsed.hostname.replace(/^www\./i, ''), path: `${parsed.pathname}${parsed.search}${parsed.hash}` };
+  } catch {
+    return null;
+  }
+};
+
+const findFirstLink = (content: string) => {
+  const match = content.match(LINK_PATTERN);
+  return match ? parseLink(match[0]) : null;
+};
+
+const LinkPreview: React.FC<{ content: string; isOwn: boolean }> = ({ content, isOwn }) => {
+  const link = findFirstLink(content);
+  if (!link) return null;
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      className={`mb-2 block w-[min(72vw,260px)] max-w-full overflow-hidden rounded-[16px] border ${
+        isOwn ? 'border-white/15 bg-black/15' : 'border-white/10 bg-white/[0.06]'
+      }`}
+      aria-label={`Open link to ${link.host}`}
+    >
+      <div className="relative flex h-24 items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_20%_25%,rgba(130,190,255,0.6),transparent_52%),radial-gradient(ellipse_at_80%_75%,rgba(10,132,255,0.55),transparent_55%),linear-gradient(135deg,#20232c,#111318)]">
+        <span className="absolute -right-3 -top-8 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
+        <span className="absolute -bottom-10 -left-5 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
+        <span className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-black/20 text-white shadow-lg backdrop-blur-sm">
+          <LinkSimple size={25} weight="bold" />
+        </span>
+        <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/35 text-white/80">
+          <ArrowSquareOut size={15} weight="bold" />
+        </span>
+      </div>
+      <div className="min-w-0 px-3 py-2">
+        <span className="block truncate text-xs font-bold text-white">{link.host}</span>
+        <span className="mt-0.5 block truncate text-[11px] text-white/65">{link.path || link.displayUrl}</span>
+      </div>
+    </a>
+  );
+};
+
 const renderContentWithMentions = (content: string, isOwnBubble: boolean, members: TripMember[]) => {
   if (!content) return null;
   const names = members
@@ -59,6 +116,29 @@ const renderContentWithMentions = (content: string, isOwnBubble: boolean, member
   const parts: React.ReactNode[] = [];
   let cursor = 0;
   while (cursor < content.length) {
+    const linkMatch = content.slice(cursor).match(/^(?:https?:\/\/|www\.)[^\s<>"']+/i);
+    if (linkMatch?.index === 0) {
+      const rawUrl = linkMatch[0];
+      const link = parseLink(rawUrl);
+      if (link) {
+        parts.push(
+          <a
+            key={`link-${cursor}`}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            className="break-all underline decoration-current/50 underline-offset-2"
+          >
+            {link.displayUrl}
+          </a>,
+        );
+        cursor += link.displayUrl.length;
+        continue;
+      }
+    }
     const previous = cursor === 0 ? '' : content[cursor - 1];
     const isBoundary = cursor === 0 || /\s/.test(previous);
     let matchedText: string | null = null;
@@ -100,7 +180,12 @@ const renderContentWithMentions = (content: string, isOwnBubble: boolean, member
       continue;
     }
     let textEnd = cursor + 1;
-    while (textEnd < content.length && content[textEnd] !== '@' && content[textEnd] !== '#') textEnd += 1;
+    while (
+      textEnd < content.length
+      && content[textEnd] !== '@'
+      && content[textEnd] !== '#'
+      && !content.slice(textEnd).match(/^(?:https?:\/\/|www\.)[^\s<>"']+/i)
+    ) textEnd += 1;
     parts.push(content.slice(cursor, textEnd));
     cursor = textEnd;
   }
@@ -490,6 +575,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : message.type === 'meal' || message.type === 'plan' ? (
                   <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
+                    <LinkPreview content={message.content} isOwn={isOwn} />
                     <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn, members)}</p>
                   </div>
                 ) : message.type === 'draw_game' ? (
@@ -537,9 +623,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                       )}
                   </div>
                 ) : (
-                  <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                    {renderContentWithMentions(message.content, isOwn, members)}
-                  </p>
+                  <>
+                    <LinkPreview content={message.content} isOwn={isOwn} />
+                    <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                      {renderContentWithMentions(message.content, isOwn, members)}
+                    </p>
+                  </>
                 )}
               </div>
             </div>
