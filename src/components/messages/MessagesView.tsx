@@ -154,6 +154,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [isTextareaMultiline, setIsTextareaMultiline] = useState(false);
+  const [activeAvatarLimit, setActiveAvatarLimit] = useState(7);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
   const scrollContentRef = useRef<HTMLDivElement>(null);
@@ -161,6 +162,15 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const latestMessagesRef = useRef(messages);
   const pendingLinkPreviewRequestsRef = useRef(new Set<string>());
   latestMessagesRef.current = messages;
+
+  useEffect(() => {
+    const updateAvatarLimit = () => {
+      setActiveAvatarLimit(window.innerWidth <= 400 ? 3 : window.innerWidth <= 640 ? 5 : 7);
+    };
+    updateAvatarLimit();
+    window.addEventListener('resize', updateAvatarLimit);
+    return () => window.removeEventListener('resize', updateAvatarLimit);
+  }, []);
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -1793,8 +1803,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   >
                     <motion.div
                       initial={{ x: !isFilteredView && isTextareaMultiline ? 58 : 0, y: 8 }}
-                      animate={{ x: !isFilteredView && isTextareaMultiline ? 58 : 0, y: 0 }}
-                      transition={{ x: { duration: 0.22, ease: 'easeOut' }, y: { duration: 0.18, ease: 'easeOut' } }}
+                      animate={{ marginLeft: !isFilteredView && isTextareaMultiline ? 58 : 0 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
                       className="flex min-w-0 items-center gap-3"
                     >
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
@@ -1808,7 +1818,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="flex min-h-8 translate-y-0.5 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       #
-                      <span>{t('Hashtag')}</span>
+                      <span className="hidden sm:inline">{t('Hashtag')}</span>
                     </button>
                     <button
                       type="button"
@@ -1819,7 +1829,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       className="flex min-h-8 items-center gap-1 px-1 text-sm font-bold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)] transition-colors active:text-white"
                     >
                       @
-                      <span>{t('Mention')}</span>
+                      <span className="hidden sm:inline">{t('Mention')}</span>
                     </button>
                   </>
                 )}
@@ -1872,13 +1882,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   aria-label={`${onlineMembers.length} members currently active`}
                   title={`${onlineMembers.length} members currently active`}
                   animate={{
-                    x: !isFilteredView && isTextareaMultiline ? -58 : 0,
-                    y: 0,
+                    marginRight: !isFilteredView && isTextareaMultiline ? 58 : 0,
                   }}
                   transition={{ duration: 0.22, ease: 'easeOut' }}
                   className="flex shrink-0 items-center justify-end -space-x-2"
                 >
-                  {onlineMembers.slice(0, 7).map((member) => (
+                  {onlineMembers.slice(0, activeAvatarLimit).map((member) => (
                     <button
                       key={member.userId}
                       type="button"
@@ -1894,9 +1903,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       />
                     </button>
                   ))}
-                  {onlineMembers.length > 7 && (
+                  {onlineMembers.length > activeAvatarLimit && (
                     <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-white/20 bg-[#303036] px-1 text-[10px] font-bold text-white">
-                      +{onlineMembers.length - 7}
+                      +{onlineMembers.length - activeAvatarLimit}
                     </span>
                   )}
                 </motion.div>

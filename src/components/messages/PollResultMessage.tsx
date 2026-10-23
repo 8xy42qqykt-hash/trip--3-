@@ -37,7 +37,7 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata }
             <div key={opt.id} className="space-y-1.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <span className={`block whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-white ${isWinner ? 'font-bold' : 'font-medium'}`}>
+                  <span className={`block whitespace-normal break-all [overflow-wrap:anywhere] text-sm text-white ${isWinner ? 'font-bold' : 'font-medium'}`}>
                     {opt.text}
                   </span>
                   {voters.length > 0 && (

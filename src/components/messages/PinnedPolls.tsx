@@ -198,7 +198,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                           {hasVoted && <Check size={12} weight="bold" />}
                         </div>
                         <span
-                          className={`min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] text-sm ${
+                          className={`min-w-0 flex-1 whitespace-normal break-all [overflow-wrap:anywhere] text-sm ${
                             isWinning
                               ? 'font-bold text-white'
                               : isLosing
