@@ -1373,6 +1373,23 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             const replyMsg = message.reply_to
               ? visibleMessages.find((m) => m.id === message.reply_to)
               : null;
+            const matchingPoll = message.type === 'poll_result'
+              ? polls.find((poll) => poll.id === message.metadata?.poll_id)
+              : undefined;
+            const messageWithPollVoters = matchingPoll
+              ? {
+                  ...message,
+                  metadata: {
+                    ...message.metadata,
+                    options: (message.metadata?.options || []).map((option: { id: string; voters?: unknown[] }) => ({
+                      ...option,
+                      voters: option.voters?.length
+                        ? option.voters
+                        : matchingPoll.options.find((pollOption) => pollOption.id === option.id)?.voters || [],
+                    })),
+                  },
+                }
+              : message;
             const firstAnimatedIndex = Math.max(0, messageGroups.length - 5);
             const isRecentMessage = index >= firstAnimatedIndex;
             const revealDelay = isRecentMessage ? (index - firstAnimatedIndex) * 0.14 : 0.15;
@@ -1398,7 +1415,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   </div>
                 )}
                 <ChatBubble
-                  message={message}
+                  message={messageWithPollVoters}
                   isOwn={user ? message.user_id === user.id : false}
                   isFirstInGroup={isFirstInGroup}
                   isLastInGroup={isLastInGroup}
@@ -1768,12 +1785,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 {(isAtBottom || isComposerFocused) && (
                   <motion.div
                     key="composer-shortcuts"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0, x: isTextareaMultiline ? 58 : 0 }}
-                    exit={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.22, ease: 'easeOut' }}
-                    className="flex min-w-0 items-center gap-3"
+                    className="min-w-0"
                   >
+                    <motion.div
+                      initial={{ x: !isFilteredView && isTextareaMultiline ? 58 : 0, y: 8 }}
+                      animate={{ x: !isFilteredView && isTextareaMultiline ? 58 : 0, y: 0 }}
+                      transition={{ x: { duration: 0.22, ease: 'easeOut' }, y: { duration: 0.18, ease: 'easeOut' } }}
+                      className="flex min-w-0 items-center gap-3"
+                    >
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
                   <>
                     <button
@@ -1839,14 +1862,20 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     />
                   </label>
                 )}
+                    </motion.div>
                   </motion.div>
                 )}
                 </AnimatePresence>
               </div>
               {onlineMembers.length > 0 && (
-                <div
+                <motion.div
                   aria-label={`${onlineMembers.length} members currently active`}
                   title={`${onlineMembers.length} members currently active`}
+                  animate={{
+                    x: !isFilteredView && isTextareaMultiline ? -58 : 0,
+                    y: 0,
+                  }}
+                  transition={{ duration: 0.22, ease: 'easeOut' }}
                   className="flex shrink-0 items-center justify-end -space-x-2"
                 >
                   {onlineMembers.slice(0, 7).map((member) => (
@@ -1870,7 +1899,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       +{onlineMembers.length - 7}
                     </span>
                   )}
-                </div>
+                </motion.div>
               )}
             </div>
           )}
@@ -1952,8 +1981,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                className={`min-w-0 flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] ${
-                  composerMode === 'grocery_list' ? 'pl-8' : composerMode === 'message' && !isFilteredView ? 'pl-9' : ''
+                className={`min-w-0 flex-1 bg-transparent text-white placeholder:text-slate-400 text-[16px] resize-none outline-none py-2.5 leading-[1.38] overflow-y-hidden whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] transition-[padding] duration-200 ease-out ${
+                  composerMode === 'grocery_list' ? 'pl-8' : composerMode === 'message' && !isFilteredView && !inputText.trim() ? 'pl-9' : 'pl-0'
                 }`}
                 style={{ minHeight: '40px', height: '40px' }}
               />

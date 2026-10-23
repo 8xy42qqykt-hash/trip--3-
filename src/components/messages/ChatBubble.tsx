@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Heart,
   Check,
@@ -353,14 +354,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showReactionDetails, setShowReactionDetails] = useState(false);
+  const [reactionDetailsPosition, setReactionDetailsPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
   const [replySwipeOffset, setReplySwipeOffset] = useState(0);
-  const [replyWidthRelation, setReplyWidthRelation] = useState<'quote-wider' | 'message-wider' | 'similar'>('similar');
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const replyPreviewRef = useRef<HTMLDivElement>(null);
   const reactionDetailsRef = useRef<HTMLDivElement>(null);
+  const reactionBadgeRef = useRef<HTMLButtonElement>(null);
+  const reactionPopupRef = useRef<HTMLDivElement>(null);
   const linkPreviewRef = useRef<HTMLAnchorElement>(null);
   const activeBubbleRef = useRef<HTMLElement | null>(null);
 
@@ -369,22 +371,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const holdPointerIdRef = useRef<number | null>(null);
 
-  useLayoutEffect(() => {
-    if (!replyMessage) return;
-    const updateWidths = () => {
-      const quoteWidth = replyPreviewRef.current?.getBoundingClientRect().width ?? 0;
-      const messageWidth = bubbleRef.current?.getBoundingClientRect().width ?? 0;
-      if (!quoteWidth || !messageWidth) return;
-      const difference = quoteWidth - messageWidth;
-      const relation = difference > 20 ? 'quote-wider' : difference < -20 ? 'message-wider' : 'similar';
-      setReplyWidthRelation((current) => current === relation ? current : relation);
-    };
-    updateWidths();
-    const observer = new ResizeObserver(updateWidths);
-    if (replyPreviewRef.current) observer.observe(replyPreviewRef.current);
-    if (bubbleRef.current) observer.observe(bubbleRef.current);
-    return () => observer.disconnect();
-  }, [message.id, replyMessage?.id, replyMessage?.content]);
   const holdListenersCleanupRef = useRef<(() => void) | null>(null);
   const didLongPressRef = useRef(false);
   const didMoveDuringPressRef = useRef(false);
@@ -415,7 +401,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   useEffect(() => {
     if (!showReactionDetails) return;
     const handleOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && !reactionDetailsRef.current?.contains(event.target)) {
+      if (event.target instanceof Node
+        && !reactionDetailsRef.current?.contains(event.target)
+        && !reactionPopupRef.current?.contains(event.target)) {
         setShowReactionDetails(false);
       }
     };
@@ -429,6 +417,28 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       document.removeEventListener('keydown', handleEscape);
     };
   }, [showReactionDetails]);
+
+  const toggleReactionDetails = () => {
+    if (showReactionDetails) {
+      setShowReactionDetails(false);
+      return;
+    }
+    const badge = reactionBadgeRef.current?.getBoundingClientRect();
+    if (!badge) return;
+    const margin = 12;
+    const width = Math.min(300, window.innerWidth - margin * 2);
+    const maxHeight = window.innerHeight - margin * 2;
+    const popupHeight = Math.min(320, maxHeight);
+    const left = Math.min(
+      Math.max(margin, isOwn ? badge.left : badge.right - width),
+      window.innerWidth - width - margin,
+    );
+    const top = badge.bottom + 8 + popupHeight <= window.innerHeight - margin
+      ? badge.bottom + 8
+      : Math.max(margin, badge.top - popupHeight - 8);
+    setReactionDetailsPosition({ top, left, width, maxHeight });
+    setShowReactionDetails(true);
+  };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -663,7 +673,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {replyMessage && (
             <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
               <div
-                ref={replyPreviewRef}
                 className={`mb-0.5 max-w-[min(72vw,320px)] overflow-hidden rounded-[13px] border px-3 py-1.5 text-[11px] leading-snug ${
                   isOwn
                     ? 'border-white/20 bg-[#202024] text-slate-200'
@@ -677,27 +686,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   {replyMessage.content || t('Attachment')}
                 </div>
               </div>
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 30 14"
-                className={`h-3.5 w-[30px] ${isOwn ? 'self-start' : 'self-end'}`}
-                fill="none"
-              >
-                <path
-                  d={(() => {
-                    if (replyWidthRelation === 'similar') {
-                      return isOwn ? 'M2 0 C2 8 10 6 10 14' : 'M28 0 C28 8 20 6 20 14';
-                    }
-                    if (replyWidthRelation === 'quote-wider') {
-                      return isOwn ? 'M2 0 C2 10 23 4 23 14' : 'M28 0 C28 10 7 4 7 14';
-                    }
-                    return isOwn ? 'M22 0 C22 10 2 4 2 14' : 'M8 0 C8 10 28 4 28 14';
-                  })()}
-                  stroke="rgba(255,255,255,0.45)"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
             </div>
           )}
           {/* Reaction Picker overlay */}
@@ -938,12 +926,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               }`}
             >
               <button
+                ref={reactionBadgeRef}
                 type="button"
                 aria-label={t('View message reactions')}
                 aria-expanded={showReactionDetails}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setShowReactionDetails((open) => !open);
+                  toggleReactionDetails();
                 }}
                 className="flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.3)] select-none animate-calm-fade-in"
                 style={{
@@ -966,11 +955,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   );
                 })}
               </button>
-              {showReactionDetails && (
+              {showReactionDetails && reactionDetailsPosition && createPortal(
                 <div
-                  className={`absolute top-full mt-2 min-w-[190px] max-w-[min(82vw,300px)] space-y-2 rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in ${
-                    isOwn ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
-                  }`}
+                  ref={reactionPopupRef}
+                  className="fixed z-[13000] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in"
+                  style={{
+                    top: reactionDetailsPosition.top,
+                    left: reactionDetailsPosition.left,
+                    width: reactionDetailsPosition.width,
+                    maxHeight: reactionDetailsPosition.maxHeight,
+                  }}
                 >
                   {groupedReactions.map(({ kind, userIds }) => {
                     const Icon = REACTION_ICON_MAP[kind];
@@ -1004,7 +998,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                       </div>
                     );
                   })}
-                </div>
+                </div>,
+                document.body,
               )}
             </div>
           )}

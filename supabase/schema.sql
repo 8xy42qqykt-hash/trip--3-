@@ -926,21 +926,37 @@ begin
     select
       o.id as option_id,
       o.text as option_text,
-      count(v.id)::int as votes
+      o.sort_order,
+      count(v.id)::int as votes,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', p.id,
+            'display_name', p.display_name,
+            'avatar_url', p.avatar_url,
+            'color', p.color
+          ) order by p.display_name
+        ) filter (where p.id is not null),
+        '[]'::jsonb
+      ) as voters
     from public.poll_options o
     left join public.poll_votes v on v.option_id = o.id
+    left join public.profiles p on p.id = v.user_id
     where o.poll_id = p_poll_id
     group by o.id, o.text, o.sort_order
-    order by o.sort_order asc
   )
   select
     coalesce(sum(votes), 0),
-    jsonb_agg(
-      jsonb_build_object(
-        'id', option_id,
-        'text', option_text,
-        'votes', votes
-      )
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', option_id,
+          'text', option_text,
+          'votes', votes,
+          'voters', voters
+        ) order by sort_order
+      ),
+      '[]'::jsonb
     )
   into v_total_votes, v_options_json
   from option_counts;

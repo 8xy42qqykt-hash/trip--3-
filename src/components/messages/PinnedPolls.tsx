@@ -187,9 +187,9 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                         style={{ width: `${pct}%` }}
                       />
 
-                      <div className="relative z-10 flex items-center gap-2.5 flex-1 pr-2 truncate">
+                      <div className="relative z-10 flex min-w-0 flex-1 items-start gap-2.5 pr-2">
                         <div
-                          className={`w-[22px] h-[22px] rounded-full flex items-center justify-center transition-all duration-200 ${
+                          className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full transition-all duration-200 ${
                             hasVoted
                               ? 'bg-[#0A84FF] text-white shadow-xs'
                               : 'border-2 border-white/30'
@@ -198,7 +198,7 @@ export const PinnedPolls: React.FC<PinnedPollsProps> = ({
                           {hasVoted && <Check size={12} weight="bold" />}
                         </div>
                         <span
-                          className={`text-sm truncate ${
+                          className={`min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere] text-sm ${
                             isWinning
                               ? 'font-bold text-white'
                               : isLosing

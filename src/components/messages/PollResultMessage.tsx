@@ -35,31 +35,31 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata }
 
           return (
             <div key={opt.id} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <span className={`text-sm truncate text-white ${isWinner ? 'font-bold' : 'font-medium'}`}>
+                  <span className={`block whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-white ${isWinner ? 'font-bold' : 'font-medium'}`}>
                     {opt.text}
                   </span>
+                  {voters.length > 0 && (
+                    <div className="mt-1.5 flex items-center -space-x-2" aria-label={t('Voters')}>
+                      {voters.map((voter: any) => (
+                        <span key={voter.id} className="relative">
+                          <Avatar
+                            name={voter.display_name}
+                            avatarUrl={voter.avatar_url}
+                            color={voter.color}
+                            size={22}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <span className="text-xs font-bold opacity-90 shrink-0 text-white">
                   {pct}%
                 </span>
               </div>
-
-              {voters.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5" aria-label={t('Voters')}>
-                  {voters.map((voter: any) => (
-                    <Avatar
-                      key={voter.id}
-                      name={voter.display_name}
-                      avatarUrl={voter.avatar_url}
-                      color={voter.color}
-                      size={22}
-                    />
-                  ))}
-                </div>
-              )}
 
               {/* Slider bar */}
               <div className="w-full h-2 rounded-full overflow-hidden bg-white/20">
