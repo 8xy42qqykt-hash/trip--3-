@@ -1,6 +1,9 @@
 -- ====================================================================
 -- TRIP APP: Complete Supabase Fresh Reset & Schema Installation
--- Run this entire script in Supabase SQL Editor (https://supabase.com)
+-- DESTRUCTIVE: this script drops public tables and deletes their data.
+-- Never run it against an existing/production database with trips, users,
+-- messages, or other data you need to keep. For link previews on an existing
+-- database, run only supabase/migrations/20261026_link_preview_cache.sql.
 -- ====================================================================
 
 -- 1. DROP EXISTING TRIGGERS, FUNCTIONS, POLICIES & TABLES
@@ -142,6 +145,18 @@ create table public.messages (
   metadata jsonb,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Backend-only cache for link preview metadata.
+create table public.link_preview_cache (
+  url text primary key,
+  preview jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+create index link_preview_cache_expiration
+  on public.link_preview_cache (expires_at);
+revoke all on public.link_preview_cache from public, anon, authenticated;
+grant all on public.link_preview_cache to service_role;
 
 -- 8. REACTIONS TABLE
 create table public.reactions (
@@ -309,6 +324,7 @@ alter table public.profiles enable row level security;
 alter table public.trips enable row level security;
 alter table public.trip_members enable row level security;
 alter table public.messages enable row level security;
+alter table public.link_preview_cache enable row level security;
 alter table public.reactions enable row level security;
 alter table public.polls enable row level security;
 alter table public.poll_options enable row level security;

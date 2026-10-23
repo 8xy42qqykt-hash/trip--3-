@@ -162,6 +162,8 @@ const translations: Record<string, string> = {
   'Add time': 'Lisää aika',
   'Add new plan': 'Lisää uusi suunnitelma',
   'Message...': 'Viesti...',
+  'Loading link preview…': 'Ladataan linkin esikatselua…',
+  'Open link to': 'Avaa linkki:',
   'Start a call': 'Aloita puhelu',
   'Close call menu': 'Sulje puheluvalikko',
   'Dismiss call error': 'Sulje puheluvirhe',

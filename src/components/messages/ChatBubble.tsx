@@ -19,6 +19,7 @@ import { DrawGameInviteCard } from './DrawGameInviteCard';
 import { GameSessionInviteCard } from './GameSessionInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { StickerArtwork } from './StickerArtwork';
+import { findFirstLink, removeFirstLink } from '../../utils/links';
 
 interface ChatBubbleProps {
   message: Message;
@@ -51,101 +52,149 @@ const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
   Question,
 };
 
-const LINK_PATTERN = /(?:https?:\/\/|www\.)[^\s<>"']+/i;
-const TRAILING_LINK_PUNCTUATION = /[),.!?;:]+$/;
-
-const parseLink = (rawUrl: string) => {
-  const displayUrl = rawUrl.replace(TRAILING_LINK_PUNCTUATION, '');
-  if (!displayUrl) return null;
-  const href = displayUrl.startsWith('www.') ? `https://${displayUrl}` : displayUrl;
-  try {
-    const parsed = new URL(href);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-    return { href: parsed.href, displayUrl, host: parsed.hostname.replace(/^www\./i, ''), path: `${parsed.pathname}${parsed.search}${parsed.hash}` };
-  } catch {
-    return null;
-  }
+type LinkPreviewData = {
+  status: 'pending' | 'ready';
+  url: string;
+  title?: string;
+  description?: string | null;
+  image?: string | null;
+  siteName?: string;
+  favicon?: string | null;
+  video?: boolean;
 };
 
-const findFirstLink = (content: string) => {
-  const match = content.match(LINK_PATTERN);
-  return match ? parseLink(match[0]) : null;
-};
+const LinkPreview: React.FC<{
+  preview: LinkPreviewData;
+  fallbackLink: NonNullable<ReturnType<typeof findFirstLink>>;
+  onPointerDown?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
+  onPointerMove?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
+  onPointerUp?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
+  onPointerCancel?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  anchorRef?: React.Ref<HTMLAnchorElement>;
+}> = ({
+  preview,
+  fallbackLink,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onContextMenu,
+  onClick,
+  anchorRef,
+}) => {
+  const { t } = useLanguage();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [faviconFailed, setFaviconFailed] = useState(false);
+  const host = (() => {
+    try {
+      return new URL(preview.url).hostname.replace(/^www\./i, '');
+    } catch {
+      return fallbackLink.host;
+    }
+  })();
+  const title = preview.title || host;
+  const siteName = preview.siteName || host;
+  const image = preview.image && preview.image !== preview.favicon ? preview.image : null;
 
-const LinkPreview: React.FC<{ content: string }> = ({ content }) => {
-  const link = findFirstLink(content);
-  if (!link) return null;
-  const host = link.host.toLowerCase();
-  const isSpotify = host === 'spotify.com' || host.endsWith('.spotify.com');
-  const isYouTube = host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
-  const isInstagram = host === 'instagram.com' || host.endsWith('.instagram.com');
-  const isTikTok = host === 'tiktok.com' || host.endsWith('.tiktok.com');
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageFailed(false);
+    setFaviconFailed(false);
+  }, [image, preview.favicon]);
+
   return (
     <a
-      href={link.href}
+      ref={anchorRef}
+      href={preview.url || fallbackLink.href}
       target="_blank"
       rel="noopener noreferrer"
-      onPointerDown={(event) => event.stopPropagation()}
-      onPointerUp={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-      className="mb-1.5 block w-[min(72vw,260px)] max-w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)]"
-      aria-label={`Open link to ${link.host}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onContextMenu={onContextMenu}
+      onClick={onClick}
+      data-link-preview="true"
+      className="mt-1.5 block w-[min(72vw,340px)] max-w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)] transition-transform active:scale-[0.99]"
+      aria-label={`${t('Open link to')} ${host}`}
     >
       <div
-        className={`relative flex h-28 items-center justify-center overflow-hidden ${
-          isSpotify
-            ? 'bg-[radial-gradient(ellipse_at_50%_110%,rgba(35,215,96,0.52),transparent_62%),linear-gradient(135deg,#182922,#101312)]'
-            : isYouTube
-              ? 'bg-[radial-gradient(ellipse_at_50%_110%,rgba(255,30,30,0.42),transparent_60%),linear-gradient(135deg,#2a1719,#111113)]'
-              : isInstagram
-                ? 'bg-[linear-gradient(125deg,#612bc2,#d12c84,#f2a13b)]'
-                : isTikTok
-                  ? 'bg-[radial-gradient(ellipse_at_25%_70%,rgba(37,244,238,0.32),transparent_52%),radial-gradient(ellipse_at_78%_25%,rgba(254,44,85,0.35),transparent_52%),#111113]'
-                  : 'bg-[radial-gradient(ellipse_at_20%_25%,rgba(130,190,255,0.6),transparent_52%),radial-gradient(ellipse_at_80%_75%,rgba(10,132,255,0.55),transparent_55%),linear-gradient(135deg,#20232c,#111318)]'
-        }`}
+        className="relative flex aspect-[1.91/1] items-center justify-center overflow-hidden bg-white/[0.06]"
       >
-        {isSpotify ? (
-          <svg aria-label="Spotify" role="img" viewBox="0 0 64 64" className="relative h-[66px] w-[66px] drop-shadow-xl">
-            <circle cx="32" cy="32" r="31" fill="#1ED760" />
-            <path d="M15 25c11-3 24-2 34 4" fill="none" stroke="#102117" strokeWidth="5" strokeLinecap="round" />
-            <path d="M18 33c9-2 20-1 28 4" fill="none" stroke="#102117" strokeWidth="4.5" strokeLinecap="round" />
-            <path d="M21 41c7-1 14 0 21 4" fill="none" stroke="#102117" strokeWidth="4" strokeLinecap="round" />
-          </svg>
-        ) : isYouTube ? (
-          <span className="relative flex h-[52px] w-[74px] items-center justify-center rounded-[17px] bg-[#FF0033] shadow-xl">
-            <span className="ml-1 h-0 w-0 border-y-[12px] border-y-transparent border-l-[18px] border-l-white" />
-          </span>
-        ) : isInstagram ? (
-          <span className="relative flex h-[66px] w-[66px] items-center justify-center rounded-[21px] border-[5px] border-white shadow-xl">
-            <span className="h-7 w-7 rounded-full border-[4px] border-white" />
-            <span className="absolute right-[9px] top-[9px] h-2 w-2 rounded-full bg-white" />
-          </span>
-        ) : isTikTok ? (
-          <span className="relative text-[76px] font-black leading-none text-white drop-shadow-[3px_3px_0_#25F4EE] [text-shadow:-3px_-3px_0_#FE2C55]">♪</span>
-        ) : (
-          <>
-            <span className="absolute -right-3 -top-8 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
-            <span className="absolute -bottom-10 -left-5 h-28 w-28 rounded-full border border-white/15 bg-white/[0.05]" />
-            <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-black/20 text-white shadow-lg backdrop-blur-sm">
-              <span className="text-2xl font-black">{link.host.charAt(0).toUpperCase()}</span>
-            </span>
-          </>
+        {preview.status === 'pending' && (
+          <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-gradient-to-r from-white/[0.02] via-white/[0.11] to-white/[0.02]" />
         )}
-        <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/35 text-white/80">
+        {image && !imageFailed ? (
+          <>
+            {!imageLoaded && (
+              <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-white/[0.08]" />
+            )}
+            <img
+              src={image}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageFailed(true)}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            />
+          </>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(ellipse_at_50%_120%,rgba(10,132,255,0.22),transparent_68%)]">
+            {preview.favicon && !faviconFailed ? (
+              <img
+                src={preview.favicon}
+                alt=""
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => setFaviconFailed(true)}
+                className="h-12 w-12 rounded-xl object-contain"
+              />
+            ) : (
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white/80">
+                <ArrowSquareOut size={22} weight="bold" />
+              </span>
+            )}
+          </div>
+        )}
+        {preview.video && (
+          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
+            <span className="ml-1 h-0 w-0 border-y-[9px] border-y-transparent border-l-[14px] border-l-white" />
+          </span>
+        )}
+        <span className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white/85">
           <ArrowSquareOut size={15} weight="bold" />
         </span>
       </div>
-      <div className="min-w-0 px-3.5 py-2.5">
-        <span className="block truncate text-sm font-bold text-white">
-          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : isInstagram ? 'Instagram' : isTikTok ? 'TikTok' : link.host}
+      <div className="min-w-0 px-3.5 py-3">
+        <span className="line-clamp-2 text-sm font-bold leading-snug text-white">
+          {preview.status === 'pending' ? t('Loading link preview…') : title}
         </span>
-        <span className="mt-0.5 block truncate text-xs text-white/65">{link.path || link.displayUrl}</span>
+        {preview.status === 'ready' && preview.description && (
+          <span className="mt-1 line-clamp-3 text-xs leading-relaxed text-white/65">
+            {preview.description}
+          </span>
+        )}
+        <span className="mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-white/50">
+          {preview.favicon && !faviconFailed && (
+            <img src={preview.favicon} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFaviconFailed(true)} className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+          )}
+          <span className="truncate">{siteName}</span>
+        </span>
       </div>
     </a>
   );
 };
 
-const renderContentWithMentions = (content: string, isOwnBubble: boolean, members: TripMember[]) => {
+const renderContentWithMentions = (
+  content: string,
+  isOwnBubble: boolean,
+  members: TripMember[],
+  preventLinkNavigation?: () => boolean,
+) => {
   if (!content) return null;
   const names = members
     .map((member) => member.profile?.display_name?.trim())
@@ -157,7 +206,7 @@ const renderContentWithMentions = (content: string, isOwnBubble: boolean, member
     const linkMatch = content.slice(cursor).match(/^(?:https?:\/\/|www\.)[^\s<>"']+/i);
     if (linkMatch?.index === 0) {
       const rawUrl = linkMatch[0];
-      const link = parseLink(rawUrl);
+      const link = findFirstLink(rawUrl);
       if (link) {
         parts.push(
           <a
@@ -165,9 +214,11 @@ const renderContentWithMentions = (content: string, isOwnBubble: boolean, member
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              if (preventLinkNavigation?.()) event.preventDefault();
+              event.stopPropagation();
+            }}
+            data-chat-link="true"
             className="break-all underline decoration-current/50 underline-offset-2"
           >
             {link.displayUrl}
@@ -262,6 +313,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const linkPreviewRef = useRef<HTMLAnchorElement>(null);
+  const activeBubbleRef = useRef<HTMLElement | null>(null);
 
   const lastTapTimeRef = useRef<number>(0);
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -291,6 +344,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     clearLongPress();
     didLongPressRef.current = false;
     didMoveDuringPressRef.current = false;
+    activeBubbleRef.current = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
     holdPointerIdRef.current = e.pointerId;
     startPosRef.current = { x: e.clientX, y: e.clientY };
 
@@ -322,8 +376,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     pressTimerRef.current = setTimeout(() => {
       didLongPressRef.current = true;
       clearLongPress();
-      if (bubbleRef.current) {
-        setBubbleRect(bubbleRef.current.getBoundingClientRect());
+      const bubbleElement = activeBubbleRef.current || bubbleRef.current || linkPreviewRef.current;
+      if (bubbleElement) {
+        setBubbleRect(bubbleElement.getBoundingClientRect());
       }
       setShowReactionPicker(true);
     }, 500);
@@ -340,10 +395,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (event?: React.PointerEvent) => {
     clearLongPress();
     startPosRef.current = null;
     if (didLongPressRef.current) {
+      return;
+    }
+    if (event?.target instanceof Element && event.target.closest('a')) {
+      lastTapTimeRef.current = 0;
       return;
     }
     if (didMoveDuringPressRef.current) {
@@ -407,6 +466,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const stickerId = typeof message.metadata?.stickerId === 'string' ? message.metadata.stickerId : null;
   const isSticker = message.type === 'text' && stickerId !== null;
   const callId = message.metadata?.callId;
+  const firstLink = findFirstLink(message.content);
+  const linkPreview = message.metadata?.linkPreview as LinkPreviewData | undefined;
+  const canShowLinkPreview = !isImageOnly
+    && Boolean(firstLink)
+    && (message.type === 'text' || message.type === 'grocery_list' || message.type === 'meal' || message.type === 'plan')
+    && (linkPreview?.status === 'pending' || linkPreview?.status === 'ready');
+  const displayContent = canShowLinkPreview && firstLink
+    ? removeFirstLink(message.content, firstLink)
+    : message.content;
+  const hideLinkOnlyBubble = canShowLinkPreview
+    && !displayContent
+    && !replyMessage
+    && (message.type === 'text' || message.type === 'meal' || message.type === 'plan');
 
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
   const getBubbleRadiusClasses = () => {
@@ -438,7 +510,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               message={message}
               isOwnMessage={isOwn}
               bubbleRect={bubbleRect}
-              bubbleElement={bubbleRef.current}
+              bubbleElement={activeBubbleRef.current || bubbleRef.current || linkPreviewRef.current}
               currentReaction={userCurrentReaction}
               onReact={(kind) => {
                 onReact(message.id, kind);
@@ -477,10 +549,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               })}
             </div>
           )}
-          {!isImageOnly && (message.type === 'text' || message.type === 'meal' || message.type === 'plan') && (
-            <LinkPreview content={message.content} />
-          )}
-
           {/* Image Bubble */}
           {isImageOnly ? (
             <div
@@ -512,29 +580,30 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               />
               {message.content && (
                 <p className="min-w-0 max-w-full px-1.5 text-base text-white whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                  {renderContentWithMentions(message.content, isOwn, members)}
+                  {renderContentWithMentions(message.content, isOwn, members, () => didLongPressRef.current)}
                 </p>
               )}
             </div>
           ) : (
             <div className="relative min-w-0 max-w-full [overflow-wrap:anywhere]">
-              <div
-                ref={bubbleRef}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerCancel}
-                onContextMenu={handleContextMenu}
-                className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${
-                  isSticker
-                    ? 'bg-transparent p-0 shadow-none'
-                    : `px-4 py-2.5 text-[16px] leading-[1.4] ${getBubbleRadiusClasses()} ${
-                      isOwn
-                        ? 'bg-[#0A84FF] text-white shadow-xs'
-                        : 'bg-[#262629] text-white shadow-xs'
-                    }`
-                }`}
-              >
+              {!hideLinkOnlyBubble && (
+                <div
+                  ref={bubbleRef}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                  onContextMenu={handleContextMenu}
+                  className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${
+                    isSticker
+                      ? 'bg-transparent p-0 shadow-none'
+                      : `px-4 py-2.5 text-[16px] leading-[1.4] ${getBubbleRadiusClasses()} ${
+                        isOwn
+                          ? 'bg-[#0A84FF] text-white shadow-xs'
+                          : 'bg-[#262629] text-white shadow-xs'
+                        } ${canShowLinkPreview ? 'min-w-[min(72vw,340px)]' : ''}`
+                  }`}
+                >
                 {/* Reply Preview */}
                 {replyMessage && (
                   <div
@@ -616,7 +685,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : message.type === 'meal' || message.type === 'plan' ? (
                   <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
-                    <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(message.content, isOwn, members)}</p>
+                    <p className="whitespace-pre-wrap break-words">{renderContentWithMentions(displayContent, isOwn, members, () => didLongPressRef.current)}</p>
                   </div>
                 ) : message.type === 'draw_game' ? (
                   <DrawGameInviteCard
@@ -664,10 +733,26 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   </div>
                 ) : (
                   <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                    {renderContentWithMentions(message.content, isOwn, members)}
+                    {renderContentWithMentions(displayContent, isOwn, members, () => didLongPressRef.current)}
                   </p>
                 )}
-              </div>
+                </div>
+              )}
+              {canShowLinkPreview && firstLink && linkPreview && (
+                <LinkPreview
+                  preview={linkPreview}
+                  fallbackLink={firstLink}
+                  anchorRef={linkPreviewRef}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                  onContextMenu={handleContextMenu}
+                  onClick={(event) => {
+                    if (didLongPressRef.current) event.preventDefault();
+                  }}
+                />
+              )}
             </div>
           )}
 

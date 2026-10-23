@@ -43,6 +43,7 @@ import { TripGameSession } from './TripGameSession';
 import { useLanguage } from '../../context/LanguageContext';
 import { CHAT_STICKERS, StickerArtwork } from './StickerArtwork';
 import tripLogo from '../../../trip-logo.png';
+import { findFirstLink } from '../../utils/links';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan' | 'games';
@@ -153,6 +154,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [showMessageLoader, setShowMessageLoader] = useState(false);
   const scrollContentRef = useRef<HTMLDivElement>(null);
   const keepScrollAtBottomRef = useRef(false);
+  const latestMessagesRef = useRef(messages);
+  const pendingLinkPreviewRequestsRef = useRef(new Set<string>());
+  latestMessagesRef.current = messages;
 
   // Virtual keyboard tracking for mobile (using accurate visualViewport bottom offset)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -489,6 +493,68 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }, [messageRevealPhase, messages.length]);
 
   useEffect(() => {
+    if (!user) return;
+    const pendingMessages = messages.filter((message) => (
+      message.user_id === user.id
+      && message.metadata?.linkPreview?.status === 'pending'
+      && typeof message.metadata?.linkPreview?.requestId === 'string'
+      && typeof message.metadata?.linkPreview?.url === 'string'
+    ));
+
+    for (const message of pendingMessages) {
+      const previewRequest = message.metadata!.linkPreview;
+      const requestId = previewRequest.requestId as string;
+      if (pendingLinkPreviewRequestsRef.current.has(requestId)) continue;
+      pendingLinkPreviewRequestsRef.current.add(requestId);
+
+      const resolvePreview = async () => {
+        let linkPreview: Record<string, unknown>;
+        if (!supabase) {
+          linkPreview = { status: 'error', requestId };
+        } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('link-preview', {
+              body: { url: previewRequest.url },
+            });
+            if (
+              error
+              || !data
+              || typeof data.title !== 'string'
+              || typeof data.siteName !== 'string'
+            ) {
+              if (error) console.warn('Could not load link preview:', error.message);
+              linkPreview = { status: 'error', requestId };
+            } else {
+              linkPreview = { ...data, status: 'ready', requestId };
+            }
+          } catch (error) {
+            console.warn('Could not load link preview:', error);
+            linkPreview = { status: 'error', requestId };
+          }
+        }
+
+        const latestMessage = latestMessagesRef.current.find((candidate) => candidate.id === message.id);
+        if (
+          !latestMessage
+          || latestMessage.metadata?.linkPreview?.requestId !== requestId
+          || latestMessage.metadata?.linkPreview?.status !== 'pending'
+        ) return;
+        try {
+          await updateMessage(latestMessage.id, {
+            content: latestMessage.content,
+            type: latestMessage.type,
+            metadata: { ...latestMessage.metadata, linkPreview },
+          });
+        } catch (error) {
+          console.error('Could not save link preview metadata:', error);
+        }
+      };
+
+      void resolvePreview();
+    }
+  }, [messages, updateMessage, user]);
+
+  useEffect(() => {
     if (!isKeyboardOpen || !isInputFocusedRef.current) return;
 
     let frame = window.requestAnimationFrame(() => {
@@ -619,14 +685,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     const replyId = replyingTo?.id;
     const type = pendingPhoto ? 'text' : composerMode === 'message' ? 'text' : composerMode;
     const editing = !pendingPhoto && editingMessageId ? messages.find((message) => message.id === editingMessageId) : undefined;
-    const previousMetadata = editing?.metadata || {};
+    const previousMetadata = { ...(editing?.metadata || {}) };
+    delete previousMetadata.linkPreview;
+    const firstLink = findFirstLink(clean);
     const previousCheckedByText = new Map<string, boolean[]>();
     for (const item of previousMetadata.items || []) {
       const matchingItems = previousCheckedByText.get(item.text) || [];
       matchingItems.push(Boolean(item.checked));
       previousCheckedByText.set(item.text, matchingItems);
     }
-    const metadata = pendingPhoto
+    const baseMetadata = pendingPhoto
       ? undefined
       : composerMode === 'grocery_list'
         ? {
@@ -640,6 +708,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           : composerMode === 'plan'
             ? { ...previousMetadata, date: planDate, time: planTime || null, contributors: previousMetadata.contributors || [] }
             : undefined;
+    const metadata = pendingPhoto
+      ? undefined
+      : firstLink
+        ? {
+            ...(baseMetadata || {}),
+            linkPreview: {
+              status: 'pending',
+              url: firstLink.href,
+              requestId: crypto.randomUUID(),
+            },
+          }
+        : baseMetadata;
     if (pendingPhoto) uploadInProgressRef.current = true;
     sendInProgressRef.current = true;
     setUploadingImage(Boolean(pendingPhoto));
@@ -655,7 +735,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         setPendingPhoto(null);
         if (clean) {
           setInputText(clean);
-          await sendMessage(clean);
+          await sendMessage(
+            clean,
+            undefined,
+            undefined,
+            'text',
+            firstLink
+              ? {
+                  linkPreview: {
+                    status: 'pending',
+                    url: firstLink.href,
+                    requestId: crypto.randomUUID(),
+                  },
+                }
+              : undefined,
+          );
         }
       } else if (editingMessageId) {
         await updateMessage(editingMessageId, { content: clean, type, metadata });
