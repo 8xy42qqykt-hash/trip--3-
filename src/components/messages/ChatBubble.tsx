@@ -8,6 +8,12 @@ import {
   HandsClapping,
   Question,
   ArrowSquareOut,
+  FacebookLogo,
+  InstagramLogo,
+  RedditLogo,
+  SpotifyLogo,
+  TiktokLogo,
+  YoutubeLogo,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -63,9 +69,19 @@ type LinkPreviewData = {
   video?: boolean;
 };
 
+const LINK_BRANDS = [
+  { domains: ['tiktok.com'], name: 'TikTok', Icon: TiktokLogo, color: '#101013' },
+  { domains: ['instagram.com'], name: 'Instagram', Icon: InstagramLogo, color: '#c13584' },
+  { domains: ['facebook.com', 'fb.com'], name: 'Facebook', Icon: FacebookLogo, color: '#1877f2' },
+  { domains: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'], name: 'YouTube', Icon: YoutubeLogo, color: '#ff0033' },
+  { domains: ['reddit.com', 'redd.it'], name: 'Reddit', Icon: RedditLogo, color: '#ff4500' },
+  { domains: ['spotify.com'], name: 'Spotify', Icon: SpotifyLogo, color: '#1ed760' },
+] as const;
+
 const LinkPreview: React.FC<{
   preview: LinkPreviewData;
   fallbackLink: NonNullable<ReturnType<typeof findFirstLink>>;
+  cardClassName: string;
   onPointerDown?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
   onPointerMove?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
   onPointerUp?: (event: React.PointerEvent<HTMLAnchorElement>) => void;
@@ -76,6 +92,7 @@ const LinkPreview: React.FC<{
 }> = ({
   preview,
   fallbackLink,
+  cardClassName,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -98,6 +115,10 @@ const LinkPreview: React.FC<{
   const title = preview.title || host;
   const siteName = preview.siteName || host;
   const image = preview.image && preview.image !== preview.favicon ? preview.image : null;
+  const normalizedHost = host.toLowerCase();
+  const brand = LINK_BRANDS.find(({ domains }) => domains.some((domain) => (
+    normalizedHost === domain || normalizedHost.endsWith(`.${domain}`)
+  )));
 
   useEffect(() => {
     setImageLoaded(false);
@@ -118,11 +139,17 @@ const LinkPreview: React.FC<{
       onContextMenu={onContextMenu}
       onClick={onClick}
       data-link-preview="true"
-      className="mt-1.5 block w-[min(72vw,340px)] max-w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)] transition-transform active:scale-[0.99]"
+      className={`mt-1.5 block w-[min(72vw,340px)] max-w-full overflow-hidden border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)] transition-transform active:scale-[0.99] select-none ${cardClassName}`}
+      style={{
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+      }}
       aria-label={`${t('Open link to')} ${host}`}
     >
       <div
         className="relative flex aspect-[1.91/1] items-center justify-center overflow-hidden bg-white/[0.06]"
+        style={brand ? { backgroundColor: brand.color } : undefined}
       >
         {preview.status === 'pending' && (
           <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-gradient-to-r from-white/[0.02] via-white/[0.11] to-white/[0.02]" />
@@ -143,8 +170,12 @@ const LinkPreview: React.FC<{
             />
           </>
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(ellipse_at_50%_120%,rgba(10,132,255,0.22),transparent_68%)]">
-            {preview.favicon && !faviconFailed ? (
+          <div className={`flex h-full w-full items-center justify-center ${
+            brand ? '' : 'bg-[radial-gradient(ellipse_at_50%_120%,rgba(10,132,255,0.22),transparent_68%)]'
+          }`}>
+            {brand ? (
+              <brand.Icon size={64} weight="fill" color="white" />
+            ) : preview.favicon && !faviconFailed ? (
               <img
                 src={preview.favicon}
                 alt=""
@@ -159,6 +190,11 @@ const LinkPreview: React.FC<{
               </span>
             )}
           </div>
+        )}
+        {brand && image && !imageFailed && (
+          <span className="absolute left-2.5 top-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white shadow-lg backdrop-blur-sm">
+            <brand.Icon size={21} weight="fill" />
+          </span>
         )}
         {preview.video && (
           <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
@@ -214,12 +250,18 @@ const renderContentWithMentions = (
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
+            onContextMenu={(event) => event.preventDefault()}
             onClick={(event) => {
               if (preventLinkNavigation?.()) event.preventDefault();
               event.stopPropagation();
             }}
             data-chat-link="true"
             className="break-all underline decoration-current/50 underline-offset-2"
+            style={{
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
           >
             {link.displayUrl}
           </a>,
@@ -261,6 +303,7 @@ const renderContentWithMentions = (
               ? 'bg-white/25 text-white underline decoration-white/40'
               : 'bg-[#0A84FF]/25 text-[#70baff] font-bold'
           }`}
+          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
           {matchedText}
         </span>,
@@ -437,8 +480,22 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     window.setTimeout(() => setReactionBurst(0), 700);
   };
 
+  const firstLink = findFirstLink(message.content);
+
   const copyContent = () => {
     navigator.clipboard.writeText(message.content || message.image_url || '');
+  };
+
+  const copyLink = () => {
+    if (!firstLink) return;
+    void navigator.clipboard.writeText(firstLink.href).catch((error) => {
+      console.error('Could not copy the link:', error);
+    });
+  };
+
+  const openLink = () => {
+    if (!firstLink) return;
+    window.open(firstLink.href, '_blank', 'noopener,noreferrer');
   };
 
   // Group reactions by kind
@@ -466,7 +523,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const stickerId = typeof message.metadata?.stickerId === 'string' ? message.metadata.stickerId : null;
   const isSticker = message.type === 'text' && stickerId !== null;
   const callId = message.metadata?.callId;
-  const firstLink = findFirstLink(message.content);
   const linkPreview = message.metadata?.linkPreview as LinkPreviewData | undefined;
   const canShowLinkPreview = !isImageOnly
     && Boolean(firstLink)
@@ -528,6 +584,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               }}
               onReply={() => onReply(message)}
               onCopy={copyContent}
+              linkUrl={firstLink?.href}
+              onCopyLink={firstLink ? copyLink : undefined}
+              onOpenLink={firstLink ? openLink : undefined}
               onDelete={isOwn && onDelete && message.type !== 'call' ? () => onDelete(message.id) : undefined}
               onEdit={['grocery_list', 'meal', 'plan'].includes(message.type) ? () => onEdit?.(message) : undefined}
               onAction={['meal', 'plan'].includes(message.type) ? (action) => onToggleAction?.(message, action) : undefined}
@@ -571,7 +630,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               onClick={() => {
                 if (!didLongPressRef.current) onOpenImage?.(message.image_url!);
               }}
-              className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y]"
+              className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y] select-none"
+              style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
             >
               {replyMessage && (
                 <div className="mb-1 max-w-full min-w-0 px-3.5 py-1.5 rounded-[16px] text-xs bg-white/10 text-slate-200">
@@ -607,7 +667,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${
                     isSticker
                       ? 'bg-transparent p-0 shadow-none'
-                      : `px-4 py-2.5 text-[16px] leading-[1.4] ${getBubbleRadiusClasses()} ${
+                      : `px-4 py-2.5 text-[16px] leading-[1.4] border border-white/10 ${getBubbleRadiusClasses()} ${
                         isOwn
                           ? 'bg-[#0A84FF] text-white shadow-xs'
                           : 'bg-[#262629] text-white shadow-xs'
@@ -752,6 +812,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 <LinkPreview
                   preview={visibleLinkPreview}
                   fallbackLink={firstLink}
+                  cardClassName={getBubbleRadiusClasses()}
                   anchorRef={linkPreviewRef}
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}

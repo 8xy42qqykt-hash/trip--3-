@@ -151,6 +151,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [gameScoreError, setGameScoreError] = useState('');
   const [gameScores, setGameScores] = useState<Array<{ userId: string; name: string; avatarUrl: string | null; color: string; score: number }>>([]);
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
   const scrollContentRef = useRef<HTMLDivElement>(null);
@@ -341,6 +343,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           textareaRef.current.style.height = `${Math.max(40, scrollH)}px`;
         }
         isInputFocusedRef.current = true;
+        setIsComposerFocused(true);
         notifyKeyboard(true);
       }, 80);
     }
@@ -365,6 +368,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const handleFocus = () => {
     isInputFocusedRef.current = true;
+    setIsComposerFocused(true);
     notifyKeyboard(true);
     const offset = calcKeyboardOffset();
     setKeyboardOffset(offset);
@@ -380,6 +384,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         return;
       }
       isInputFocusedRef.current = false;
+      setIsComposerFocused(false);
       setMentionQuery(null);
       const offset = calcKeyboardOffset();
       if (offset <= 20) {
@@ -426,6 +431,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      setIsAtBottom(true);
     }
   };
 
@@ -691,6 +697,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const openStickerPicker = () => {
     textareaRef.current?.blur();
     isInputFocusedRef.current = false;
+    setIsComposerFocused(false);
     notifyKeyboard(false);
     setIsKeyboardOpen(false);
     setKeyboardOffset(0);
@@ -800,6 +807,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         textareaRef.current.focus({ preventScroll: true });
       }
       isInputFocusedRef.current = true;
+      setIsComposerFocused(true);
       notifyKeyboard(true);
     } catch (error) {
       console.error('Could not send or update the chat message:', error);
@@ -864,6 +872,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
     if (isInputFocusedRef.current || document.activeElement === textareaRef.current) {
       isInputFocusedRef.current = false;
+      setIsComposerFocused(false);
       textareaRef.current?.blur();
       notifyKeyboard(false);
       setKeyboardOffset(0);
@@ -1140,7 +1149,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
   const hasOpenPolls = polls.some((p) => !p.is_closed);
   const handleChatScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    setIsTitleCollapsed(event.currentTarget.scrollTop > 40);
+    const element = event.currentTarget;
+    setIsTitleCollapsed(element.scrollTop > 40);
+    setIsAtBottom(element.scrollHeight - element.clientHeight - element.scrollTop <= 72);
   };
 
   // Filter mention candidate members
@@ -1291,7 +1302,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   });
                   setIsCallMenuOpen(true);
                 }}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg active:scale-95"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-[#0A84FF] text-white shadow-lg active:scale-95"
               >
                 {selectedPhoto ? <X size={20} weight="bold" /> : <Phone size={20} weight="fill" />}
               </button>
@@ -1461,7 +1472,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         style={{
           bottom: isKeyboardOpen
             ? `${Math.max(8, keyboardOffset + 6)}px`
-            : `calc(${isGamesView ? '32px' : '42px'} + env(safe-area-inset-bottom, 0px))`,
+            : `calc(42px + env(safe-area-inset-bottom, 0px))`,
         }}
         data-reaction-clearance
         className="absolute left-3.5 right-3.5 z-30 pointer-events-auto transition-[bottom] duration-150 ease-out"
@@ -1740,6 +1751,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             || (onlineMembers.length > 0 && !isMentionListVisible)) && (
             <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 flex min-h-8 items-center justify-between">
               <div className="flex min-w-0 items-center gap-3 pl-1">
+                <AnimatePresence initial={false}>
+                {(isAtBottom || isComposerFocused) && (
+                  <motion.div
+                    key="composer-shortcuts"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    className="flex min-w-0 items-center gap-3"
+                  >
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
                   <>
                     <button
@@ -1805,6 +1826,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     />
                   </label>
                 )}
+                  </motion.div>
+                )}
+                </AnimatePresence>
               </div>
               {onlineMembers.length > 0 && (
                 <div

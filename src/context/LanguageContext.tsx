@@ -164,6 +164,8 @@ const translations: Record<string, string> = {
   'Message...': 'Viesti...',
   'Loading link preview…': 'Ladataan linkin esikatselua…',
   'Open link to': 'Avaa linkki:',
+  'Copy link': 'Kopioi linkki',
+  'Open link': 'Avaa linkki',
   'Start a call': 'Aloita puhelu',
   'Close call menu': 'Sulje puheluvalikko',
   'Dismiss call error': 'Sulje puheluvirhe',

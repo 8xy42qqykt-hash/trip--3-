@@ -14,6 +14,7 @@ import {
   PencilSimple,
   CookingPot,
   HandHeart,
+  ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
@@ -30,6 +31,9 @@ interface ReactionPickerProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onAction?: (action: 'Cook' | 'Contribute') => void;
+  linkUrl?: string;
+  onCopyLink?: () => void;
+  onOpenLink?: () => void;
   onClose: () => void;
 }
 
@@ -54,6 +58,9 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   onDelete,
   onEdit,
   onAction,
+  linkUrl,
+  onCopyLink,
+  onOpenLink,
   onClose,
 }) => {
   const { t } = useLanguage();
@@ -65,7 +72,12 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   const reactionBarHeight = 52;
   const reactionBarWidth = 276;
   const gap = 12;
-  const menuHeight = 104 + (onEdit ? 44 : 0) + (onAction ? 44 : 0) + (isOwnMessage && onDelete ? 44 : 0);
+  const menuHeight = 104
+    + (linkUrl && onCopyLink ? 44 : 0)
+    + (linkUrl && onOpenLink ? 44 : 0)
+    + (onEdit ? 44 : 0)
+    + (onAction ? 44 : 0)
+    + (isOwnMessage && onDelete ? 44 : 0);
   const menuWidth = 216;
 
   // Top and bottom clearance from header and the live composer controls.
@@ -258,6 +270,38 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             <span>{t('Copy')}</span>
             <Copy size={18} weight="bold" className="text-slate-400" />
           </button>
+          {linkUrl && onCopyLink && (
+            <>
+              <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
+              <button
+                type="button"
+                onClick={() => {
+                  onCopyLink();
+                  onClose();
+                }}
+                className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
+              >
+                <span>{t('Copy link')}</span>
+                <Copy size={18} weight="bold" className="text-slate-400" />
+              </button>
+            </>
+          )}
+          {linkUrl && onOpenLink && (
+            <>
+              <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenLink();
+                  onClose();
+                }}
+                className="w-full h-11 px-4 flex items-center justify-between text-sm font-semibold text-slate-100 hover:bg-white/10 active:scale-98 cursor-pointer rounded-[16px] transition-colors"
+              >
+                <span>{t('Open link')}</span>
+                <ArrowSquareOut size={18} weight="bold" className="text-slate-400" />
+              </button>
+            </>
+          )}
           {onEdit && (
             <>
               <div className="h-[1px] w-full bg-white/[0.10] my-0.5" />
