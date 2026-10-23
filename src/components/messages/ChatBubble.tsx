@@ -352,12 +352,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 }) => {
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [showReactionDetails, setShowReactionDetails] = useState(false);
   const [bubbleRect, setBubbleRect] = useState<DOMRect | null>(null);
   const [showHeartPop, setShowHeartPop] = useState(false);
   const [reactionBurst, setReactionBurst] = useState(0);
+  const [replySwipeOffset, setReplySwipeOffset] = useState(0);
   const [replyWidthRelation, setReplyWidthRelation] = useState<'quote-wider' | 'message-wider' | 'similar'>('similar');
   const bubbleRef = useRef<HTMLDivElement>(null);
   const replyPreviewRef = useRef<HTMLDivElement>(null);
+  const reactionDetailsRef = useRef<HTMLDivElement>(null);
   const linkPreviewRef = useRef<HTMLAnchorElement>(null);
   const activeBubbleRef = useRef<HTMLElement | null>(null);
 
@@ -385,6 +388,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const holdListenersCleanupRef = useRef<(() => void) | null>(null);
   const didLongPressRef = useRef(false);
   const didMoveDuringPressRef = useRef(false);
+  const replySwipeTriggeredRef = useRef(false);
 
   const clearLongPress = () => {
     if (pressTimerRef.current) {
@@ -396,28 +400,66 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     holdPointerIdRef.current = null;
   };
 
+  const cancelLongPressTimer = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
   useEffect(() => () => {
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
     holdListenersCleanupRef.current?.();
   }, []);
 
+  useEffect(() => {
+    if (!showReactionDetails) return;
+    const handleOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !reactionDetailsRef.current?.contains(event.target)) {
+        setShowReactionDetails(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowReactionDetails(false);
+    };
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showReactionDetails]);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    e.stopPropagation();
     clearLongPress();
     didLongPressRef.current = false;
     didMoveDuringPressRef.current = false;
+    replySwipeTriggeredRef.current = false;
     activeBubbleRef.current = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
     holdPointerIdRef.current = e.pointerId;
     startPosRef.current = { x: e.clientX, y: e.clientY };
 
     const cancelForMovement = (event: PointerEvent) => {
       if (event.pointerId !== holdPointerIdRef.current || !startPosRef.current) return;
-      const dx = Math.abs(event.clientX - startPosRef.current.x);
+      const signedDx = event.clientX - startPosRef.current.x;
+      const dx = Math.abs(signedDx);
       const dy = Math.abs(event.clientY - startPosRef.current.y);
-      if (dx > 8 || dy > 8) {
+      const replySwipeDirection = isOwn ? signedDx < -52 : signedDx > 52;
+      if (replySwipeDirection && dy < 38 && !replySwipeTriggeredRef.current) {
+        replySwipeTriggeredRef.current = true;
+        didLongPressRef.current = true;
         didMoveDuringPressRef.current = true;
+        setReplySwipeOffset(isOwn ? -52 : 52);
         clearLongPress();
         startPosRef.current = null;
+        onReply(message);
+        return;
+      }
+      if (dx > 8 || dy > 8) {
+        didMoveDuringPressRef.current = true;
+        cancelLongPressTimer();
       }
     };
     const cancelForRelease = (event: PointerEvent) => {
@@ -425,6 +467,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       if (event.type === 'pointercancel') didMoveDuringPressRef.current = true;
       clearLongPress();
       startPosRef.current = null;
+      setReplySwipeOffset(0);
     };
     window.addEventListener('pointermove', cancelForMovement, true);
     window.addEventListener('pointerup', cancelForRelease, true);
@@ -447,19 +490,38 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    e.stopPropagation();
     if (!startPosRef.current) return;
-    const dx = Math.abs(e.clientX - startPosRef.current.x);
+    const signedDx = e.clientX - startPosRef.current.x;
+    const dx = Math.abs(signedDx);
     const dy = Math.abs(e.clientY - startPosRef.current.y);
-    if (dx > 8 || dy > 8) {
+    const replySwipeDirection = isOwn ? signedDx < -52 : signedDx > 52;
+    if (replySwipeDirection && dy < 38) {
+      setReplySwipeOffset(isOwn ? Math.max(-52, signedDx) : Math.min(52, signedDx));
+    } else {
+      setReplySwipeOffset(0);
+    }
+    if (replySwipeDirection && dy < 38 && !replySwipeTriggeredRef.current) {
+      replySwipeTriggeredRef.current = true;
+      didLongPressRef.current = true;
       didMoveDuringPressRef.current = true;
+      setReplySwipeOffset(isOwn ? -52 : 52);
       clearLongPress();
       startPosRef.current = null;
+      onReply(message);
+      return;
+    }
+    if (dx > 8 || dy > 8) {
+      didMoveDuringPressRef.current = true;
+      cancelLongPressTimer();
     }
   };
 
   const handlePointerUp = (event?: React.PointerEvent) => {
+    event?.stopPropagation();
     clearLongPress();
     startPosRef.current = null;
+    setReplySwipeOffset(0);
     if (didLongPressRef.current) {
       return;
     }
@@ -492,6 +554,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     didMoveDuringPressRef.current = true;
     clearLongPress();
     startPosRef.current = null;
+    setReplySwipeOffset(0);
   };
 
   const playReactionBurst = () => {
@@ -518,13 +581,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   };
 
   // Group reactions by kind
-  const groupedReactions: { kind: Reaction['kind']; count: number; userHasReacted: boolean }[] = [];
+  const groupedReactions: {
+    kind: Reaction['kind'];
+    count: number;
+    userHasReacted: boolean;
+    userIds: string[];
+  }[] = [];
   let userCurrentReaction: Reaction['kind'] | null = null;
   if (message.reactions && message.reactions.length > 0) {
-    const map = new Map<Reaction['kind'], { count: number; userHasReacted: boolean }>();
+    const map = new Map<Reaction['kind'], { count: number; userHasReacted: boolean; userIds: string[] }>();
     for (const r of message.reactions) {
-      const existing = map.get(r.kind) || { count: 0, userHasReacted: false };
+      const existing = map.get(r.kind) || { count: 0, userHasReacted: false, userIds: [] };
       existing.count += 1;
+      existing.userIds.push(r.user_id);
       if (r.user_id === currentUserId) {
         existing.userHasReacted = true;
         userCurrentReaction = r.kind;
@@ -532,7 +601,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       map.set(r.kind, existing);
     }
     for (const [kind, data] of map.entries()) {
-      groupedReactions.push({ kind, count: data.count, userHasReacted: data.userHasReacted });
+      groupedReactions.push({ kind, count: data.count, userHasReacted: data.userHasReacted, userIds: data.userIds });
     }
   }
 
@@ -585,7 +654,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       } select-none`}
     >
       {/* Row containing avatar NEXT to bubble */}
-      <div className={`relative flex max-w-[85%] ${isOwn ? 'flex-row-reverse items-end' : 'flex-col items-start'}`}>
+      <div
+        className={`relative flex max-w-[85%] transition-transform duration-150 ease-out ${isOwn ? 'flex-row-reverse items-end' : 'flex-col items-start'}`}
+        style={{ transform: `translateX(${replySwipeOffset}px)` }}
+      >
 
         <div className={`relative flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
           {replyMessage && (
@@ -608,18 +680,18 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
               <svg
                 aria-hidden="true"
                 viewBox="0 0 30 14"
-                className={`h-3.5 w-[30px] ${isOwn ? 'self-end' : 'self-start'}`}
+                className={`h-3.5 w-[30px] ${isOwn ? 'self-start' : 'self-end'}`}
                 fill="none"
               >
                 <path
                   d={(() => {
                     if (replyWidthRelation === 'similar') {
-                      return isOwn ? 'M29 0 C29 9 20 5 20 14' : 'M1 0 C1 9 10 5 10 14';
+                      return isOwn ? 'M2 0 C2 8 10 6 10 14' : 'M28 0 C28 8 20 6 20 14';
                     }
                     if (replyWidthRelation === 'quote-wider') {
-                      return isOwn ? 'M29 0 C29 10 14 4 14 14' : 'M1 0 C1 10 16 4 16 14';
+                      return isOwn ? 'M2 0 C2 10 23 4 23 14' : 'M28 0 C28 10 7 4 7 14';
                     }
-                    return isOwn ? 'M14 0 C14 10 29 4 29 14' : 'M16 0 C16 10 1 4 1 14';
+                    return isOwn ? 'M22 0 C22 10 2 4 2 14' : 'M8 0 C8 10 28 4 28 14';
                   })()}
                   stroke="rgba(255,255,255,0.45)"
                   strokeWidth="1.5"
@@ -860,35 +932,80 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {/* Circular Badge on top corner of bubble */}
           {groupedReactions.length > 0 && (
             <div
-              className={`absolute -top-3 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.3)] border border-white/15 select-none animate-calm-fade-in ${
+              ref={reactionDetailsRef}
+              className={`absolute -top-3 z-30 ${
                 isOwn ? '-left-2' : '-right-2'
               }`}
-              style={{
-                background: 'rgba(30, 30, 35, 0.92)',
-                backdropFilter: 'blur(20px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              }}
             >
-              {groupedReactions.slice(0, 2).map(({ kind, count, userHasReacted }) => {
-                const Icon = REACTION_ICON_MAP[kind];
-                return (
-                  <span
-                    key={kind}
-                    className="flex items-center gap-1 text-white"
-                  >
-                    <Icon
-                      size={15}
-                      weight={userHasReacted ? 'fill' : 'regular'}
-                      className={userHasReacted ? 'text-[#0A84FF]' : 'text-white'}
-                    />
-                    {count > 1 && (
-                      <span className="text-[11px] font-bold text-slate-200">
-                        {count}
-                      </span>
-                    )}
-                  </span>
-                );
-              })}
+              <button
+                type="button"
+                aria-label={t('View message reactions')}
+                aria-expanded={showReactionDetails}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowReactionDetails((open) => !open);
+                }}
+                className="flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.3)] select-none animate-calm-fade-in"
+                style={{
+                  background: 'rgba(30, 30, 35, 0.92)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                }}
+              >
+                {groupedReactions.slice(0, 2).map(({ kind, count, userHasReacted }) => {
+                  const Icon = REACTION_ICON_MAP[kind];
+                  return (
+                    <span key={kind} className="flex items-center gap-1 text-white">
+                      <Icon
+                        size={15}
+                        weight={userHasReacted ? 'fill' : 'regular'}
+                        className={userHasReacted ? 'text-[#0A84FF]' : 'text-white'}
+                      />
+                      {count > 1 && <span className="text-[11px] font-bold text-slate-200">{count}</span>}
+                    </span>
+                  );
+                })}
+              </button>
+              {showReactionDetails && (
+                <div
+                  className={`absolute top-full mt-2 min-w-[190px] max-w-[min(82vw,300px)] space-y-2 rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl animate-spring-in ${
+                    isOwn ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
+                  }`}
+                >
+                  {groupedReactions.map(({ kind, userIds }) => {
+                    const Icon = REACTION_ICON_MAP[kind];
+                    const profiles = userIds
+                      .map((id) => members.find((member) => member.user_id === id)?.profile)
+                      .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
+                    return (
+                      <div key={kind} className="flex items-center gap-2.5">
+                        <Icon size={17} weight="fill" className="shrink-0 text-[#0A84FF]" />
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          {profiles.map((profile) => (
+                            <button
+                              key={profile.id}
+                              type="button"
+                              aria-label={`${t('View profile')}: ${profile.display_name}`}
+                              onClick={() => {
+                                setShowReactionDetails(false);
+                                onProfileClick?.(profile.id);
+                              }}
+                              className="rounded-full"
+                            >
+                              <Avatar
+                                name={profile.display_name}
+                                avatarUrl={profile.avatar_url}
+                                color={profile.color}
+                                size={28}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

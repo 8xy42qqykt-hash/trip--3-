@@ -407,7 +407,7 @@ const MainAppContent: React.FC = () => {
     if (event.pointerType === 'mouse' || !currentTrip || activeTab === 'trips') return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .leaflet-container, [role="dialog"]')) return;
+    if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .chat-bubble-touch, .leaflet-container, [role="dialog"]')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side: null, pointerId: event.pointerId };
     edgeSwipeArmedRef.current = false;

@@ -7,7 +7,7 @@ interface PollResultMessageProps {
   isOwn: boolean;
 }
 
-export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, isOwn }) => {
+export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata }) => {
   const { t } = useLanguage();
   if (!metadata) return null;
   const options = metadata.options || [];
@@ -26,7 +26,7 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, 
         </span>
       </div>
 
-      {/* Options: Thin sliders, percentage above in right, voter pfps on left */}
+      {/* Options: voters are shown directly above each result bar. */}
       <div className="space-y-3 mt-1">
         {options.map((opt: any) => {
           const isWinner = opt.text === metadata.winner && opt.votes > 0;
@@ -36,35 +36,30 @@ export const PollResultMessage: React.FC<PollResultMessageProps> = ({ metadata, 
           return (
             <div key={opt.id} className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="min-w-0 flex-1">
                   <span className={`text-sm truncate text-white ${isWinner ? 'font-bold' : 'font-medium'}`}>
                     {opt.text}
                   </span>
-                  {voters.length > 0 && (
-                    <div className="flex -space-x-1.5 items-center shrink-0">
-                      {voters.map((voter: any) => (
-                        <div
-                          key={voter.id}
-                          className={`rounded-full ring-2 overflow-hidden ${
-                            isOwn ? 'ring-[#0A84FF]' : 'ring-[#262629]'
-                          }`}
-                        >
-                          <Avatar
-                            name={voter.display_name}
-                            avatarUrl={voter.avatar_url}
-                            color={voter.color}
-                            size={20}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <span className="text-xs font-bold opacity-90 shrink-0 text-white">
                   {pct}%
                 </span>
               </div>
+
+              {voters.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5" aria-label={t('Voters')}>
+                  {voters.map((voter: any) => (
+                    <Avatar
+                      key={voter.id}
+                      name={voter.display_name}
+                      avatarUrl={voter.avatar_url}
+                      color={voter.color}
+                      size={22}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Slider bar */}
               <div className="w-full h-2 rounded-full overflow-hidden bg-white/20">

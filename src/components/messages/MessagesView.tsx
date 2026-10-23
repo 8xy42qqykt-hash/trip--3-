@@ -153,6 +153,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isTitleCollapsed, setIsTitleCollapsed] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [isTextareaMultiline, setIsTextareaMultiline] = useState(false);
   const [messageRevealPhase, setMessageRevealPhase] = useState<'waiting' | 'loading' | 'revealing' | 'shown'>('waiting');
   const [showMessageLoader, setShowMessageLoader] = useState(false);
   const scrollContentRef = useRef<HTMLDivElement>(null);
@@ -165,6 +166,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const isInputFocusedRef = useRef(false);
+  const blurTimerRef = useRef<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -367,6 +369,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   };
 
   const handleFocus = () => {
+    if (blurTimerRef.current !== null) {
+      window.clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
     isInputFocusedRef.current = true;
     setIsComposerFocused(true);
     notifyKeyboard(true);
@@ -378,21 +384,24 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   };
 
   const handleBlur = () => {
-    setTimeout(() => {
-      // If the activeElement is still textarea, do NOT close!
-      if (document.activeElement === textareaRef.current) {
+    if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+    blurTimerRef.current = window.setTimeout(() => {
+      blurTimerRef.current = null;
+      const offset = calcKeyboardOffset();
+      if (document.activeElement === textareaRef.current || offset > 20) {
         return;
       }
       isInputFocusedRef.current = false;
       setIsComposerFocused(false);
       setMentionQuery(null);
-      const offset = calcKeyboardOffset();
-      if (offset <= 20) {
-        notifyKeyboard(false);
-        setKeyboardOffset(0);
-      }
-    }, 120);
+      notifyKeyboard(false);
+      setKeyboardOffset(0);
+    }, 260);
   };
+
+  useEffect(() => () => {
+    if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+  }, []);
 
   // Track visualViewport for iOS and mobile keyboard changes
   useEffect(() => {
@@ -640,7 +649,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (textarea) {
       textarea.style.height = 'auto';
       const scrollH = textarea.scrollHeight;
-      textarea.style.height = `${Math.max(40, scrollH)}px`;
+      const height = Math.max(40, scrollH);
+      textarea.style.height = `${height}px`;
+      setIsTextareaMultiline(height > 42);
     }
   };
 
@@ -648,7 +659,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
+    const height = Math.max(40, textarea.scrollHeight);
+    textarea.style.height = `${height}px`;
+    setIsTextareaMultiline(height > 42);
   }, [inputText, composerMode]);
 
   const handleSelectMention = (member: TripMember) => {
@@ -1756,9 +1769,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <motion.div
                     key="composer-shortcuts"
                     initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={{ opacity: 1, y: 0, x: isTextareaMultiline ? 58 : 0 }}
                     exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
                     className="flex min-w-0 items-center gap-3"
                   >
                 {!isFilteredView && !isGamesView && composerMode === 'message' && (
@@ -1892,7 +1905,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   ))}
                 </div>
               )}
-              {!isFilteredView && !isGamesView && composerMode === 'message' && (
+              {!isFilteredView && !isGamesView && composerMode === 'message' && !inputText.trim() && (
                 <button
                   type="button"
                   aria-label={t('Choose a sticker')}
@@ -1904,16 +1917,18 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   <Smiley size={21} weight="duotone" />
                 </button>
               )}
-              {!isFilteredView && !isGamesView && composerMode === 'message' && !isComposerFocused && (
+              {!isFilteredView && !isGamesView && composerMode === 'message' && (
                 <button
                   type="button"
                   aria-label={t('Focus message input')}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
+                  onPointerDown={(event) => event.preventDefault()}
+                  onPointerUp={() => {
                     textareaRef.current?.focus({ preventScroll: true });
                   }}
                   onClick={() => textareaRef.current?.focus({ preventScroll: true })}
-                  className="absolute inset-y-0 left-10 right-0 z-10 cursor-text rounded-r-[23px] bg-transparent"
+                  className={`absolute inset-y-0 left-10 right-0 z-10 cursor-text rounded-r-[23px] bg-transparent ${
+                    isComposerFocused ? 'pointer-events-none' : ''
+                  }`}
                 />
               )}
               <textarea
