@@ -913,10 +913,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
     if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
     const previewUrl = URL.createObjectURL(file);
     setPendingPhoto({ id: `pending-photo-${Date.now()}`, previewUrl, file });
@@ -935,6 +933,22 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
     }, 20);
     if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const handlePhotoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageFile(file);
+  };
+
+  const handleComposerPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardItems = Array.from(e.clipboardData.items);
+    const imageItem = clipboardItems.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    const imageFile = imageItem?.getAsFile()
+      || Array.from(e.clipboardData.files).find((file) => file.type.startsWith('image/'));
+    if (!imageFile) return;
+
+    e.preventDefault();
+    handleImageFile(imageFile);
   };
 
   const handleDoubleTapHeart = (messageId: string) => {
@@ -1645,7 +1659,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           type="file"
           ref={photoInputRef}
           accept="image/*"
-          onChange={handleImageFile}
+          onChange={handlePhotoInputChange}
           className="hidden"
         />
 
@@ -1998,6 +2012,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 }
                 value={inputText}
                 onChange={handleTextareaChange}
+                onPaste={handleComposerPaste}
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
