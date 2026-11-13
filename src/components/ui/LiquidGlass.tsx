@@ -80,7 +80,7 @@ export function LiquidGlass<T extends React.ElementType = 'div'>({
   radius = 20,
   strength = 1,
   aberration = 0.8,
-  tint = 'rgba(238,242,250,0.085)',
+  tint = 'rgba(238,242,250,0.12)',
   className = '',
   refCallback,
   children,
@@ -144,8 +144,8 @@ export function LiquidGlass<T extends React.ElementType = 'div'>({
   const greenScale = baseScale * Math.max(0, 1 - 0.06 * aberration);
   const blueScale = baseScale * Math.max(0, 1 - 0.12 * aberration);
   const filter = useDisplacement
-    ? `url(#${filterId}) blur(3px) saturate(1.08)`
-    : 'blur(3px) saturate(1.08)';
+    ? `url(#${filterId}) blur(5px) saturate(1.08)`
+    : 'blur(5px) saturate(1.08)';
   const rootStyle: React.CSSProperties = {
     ...style,
     position: style?.position ?? 'relative',

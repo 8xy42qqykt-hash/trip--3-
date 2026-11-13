@@ -32,7 +32,6 @@ import { TripMemberStack } from '../common/TripMemberStack';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { BottomSheet } from '../common/BottomSheet';
 import { PhotoLightbox } from '../common/PhotoLightbox';
-import { CameraModal } from '../common/CameraModal';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
 import { supabase, uploadAsset } from '../../lib/supabase';
@@ -216,8 +215,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     file: File;
     type: 'image' | 'video';
   } | null>(null);
-  const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isCompressingVideo, setIsCompressingVideo] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
@@ -1087,15 +1084,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     e.currentTarget.value = '';
   };
 
-  const handleCameraCapture = (blob: Blob, type: 'image' | 'video') => {
-    const extension = type === 'video'
-      ? blob.type.includes('webm') ? 'webm' : 'mp4'
-      : 'jpg';
-    handleMediaFile(new File([blob], `trip-${Date.now()}.${extension}`, {
-      type: blob.type || (type === 'video' ? 'video/mp4' : 'image/jpeg'),
-    }));
-  };
-
   const handleCompressAndSend = async () => {
     if (pendingMedia?.type !== 'video' || !hasOversizedVideo || isCompressingVideo || uploadingMedia) return;
     setComposerError('');
@@ -1488,7 +1476,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -top-8 -bottom-16"
+          className="pointer-events-none absolute inset-x-0 -top-8 -bottom-16 z-0"
           style={{
             backgroundImage: 'linear-gradient(to bottom, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.94) 36%, rgba(0,0,0,0.72) 62%, rgba(0,0,0,0) 100%)',
           }}
@@ -1977,7 +1965,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                       type="button"
                       onClick={() => {
                         setIsPlusMenuOpen(false);
-                        setIsMediaMenuOpen(true);
+                        mediaInputRef.current?.click();
                       }}
                       className="order-6 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
                     >
@@ -2310,37 +2298,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         </BottomSheet>
       )}
       {!isFilteredView && !isGamesView && (
-        <BottomSheet isOpen={isMediaMenuOpen} onClose={() => setIsMediaMenuOpen(false)}>
-          <div className="pb-2">
-            <h2 className="mb-3 text-center text-lg font-bold text-white">{t('Photo / Video')}</h2>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMediaMenuOpen(false);
-                  mediaInputRef.current?.click();
-                }}
-                className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
-              >
-                <ImageIcon size={20} weight="bold" className="text-emerald-400" />
-                {t('Choose photo or video')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMediaMenuOpen(false);
-                  setIsCameraOpen(true);
-                }}
-                className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
-              >
-                <VideoCamera size={20} weight="bold" className="text-[#70baff]" />
-                {t('Record video')}
-              </button>
-            </div>
-          </div>
-        </BottomSheet>
-      )}
-      {!isFilteredView && !isGamesView && (
         <BottomSheet
           isOpen={Boolean(hasOversizedVideo)}
           onClose={() => {
@@ -2378,14 +2335,6 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </div>
           </div>
         </BottomSheet>
-      )}
-      {!isFilteredView && !isGamesView && (
-        <CameraModal
-          isOpen={isCameraOpen}
-          captureMode="video"
-          onClose={() => setIsCameraOpen(false)}
-          onCapture={handleCameraCapture}
-        />
       )}
       <MemberProfileSheet
         profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}

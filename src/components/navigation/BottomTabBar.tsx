@@ -66,12 +66,12 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 -top-12 bottom-0"
         style={{
-          backgroundImage: 'linear-gradient(to top, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.62) 40%, rgba(0, 0, 0, 0) 100%)',
+          backgroundImage: 'linear-gradient(to top, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.34) 42%, rgba(0, 0, 0, 0) 100%)',
         }}
       />
       <div
         className="relative z-10 max-w-lg mx-auto grid grid-cols-5 items-center px-1 pt-1 pb-0"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{ paddingBottom: 'max(0px, calc(env(safe-area-inset-bottom, 0px) - 8px))' }}
       >
         {tabs.map(({ key, label, Icon }) => {
           const isActive = activeTab === key;
