@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -32,6 +32,7 @@ import { TripMemberStack } from '../common/TripMemberStack';
 import { MemberProfileSheet } from '../common/MemberProfileSheet';
 import { BottomSheet } from '../common/BottomSheet';
 import { PhotoLightbox } from '../common/PhotoLightbox';
+import { CameraModal } from '../common/CameraModal';
 import { CustomScrollArea } from '../common/CustomScrollArea';
 import { formatMessageDaySeparator, formatTripDate } from '../../utils/date';
 import { supabase, uploadAsset } from '../../lib/supabase';
@@ -44,6 +45,8 @@ import { useLanguage } from '../../context/LanguageContext';
 import { CHAT_STICKERS, StickerArtwork } from './StickerArtwork';
 import tripLogo from '../../../trip-logo.png';
 import { findFirstLink } from '../../utils/links';
+import { compressVideo, MAX_VIDEO_UPLOAD_BYTES } from '../../utils/compressVideo';
+import { LiquidGlass } from '../ui/LiquidGlass';
 
 interface MessagesViewProps {
   viewMode?: 'messages' | 'grocery_list' | 'plan' | 'games';
@@ -55,6 +58,71 @@ interface MessagesViewProps {
   onClearInitialMention?: () => void;
   onlineMembers: OnlineTripMember[];
   call: GroupCallManager;
+}
+
+interface PopupPosition {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  maxHeight: number;
+  initialScaleX: number;
+  initialScaleY: number;
+  transformOrigin: 'bottom left' | 'bottom right' | 'top left' | 'top right';
+  buttonTransformOrigin: string;
+}
+
+function getPopupPosition(
+  trigger: HTMLElement,
+  width: number,
+  height: number,
+  preferredPlacement: 'top' | 'bottom',
+  alignment: 'start' | 'end',
+  coordinateRoot?: HTMLElement | null,
+): PopupPosition {
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const rect = trigger.getBoundingClientRect();
+  const popupWidth = Math.min(width, Math.max(0, viewportWidth - 16));
+  const leftEdge = viewportLeft + 8;
+  const rightEdge = viewportLeft + viewportWidth - popupWidth - 8;
+  const preferredLeft = alignment === 'start' ? rect.left : rect.right - popupWidth;
+  const left = Math.max(leftEdge, Math.min(preferredLeft, rightEdge));
+  const spaceAbove = Math.max(0, rect.top - viewportTop - 8);
+  const spaceBelow = Math.max(0, viewportTop + viewportHeight - rect.bottom - 8);
+  const minUsefulHeight = Math.min(height, 128);
+  const opensAbove = preferredPlacement === 'top'
+    ? spaceAbove >= minUsefulHeight || spaceAbove >= spaceBelow
+    : !(spaceBelow >= minUsefulHeight || spaceBelow >= spaceAbove);
+  const availableHeight = opensAbove ? spaceAbove : spaceBelow;
+  const popupHeight = Math.min(height, availableHeight);
+  const top = opensAbove
+    ? Math.max(viewportTop + 8, rect.top - popupHeight - 8)
+    : Math.min(viewportTop + viewportHeight - popupHeight - 8, rect.bottom + 8);
+  const initialScaleX = Math.min(1, rect.width / Math.max(1, popupWidth));
+  const initialScaleY = Math.min(1, rect.height / Math.max(1, popupHeight));
+  const originX = initialScaleX < 1
+    ? (rect.left - left) / (1 - initialScaleX)
+    : rect.left - left + rect.width / 2;
+  const originY = initialScaleY < 1
+    ? (rect.top - top) / (1 - initialScaleY)
+    : rect.top - top + rect.height / 2;
+  const rootRect = coordinateRoot?.getBoundingClientRect();
+  const horizontalOrigin = alignment === 'start' ? 'left' : 'right';
+  return {
+    left: left - (rootRect?.left ?? 0),
+    top: top - (rootRect?.top ?? 0),
+    width: popupWidth,
+    height: popupHeight,
+    maxHeight: Math.max(0, availableHeight),
+    initialScaleX,
+    initialScaleY,
+    transformOrigin: `${opensAbove ? 'bottom' : 'top'} ${horizontalOrigin}`,
+    buttonTransformOrigin: `${originX}px ${originY}px`,
+  };
 }
 
 const AnimatedScore: React.FC<{ score: number }> = ({ score }) => {
@@ -121,7 +189,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
-  const plusButtonRef = useRef<HTMLButtonElement>(null);
+  const plusButtonRef = useRef<HTMLElement>(null);
+  const [plusMenuPosition, setPlusMenuPosition] = useState<PopupPosition | null>(null);
+  const [popupPortalTarget, setPopupPortalTarget] = useState<HTMLDivElement | null>(null);
   const [composerMode, setComposerMode] = useState<'message' | 'grocery_list' | 'meal' | 'plan'>(
     viewMode === 'messages' || viewMode === 'games' ? 'message' : viewMode,
   );
@@ -134,18 +204,27 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isCallMenuOpen, setIsCallMenuOpen] = useState(false);
-  const callButtonRef = useRef<HTMLButtonElement>(null);
-  const [callMenuPosition, setCallMenuPosition] = useState<{ top: number; right: number } | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const callButtonRef = useRef<HTMLElement>(null);
+  const [callMenuPosition, setCallMenuPosition] = useState<PopupPosition | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const uploadInProgressRef = useRef(false);
   const sendInProgressRef = useRef(false);
   const [isSending, setIsSending] = useState(false);
-  const [pendingPhoto, setPendingPhoto] = useState<{ id: string; previewUrl: string; file: File } | null>(null);
+  const [pendingMedia, setPendingMedia] = useState<{
+    id: string;
+    previewUrl: string;
+    file: File;
+    type: 'image' | 'video';
+  } | null>(null);
+  const [isMediaMenuOpen, setIsMediaMenuOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isCompressingVideo, setIsCompressingVideo] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [activeDrawGameId, setActiveDrawGameId] = useState<string | null>(null);
   const [activeGameSessionId, setActiveGameSessionId] = useState<string | null>(null);
   const [isGamesMenuOpen, setIsGamesMenuOpen] = useState(false);
-  const gamesButtonRef = useRef<HTMLButtonElement>(null);
+  const gamesButtonRef = useRef<HTMLElement>(null);
+  const [gamesMenuPosition, setGamesMenuPosition] = useState<PopupPosition | null>(null);
   const [isGameScoreboardOpen, setIsGameScoreboardOpen] = useState(false);
   const [isLoadingGameScores, setIsLoadingGameScores] = useState(false);
   const [gameScoreError, setGameScoreError] = useState('');
@@ -162,6 +241,58 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   const latestMessagesRef = useRef(messages);
   const pendingLinkPreviewRequestsRef = useRef(new Set<string>());
   latestMessagesRef.current = messages;
+
+  const measurePlusMenuPosition = useCallback(() => {
+    const button = plusButtonRef.current;
+    if (!button) return;
+    setPlusMenuPosition(getPopupPosition(button, 192, 236, 'top', 'start', popupPortalTarget));
+  }, [popupPortalTarget]);
+
+  const measureCallMenuPosition = useCallback(() => {
+    const button = callButtonRef.current;
+    if (!button) return;
+    setCallMenuPosition(getPopupPosition(button, 288, call.callError ? 196 : 168, 'bottom', 'end', popupPortalTarget));
+  }, [call.callError, popupPortalTarget]);
+
+  const measureGamesMenuPosition = useCallback(() => {
+    const button = gamesButtonRef.current;
+    if (!button) return;
+    setGamesMenuPosition(getPopupPosition(button, button.getBoundingClientRect().width, 168, 'top', 'start'));
+  }, []);
+
+  useEffect(() => {
+    if (!isPlusMenuOpen && !isCallMenuOpen && !isGamesMenuOpen) return;
+    const reposition = () => {
+      if (isPlusMenuOpen) measurePlusMenuPosition();
+      if (isCallMenuOpen) measureCallMenuPosition();
+      if (isGamesMenuOpen) measureGamesMenuPosition();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsPlusMenuOpen(false);
+      setIsCallMenuOpen(false);
+      setIsGamesMenuOpen(false);
+    };
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    window.visualViewport?.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('scroll', reposition);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+      window.visualViewport?.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('scroll', reposition);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [
+    isPlusMenuOpen,
+    isCallMenuOpen,
+    isGamesMenuOpen,
+    measurePlusMenuPosition,
+    measureCallMenuPosition,
+    measureGamesMenuPosition,
+  ]);
 
   useEffect(() => {
     const updateAvatarLimit = () => {
@@ -189,12 +320,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     composerTop: number;
     composerBottom: number;
   } | null>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const mealTimeInputRef = useRef<HTMLInputElement>(null);
   const planDateInputRef = useRef<HTMLInputElement>(null);
   const planTimeInputRef = useRef<HTMLInputElement>(null);
   const isFilteredView = viewMode !== 'messages' && viewMode !== 'games';
   const isGamesView = viewMode === 'games';
+  const hasOversizedVideo = pendingMedia?.type === 'video' && pendingMedia.file.size > MAX_VIDEO_UPLOAD_BYTES;
   const pageTitle = isFilteredView
     ? viewMode === 'grocery_list' ? t('Groceries') : t('Plans')
     : isGamesView ? t('Games') : currentTrip?.name || '';
@@ -630,8 +762,8 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   }, [isKeyboardOpen, keyboardOffset]);
 
   useEffect(() => () => {
-    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
-  }, [pendingPhoto]);
+    if (pendingMedia) URL.revokeObjectURL(pendingMedia.previewUrl);
+  }, [pendingMedia]);
 
   const syncComposerTextareaHeight = (textarea: HTMLTextAreaElement) => {
     textarea.style.height = 'auto';
@@ -654,7 +786,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       atIndex >= 0
       && (!textBeforeAt || /\s$/.test(textBeforeAt))
       && !/[\n@]/.test(mentionQueryText)
-      && !/^photo$/i.test(mentionQueryText)
+      && !/^(?:photo|video)$/i.test(mentionQueryText)
       && !/\s$/.test(mentionQueryText)
     ) {
       setMentionQuery(mentionQueryText);
@@ -748,18 +880,23 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent, mediaOverride?: File) => {
     if (e) e.preventDefault();
-    if (sendInProgressRef.current || uploadingImage || uploadInProgressRef.current) return;
+    if (sendInProgressRef.current || uploadingMedia || uploadInProgressRef.current) return;
     const typedText = inputText.trim();
-    const clean = pendingPhoto
-      ? typedText.replace(/(?:^|\s)@photo(?=\s|$)/gi, ' ').trim()
+    const clean = pendingMedia
+      ? typedText.replace(pendingMedia.type === 'image' ? /(?:^|\s)@photo(?=\s|$)/gi : /(?:^|\s)@video(?=\s|$)/gi, ' ').trim()
       : typedText;
-    if ((!clean && !pendingPhoto) || (composerMode === 'plan' && !planDate)) return;
+    const mediaFile = mediaOverride || pendingMedia?.file;
+    if ((!clean && !pendingMedia) || (composerMode === 'plan' && !planDate)) return;
+    if (pendingMedia?.type === 'video' && mediaFile && mediaFile.size > MAX_VIDEO_UPLOAD_BYTES) {
+      setComposerError('Compress the video before sending.');
+      return;
+    }
     setComposerError('');
     const replyId = replyingTo?.id;
-    const type = pendingPhoto ? 'text' : composerMode === 'message' ? 'text' : composerMode;
-    const editing = !pendingPhoto && editingMessageId ? messages.find((message) => message.id === editingMessageId) : undefined;
+    const type = pendingMedia ? 'text' : composerMode === 'message' ? 'text' : composerMode;
+    const editing = !pendingMedia && editingMessageId ? messages.find((message) => message.id === editingMessageId) : undefined;
     const previousMetadata = { ...(editing?.metadata || {}) };
     delete previousMetadata.linkPreview;
     const firstLink = findFirstLink(clean);
@@ -769,7 +906,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       matchingItems.push(Boolean(item.checked));
       previousCheckedByText.set(item.text, matchingItems);
     }
-    const baseMetadata = pendingPhoto
+    const baseMetadata = pendingMedia
       ? undefined
       : composerMode === 'grocery_list'
         ? {
@@ -783,7 +920,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           : composerMode === 'plan'
             ? { ...previousMetadata, date: planDate, time: planTime || null, contributors: previousMetadata.contributors || [] }
             : undefined;
-    const metadata = pendingPhoto
+    const metadata = pendingMedia
       ? undefined
       : firstLink
         ? {
@@ -795,19 +932,21 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             },
           }
         : baseMetadata;
-    if (pendingPhoto) uploadInProgressRef.current = true;
+    if (pendingMedia) uploadInProgressRef.current = true;
     sendInProgressRef.current = true;
-    setUploadingImage(Boolean(pendingPhoto));
-    setIsSending(Boolean(pendingPhoto));
-    const sendingIndicatorTimer = pendingPhoto
+    setUploadingMedia(Boolean(pendingMedia));
+    setIsSending(Boolean(pendingMedia));
+    const sendingIndicatorTimer = pendingMedia
       ? null
       : window.setTimeout(() => setIsSending(true), 250);
     try {
-      if (pendingPhoto) {
-        const imageUrl = await uploadAsset(pendingPhoto.file, 'chat');
-        await sendMessage('', imageUrl, replyId);
-        URL.revokeObjectURL(pendingPhoto.previewUrl);
-        setPendingPhoto(null);
+      if (pendingMedia && mediaFile) {
+        const mediaUrl = await uploadAsset(mediaFile, 'chat', {
+          allowDataUrlFallback: pendingMedia.type !== 'video',
+        });
+        await sendMessage('', mediaUrl, replyId, pendingMedia.type);
+        URL.revokeObjectURL(pendingMedia.previewUrl);
+        setPendingMedia(null);
         if (clean) {
           setInputText(clean);
           await sendMessage(
@@ -850,7 +989,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       if (sendingIndicatorTimer !== null) window.clearTimeout(sendingIndicatorTimer);
       sendInProgressRef.current = false;
       uploadInProgressRef.current = false;
-      setUploadingImage(false);
+      setUploadingMedia(false);
       setIsSending(false);
     }
     setComposerMode(isFilteredView ? viewMode : 'message');
@@ -866,16 +1005,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       setMentionQuery(null);
       return;
     }
-    if (e.key === 'Backspace' && pendingPhoto) {
+    if (e.key === 'Backspace' && pendingMedia) {
       const cursor = e.currentTarget.selectionStart;
       const beforeCursor = inputText.slice(0, cursor);
-      const photoToken = /(?:^|\s)@photo\s?$/i.exec(beforeCursor);
-      if (photoToken) {
+      const mediaToken = /(?:^|\s)@(photo|video)\s?$/i.exec(beforeCursor);
+      if (mediaToken) {
         e.preventDefault();
-        const tokenStart = photoToken.index + (photoToken[0].startsWith(' ') ? 1 : 0);
+        const tokenStart = mediaToken.index + (mediaToken[0].startsWith(' ') ? 1 : 0);
         const nextText = `${inputText.slice(0, tokenStart)}${inputText.slice(cursor)}`.trimEnd();
-        URL.revokeObjectURL(pendingPhoto.previewUrl);
-        setPendingPhoto(null);
+        URL.revokeObjectURL(pendingMedia.previewUrl);
+        setPendingMedia(null);
         setInputText(nextText);
         window.requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
         return;
@@ -913,16 +1052,23 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     }
   };
 
-  const handleImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+  const handleMediaFile = (file: File) => {
+    const type = file.type.startsWith('image/')
+      ? 'image'
+      : file.type.startsWith('video/') ? 'video' : null;
+    if (!type) {
+      setComposerError('Choose an image or video file.');
+      return;
+    }
+    if (pendingMedia) URL.revokeObjectURL(pendingMedia.previewUrl);
     const previewUrl = URL.createObjectURL(file);
-    setPendingPhoto({ id: `pending-photo-${Date.now()}`, previewUrl, file });
+    setPendingMedia({ id: `pending-media-${Date.now()}`, previewUrl, file, type });
     setIsPlusMenuOpen(false);
-    const currentText = (pendingPhoto
-      ? inputText.replace(/(?:^|\s)@photo(?=\s|$)/gi, ' ')
+    const currentText = (pendingMedia
+      ? inputText.replace(/(?:^|\s)@(photo|video)(?=\s|$)/gi, ' ')
       : inputText).trimEnd();
-    const nextText = currentText ? `${currentText} @photo ` : '@photo ';
+    const token = type === 'image' ? '@photo' : '@video';
+    const nextText = currentText ? `${currentText} ${token} ` : `${token} `;
     setInputText(nextText);
     window.setTimeout(() => {
       const textarea = textareaRef.current;
@@ -932,12 +1078,47 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
     }, 20);
-    if (photoInputRef.current) photoInputRef.current.value = '';
+    if (mediaInputRef.current) mediaInputRef.current.value = '';
   };
 
-  const handlePhotoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleImageFile(file);
+    if (file) handleMediaFile(file);
+    e.currentTarget.value = '';
+  };
+
+  const handleCameraCapture = (blob: Blob, type: 'image' | 'video') => {
+    const extension = type === 'video'
+      ? blob.type.includes('webm') ? 'webm' : 'mp4'
+      : 'jpg';
+    handleMediaFile(new File([blob], `trip-${Date.now()}.${extension}`, {
+      type: blob.type || (type === 'video' ? 'video/mp4' : 'image/jpeg'),
+    }));
+  };
+
+  const handleCompressAndSend = async () => {
+    if (pendingMedia?.type !== 'video' || !hasOversizedVideo || isCompressingVideo || uploadingMedia) return;
+    setComposerError('');
+    setIsCompressingVideo(true);
+    try {
+      const compressedFile = await compressVideo(pendingMedia.file);
+      if (compressedFile.size > MAX_VIDEO_UPLOAD_BYTES) {
+        throw new Error('The compressed video is still larger than 50 MB. Choose a shorter video.');
+      }
+      await handleSend(undefined, compressedFile);
+    } catch (error) {
+      console.error('Could not compress the selected video:', error);
+      setComposerError(error instanceof Error ? error.message : 'Could not compress the video. Try another video.');
+    } finally {
+      setIsCompressingVideo(false);
+    }
+  };
+
+  const removePendingMedia = () => {
+    if (pendingMedia) URL.revokeObjectURL(pendingMedia.previewUrl);
+    setPendingMedia(null);
+    setComposerError('');
+    setInputText((current) => current.replace(/(?:^|\s)@(photo|video)(?=\s|$)/gi, ' ').trim());
   };
 
   const handleComposerPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -948,7 +1129,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
     if (!imageFile) return;
 
     e.preventDefault();
-    handleImageFile(imageFile);
+    handleMediaFile(imageFile);
   };
 
   const handleDoubleTapHeart = (messageId: string) => {
@@ -1213,13 +1394,17 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           })
       : [];
   const isMentionListVisible = mentionQuery !== null && mentionCandidates.length > 0;
-  const tripPhotos = messages
-    .filter((message) => message.type === 'image' && message.image_url)
-    .map((message) => ({ id: message.id, url: message.image_url! }));
-  const selectedPhoto = tripPhotos.find((photo) => photo.id === selectedPhotoId) || null;
+  const chatMedia = messages
+    .filter((message) => (message.type === 'image' || message.type === 'video') && message.image_url)
+    .map((message) => ({
+      id: message.id,
+      url: message.image_url!,
+      type: message.type === 'video' ? 'video' as const : 'image' as const,
+    }));
+  const selectedMedia = chatMedia.find((media) => media.id === selectedPhotoId) || null;
 
   useEffect(() => {
-    onPhotoViewerChange?.(Boolean(selectedPhoto));
+    onPhotoViewerChange?.(Boolean(selectedMedia));
   }, [onPhotoViewerChange, selectedPhotoId]);
 
   useEffect(() => () => {
@@ -1288,6 +1473,10 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
   return (
     <div className="h-full w-full flex flex-col bg-black text-white overflow-hidden relative select-none">
       <div
+        ref={setPopupPortalTarget}
+        className="pointer-events-none absolute inset-0 overflow-visible"
+      />
+      <div
         aria-hidden="true"
         className="w-full shrink-0"
         style={{ height: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
@@ -1295,7 +1484,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       {/* Top Header - Trip Title & Exit Button (Extended cleanly through top danger zone) */}
       <div
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        className={`fixed inset-x-0 top-0 isolate w-full ${selectedPhoto ? 'z-[11010]' : 'z-20'}`}
+        className={`fixed inset-x-0 top-0 isolate w-full ${selectedMedia ? 'z-[11010]' : 'z-20'}`}
       >
         <div
           aria-hidden="true"
@@ -1328,13 +1517,14 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
           {!isFilteredView && !isGamesView ? (
             <div className="w-14 flex justify-end">
-              <button
-                ref={callButtonRef}
+              <LiquidGlass
+                as="button"
+                refCallback={(element) => { callButtonRef.current = element; }}
                 type="button"
-                aria-label={selectedPhoto ? t('Close photo') : t('Start a call')}
-                aria-expanded={selectedPhoto ? undefined : isCallMenuOpen}
+                aria-label={selectedMedia ? t('Close media') : t('Start a call')}
+                aria-expanded={selectedMedia ? undefined : isCallMenuOpen}
                 onClick={() => {
-                  if (selectedPhoto) {
+                  if (selectedMedia) {
                     setSelectedPhotoId(null);
                     return;
                   }
@@ -1342,17 +1532,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     setIsCallMenuOpen(false);
                     return;
                   }
-                  const rect = callButtonRef.current?.getBoundingClientRect();
-                  if (rect) setCallMenuPosition({
-                    top: rect.bottom + 8,
-                    right: Math.max(12, window.innerWidth - rect.right),
-                  });
+                  measureCallMenuPosition();
                   setIsCallMenuOpen(true);
                 }}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-[#0A84FF] text-white shadow-lg active:scale-95"
+                radius={999}
+                tint="rgba(10,132,255,0.7)"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform duration-200 ease-out active:scale-95"
+                style={{ border: '1px solid rgba(255,255,255,0.10)' }}
               >
-                {selectedPhoto ? <X size={20} weight="bold" /> : <Phone size={20} weight="fill" />}
-              </button>
+                {selectedMedia ? <X size={20} weight="bold" /> : <Phone size={20} weight="fill" />}
+              </LiquidGlass>
             </div>
           ) : <div className="w-14" />}
         </div>
@@ -1468,8 +1657,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                   onOpenDrawGame={setActiveDrawGameId}
                   onOpenGameSession={setActiveGameSessionId}
                   onOpenImage={(url) => {
-                    const photo = tripPhotos.find((item) => item.url === url);
-                    setSelectedPhotoId(photo?.id || null);
+                    const media = chatMedia.find((item) => item.url === url && item.type === 'image');
+                    setSelectedPhotoId(media?.id || null);
+                  }}
+                  onOpenVideo={(url) => {
+                    const media = chatMedia.find((item) => item.url === url && item.type === 'video');
+                    setSelectedPhotoId(media?.id || null);
                   }}
                 />
               </motion.div>
@@ -1504,14 +1697,12 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
       {replyingTo && !isFilteredView && !isGamesView && (
         <div
           style={{
-            backdropFilter: 'blur(24px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(24px) saturate(180%)',
             bottom: isKeyboardOpen
               ? `${Math.max(8, keyboardOffset + 6) + 96}px`
               : 'calc(132px + env(safe-area-inset-bottom, 0px))',
           }}
           data-reaction-clearance
-          className="absolute left-3.5 right-3.5 z-30 px-4 py-2.5 flex items-center gap-2 bg-[#202024]/90 border border-white/[0.12] rounded-[20px] text-xs text-white shadow-lg animate-spring-in transition-[bottom] duration-150 ease-out"
+          className="absolute left-3.5 right-3.5 z-30 flex items-center gap-2 rounded-[20px] border border-white/[0.08] bg-[#222226]/95 px-4 py-2.5 text-xs text-white animate-spring-in transition-[bottom] duration-150 ease-out"
         >
           <div className="min-w-0 flex-1">
             <span className="font-bold text-[#0A84FF] mr-1.5">
@@ -1572,79 +1763,85 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 )}
               </div>
             )}
-            <button
+            <LiquidGlass
+              as="button"
               type="button"
+              radius={999}
               aria-label={t('Game leaderboard')}
               disabled={isLoadingGameScores}
               aria-busy={isLoadingGameScores}
               onClick={() => void openGameScoreboard()}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/90 text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] backdrop-blur-xl disabled:opacity-60"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-60"
             >
               <Trophy size={20} weight="fill" />
-            </button>
+            </LiquidGlass>
             <div className="relative min-w-0 flex-1">
-              <button
-                ref={gamesButtonRef}
+              <LiquidGlass
+                as="button"
                 type="button"
+                refCallback={(element) => { gamesButtonRef.current = element; }}
                 aria-haspopup="menu"
                 aria-expanded={isGamesMenuOpen}
-                onClick={() => setIsGamesMenuOpen((open) => !open)}
-                className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-white/[0.12] bg-[#222226]/90 px-4 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] backdrop-blur-xl"
-                style={{ backdropFilter: 'blur(24px) saturate(180%)', WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
+                onClick={() => {
+                  if (!isGamesMenuOpen) measureGamesMenuPosition();
+                  setIsGamesMenuOpen((open) => !open);
+                }}
+                radius={999}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-full px-4 text-sm font-semibold text-white"
               >
                 <span className="flex items-center gap-2"><GameController size={19} weight="fill" />{t('Choose a game')}</span>
-              </button>
-            <AnimatePresence>
-              {isGamesMenuOpen && (
+              </LiquidGlass>
+            </div>
+          </div>
+        )}
+        {createPortal(
+          <AnimatePresence>
+              {isGamesMenuOpen && gamesMenuPosition && (
                 <>
                   <motion.button
                     type="button"
                     aria-label={t('Close game menu')}
                     onClick={() => setIsGamesMenuOpen(false)}
-                    className="fixed inset-0 z-30 cursor-default"
+                    data-no-view-swipe
+                    className="fixed inset-0 z-[10999] cursor-default"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.12 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   />
-                  <motion.div
-                    initial={{
-                      opacity: 0,
-                      scaleX: 1,
-                      scaleY: Math.min(1, (gamesButtonRef.current?.offsetHeight || 48) / 160),
-                      y: 8,
-                    }}
-                    animate={{ opacity: 1, scaleY: 1, y: 0 }}
-                    exit={{
-                      opacity: 0,
-                      scaleX: 1,
-                      scaleY: Math.min(1, (gamesButtonRef.current?.offsetHeight || 48) / 160),
-                      y: 8,
-                    }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                  <LiquidGlass
+                    as={motion.div}
+                    radius={24}
+                    initial={{ opacity: 0, scale: 0.84, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 4 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.85 }}
                     style={{
-                      transformOrigin: 'bottom center',
-                      backdropFilter: 'blur(30px) saturate(190%)',
-                      WebkitBackdropFilter: 'blur(30px) saturate(190%)',
+                      position: 'fixed',
+                      left: gamesMenuPosition.left,
+                      top: gamesMenuPosition.top,
+                      width: gamesMenuPosition.width,
+                      maxHeight: gamesMenuPosition.maxHeight,
+                      transformOrigin: gamesMenuPosition.transformOrigin,
                     }}
-                    className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 rounded-[24px] border border-white/[0.14] bg-[#202024]/90 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
+                    data-no-view-swipe
+                    className="z-[11000] overflow-y-auto rounded-[24px] p-2"
                   >
-                  {([
-                    ['Draw and Guess', () => void createDrawGame()],
-                    ['Connect Four', () => void createTripGame('connect_four')],
-                    ['Tic-Tac-Toe', () => void createTripGame('tic_tac_toe')],
-                  ] as const).map(([name, create]) => (
-                    <button key={name} type="button" role="menuitem" onClick={create} className="flex min-h-12 w-full items-center gap-3 rounded-[18px] px-3.5 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0A84FF]/15 text-[#0A84FF]"><GameController size={17} weight="fill" /></span>
-                      {t(name)}
-                    </button>
-                  ))}
-                  </motion.div>
+                      {([
+                        ['Draw and Guess', () => void createDrawGame()],
+                        ['Connect Four', () => void createTripGame('connect_four')],
+                        ['Tic-Tac-Toe', () => void createTripGame('tic_tac_toe')],
+                      ] as const).map(([name, create]) => (
+                        <button key={name} type="button" role="menuitem" onClick={create} className="flex min-h-12 w-full items-center gap-3 rounded-[18px] px-3.5 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0A84FF]/15 text-[#0A84FF]"><GameController size={17} weight="fill" /></span>
+                          {t(name)}
+                        </button>
+                      ))}
+                  </LiquidGlass>
                 </>
               )}
-            </AnimatePresence>
-            </div>
-          </div>
+          </AnimatePresence>,
+          document.body,
         )}
         {composerError && (
           <div
@@ -1657,21 +1854,32 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         )}
         <input
           type="file"
-          ref={photoInputRef}
-          accept="image/*"
-          onChange={handlePhotoInputChange}
+          ref={mediaInputRef}
+          accept="image/*,video/*"
+          onChange={handleMediaInputChange}
           className="hidden"
         />
 
         {/* Member Mention Autocomplete Popup */}
-        {pendingPhoto && (
-          <div className="mb-2 flex justify-end" key={pendingPhoto.id}>
-            <div className="relative max-w-[70%] overflow-hidden rounded-[18px] border border-white/10 bg-[#222226]">
-              <img
-                src={pendingPhoto.previewUrl}
-                alt={t('Photo upload preview')}
-                className="block max-h-32 w-auto max-w-full object-contain"
-              />
+        {pendingMedia && (
+          <div className="mb-2 flex justify-end" key={pendingMedia.id}>
+            <div className="relative max-w-[70%] overflow-hidden rounded-[18px] border border-white/[0.04] bg-[#222226]">
+              {pendingMedia.type === 'image' ? (
+                <img
+                  src={pendingMedia.previewUrl}
+                  alt={t('Photo upload preview')}
+                  className="block max-h-32 w-auto max-w-full object-contain"
+                />
+              ) : (
+                <video
+                  src={pendingMedia.previewUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="block max-h-32 w-auto max-w-full object-contain"
+                  aria-label={t('Video upload preview')}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1679,10 +1887,16 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         {/* items-end: The + button and send button stay anchored at the bottom line when textarea expands */}
         <form ref={composerFormRef} onSubmit={handleSend} className={`relative flex items-end gap-2 ${isGamesView ? 'hidden' : ''}`}>
           {/* Type-specific tabs have a fixed composer mode and do not show mode toggles. */}
-          {!isFilteredView && !isGamesView && <button
-            ref={plusButtonRef}
+          {!isFilteredView && !isGamesView && <LiquidGlass
+            as="button"
+            refCallback={(element) => { plusButtonRef.current = element; }}
             type="button"
-            disabled={uploadingImage}
+            disabled={uploadingMedia || isCompressingVideo}
+            aria-expanded={isPlusMenuOpen}
+            aria-haspopup="menu"
+            onPointerDown={(event) => {
+              if (composerMode === 'message') event.preventDefault();
+            }}
             onClick={() => {
               if (composerMode !== 'message') {
                 setComposerMode('message');
@@ -1696,119 +1910,123 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 setComposerError('');
                 return;
               }
-              if (textareaRef.current) {
-                textareaRef.current.blur();
+              if (isPlusMenuOpen) {
+                setIsPlusMenuOpen(false);
+              } else {
+                measurePlusMenuPosition();
+                setIsPlusMenuOpen(true);
               }
-              notifyKeyboard(false);
-              setIsPlusMenuOpen(!isPlusMenuOpen);
             }}
-            style={{
-              backdropFilter: 'blur(24px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-            }}
-            className={`w-[46px] h-[46px] min-w-[46px] min-h-[46px] rounded-full flex items-center justify-center cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.3)] border border-white/[0.12] active-press shrink-0 self-end transition-colors ${
-              isPlusMenuOpen || composerMode !== 'message'
-                ? 'bg-white/25 text-white'
-                : 'bg-[#222226]/90 text-white hover:bg-[#2a2a2e]'
-            }`}
+            radius={999}
+            className="h-[46px] min-h-[46px] w-[46px] min-w-[46px] shrink-0 self-end flex items-center justify-center rounded-full text-white"
           >
             {composerMode !== 'message'
               ? <X size={22} weight="bold" />
               : <Plus size={22} weight="bold" className={`transition-transform duration-200 ${isPlusMenuOpen ? 'rotate-45' : ''}`} />}
-          </button>}
+          </LiquidGlass>}
 
           {/* Plus Menu Popup */}
-          {!isFilteredView && !isGamesView && (
+          {!isFilteredView && !isGamesView && popupPortalTarget && createPortal(
             <AnimatePresence>
-              {isPlusMenuOpen && (
+              {isPlusMenuOpen && plusMenuPosition && (
                 <>
                   <motion.button
                     type="button"
                     aria-label={t('Close attachment menu')}
                     onClick={() => setIsPlusMenuOpen(false)}
-                    className="fixed inset-0 z-30 bg-transparent"
+                    data-no-view-swipe
+                    className="pointer-events-auto absolute inset-0 z-[28] bg-transparent"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.12 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   />
-                  <motion.div
+                  <LiquidGlass
+                    as={motion.div}
+                    radius={24}
                     initial={{
                       opacity: 0,
-                      scaleX: Math.min(1, (plusButtonRef.current?.offsetWidth || 46) / 192),
-                      scaleY: Math.min(1, (plusButtonRef.current?.offsetHeight || 46) / 240),
-                      y: 8,
+                      scaleX: plusMenuPosition.initialScaleX,
+                      scaleY: plusMenuPosition.initialScaleY,
                     }}
-                    animate={{ opacity: 1, scaleX: 1, scaleY: 1, y: 0 }}
+                    animate={{ opacity: 1, scaleX: 1, scaleY: 1 }}
                     exit={{
                       opacity: 0,
-                      scaleX: Math.min(1, (plusButtonRef.current?.offsetWidth || 46) / 192),
-                      scaleY: Math.min(1, (plusButtonRef.current?.offsetHeight || 46) / 240),
-                      y: 8,
+                      scaleX: plusMenuPosition.initialScaleX,
+                      scaleY: plusMenuPosition.initialScaleY,
                     }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                    transition={{
+                      scaleX: { type: 'spring', stiffness: 250, damping: 18, mass: 0.75 },
+                      scaleY: { type: 'spring', stiffness: 250, damping: 18, mass: 0.75 },
+                      opacity: { duration: 0.18, ease: 'easeOut' },
+                    }}
                     style={{
-                      transformOrigin: 'bottom left',
-                      backdropFilter: 'blur(30px) saturate(190%)',
-                      WebkitBackdropFilter: 'blur(30px) saturate(190%)',
-                      backgroundColor: 'rgba(28, 28, 32, 0.94)',
+                      position: 'absolute',
+                      left: plusMenuPosition.left,
+                      top: plusMenuPosition.top,
+                      width: plusMenuPosition.width,
+                      height: plusMenuPosition.height,
+                      maxHeight: plusMenuPosition.maxHeight,
+                      transformOrigin: plusMenuPosition.buttonTransformOrigin,
                     }}
                     data-reaction-clearance
-                    className="absolute left-0 bottom-14 z-40 flex w-48 flex-col border border-white/[0.14] rounded-[24px] p-2 shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
+                    data-no-view-swipe
+                    className="pointer-events-auto z-[29] flex flex-col overflow-y-auto rounded-[24px] p-2"
                   >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPlusMenuOpen(false);
-                    photoInputRef.current?.click();
-                  }}
-                  className="order-6 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
-                >
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                    <ImageIcon size={16} weight="bold" />
-                  </div>
-                  <span>{t('Photo')}</span>
-                </button>
-                {([
-                  ['grocery_list', t('Grocery list'), ShoppingCart],
-                  ['meal', t('Meal'), ForkKnife],
-                  ['plan', t('Plan'), CalendarBlank],
-                ] as const).map(([mode, label, Icon]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => {
-                      setIsPlusMenuOpen(false);
-                      setInputText('');
-                      setComposerMode(mode);
-                      textareaRef.current?.focus({ preventScroll: true });
-                      window.setTimeout(() => textareaRef.current?.setSelectionRange(0, 0), 0);
-                    }}
-                    className={`${mode === 'plan' ? 'order-1' : mode === 'grocery_list' ? 'order-2' : 'order-3'} w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all`}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-slate-200">
-                      <Icon size={16} weight="bold" />
-                    </div>
-                    <span>{label}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPlusMenuOpen(false);
-                    setIsPollSheetOpen(true);
-                  }}
-                  className="order-5 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
-                >
-                  <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
-                    <ChartBar size={16} weight="bold" />
-                  </div>
-                  <span>{t('Poll')}</span>
-                </button>
-                  </motion.div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPlusMenuOpen(false);
+                        setIsMediaMenuOpen(true);
+                      }}
+                      className="order-6 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <ImageIcon size={16} weight="bold" />
+                      </div>
+                      <span>{t('Photo / Video')}</span>
+                    </button>
+                    {([
+                      ['grocery_list', t('Grocery list'), ShoppingCart],
+                      ['meal', t('Meal'), ForkKnife],
+                      ['plan', t('Plan'), CalendarBlank],
+                    ] as const).map(([mode, label, Icon]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => {
+                          setIsPlusMenuOpen(false);
+                          setInputText('');
+                          setComposerMode(mode);
+                          textareaRef.current?.focus({ preventScroll: true });
+                          window.setTimeout(() => textareaRef.current?.setSelectionRange(0, 0), 0);
+                        }}
+                        className={`${mode === 'plan' ? 'order-1' : mode === 'grocery_list' ? 'order-2' : 'order-3'} w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-slate-200">
+                          <Icon size={16} weight="bold" />
+                        </div>
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPlusMenuOpen(false);
+                        setIsPollSheetOpen(true);
+                      }}
+                      className="order-5 w-full h-11 px-3.5 rounded-[18px] flex items-center gap-3 text-sm font-semibold text-white hover:bg-white/10 active:scale-98 cursor-pointer transition-all"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                        <ChartBar size={16} weight="bold" />
+                      </div>
+                      <span>{t('Poll')}</span>
+                    </button>
+                  </LiquidGlass>
                 </>
               )}
-            </AnimatePresence>
+            </AnimatePresence>,
+            popupPortalTarget,
           )}
 
           {((!isFilteredView && !isGamesView && composerMode !== 'grocery_list' && !isMentionListVisible)
@@ -1823,7 +2041,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 className="pointer-events-none absolute left-0 top-0"
               >
                 <AnimatePresence initial={false}>
-                {(isAtBottom || isComposerFocused) && (
+                {(isAtBottom || isComposerFocused) && !isPlusMenuOpen && (
                   <motion.div
                     key="composer-shortcuts"
                     initial={{ opacity: 0 }}
@@ -1940,12 +2158,9 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
 
           <div className="flex min-w-0 flex-1 flex-col">
             {/* Floating Pill Input Box - expands UPWARDS */}
-            <div
-              style={{
-                backdropFilter: 'blur(28px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-              }}
-              className="relative flex min-w-0 items-start min-h-[46px] bg-[#222226]/90 border border-white/[0.12] rounded-[23px] px-3.5 py-0.5 shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-150 ease-out"
+            <LiquidGlass
+              radius={23}
+              className="relative flex min-w-0 items-start min-h-[46px] rounded-[23px] px-3.5 py-0.5 transition-all duration-150 ease-out"
             >
               {composerMode === 'grocery_list' && (
                 <div className="absolute left-3.5 top-[15px] z-10 flex flex-col" aria-label={t('Draft grocery item checkboxes')}>
@@ -2021,7 +2236,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 }`}
                 style={{ minHeight: '40px', height: '40px' }}
               />
-            </div>
+            </LiquidGlass>
           </div>
 
           {/* Send Button - stays anchored at bottom */}
@@ -2032,9 +2247,19 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 : 'w-0 opacity-0 scale-50 translate-x-2 pointer-events-none'
             }`}
           >
-            <button
+            <LiquidGlass
+              as="button"
+              radius={999}
+              tint="rgba(10,132,255,0.7)"
               type="submit"
-              disabled={!inputText.trim() || (composerMode === 'plan' && !planDate) || isSending}
+              disabled={
+                (!inputText.trim() && !pendingMedia)
+                || (composerMode === 'plan' && !planDate)
+                || isSending
+                || isCompressingVideo
+                || uploadingMedia
+                || hasOversizedVideo
+              }
               onMouseDown={(e) => {
                 // Prevent focus shift away from textarea
                 e.preventDefault();
@@ -2045,12 +2270,13 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 handleSend();
               }}
               aria-label={t(isSending ? 'Sending…' : 'Send')}
-              className="w-[46px] h-[46px] min-w-[46px] min-h-[46px] rounded-full bg-[#0A84FF] text-white flex items-center justify-center cursor-pointer shadow-lg active:scale-90 transition-transform disabled:cursor-wait"
+              className="flex h-[46px] min-h-[46px] w-[46px] min-w-[46px] items-center justify-center rounded-full text-white transition-transform active:scale-95 disabled:cursor-wait disabled:opacity-60"
+              style={{ border: '1px solid rgba(255,255,255,0.10)' }}
             >
               {isSending
                 ? <CircleNotch size={20} weight="bold" className="animate-spin" />
                 : <ArrowUp size={20} weight="bold" />}
-            </button>
+            </LiquidGlass>
           </div>
         </form>
       </div>
@@ -2082,6 +2308,84 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
             </div>
           </div>
         </BottomSheet>
+      )}
+      {!isFilteredView && !isGamesView && (
+        <BottomSheet isOpen={isMediaMenuOpen} onClose={() => setIsMediaMenuOpen(false)}>
+          <div className="pb-2">
+            <h2 className="mb-3 text-center text-lg font-bold text-white">{t('Photo / Video')}</h2>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMediaMenuOpen(false);
+                  mediaInputRef.current?.click();
+                }}
+                className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
+              >
+                <ImageIcon size={20} weight="bold" className="text-emerald-400" />
+                {t('Choose photo or video')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMediaMenuOpen(false);
+                  setIsCameraOpen(true);
+                }}
+                className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
+              >
+                <VideoCamera size={20} weight="bold" className="text-[#70baff]" />
+                {t('Record video')}
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+      {!isFilteredView && !isGamesView && (
+        <BottomSheet
+          isOpen={Boolean(hasOversizedVideo)}
+          onClose={() => {
+            if (!isCompressingVideo) removePendingMedia();
+          }}
+        >
+          <div className="pb-2 text-center">
+            <h2 className="text-lg font-bold text-white">{t('Video file is too large')}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">
+              {t('This video exceeds the 50 MB upload limit. Compress it on this device before sending, or remove it.')}
+            </p>
+            {composerError && (
+              <p role="alert" className="mt-3 rounded-xl bg-red-950/70 px-3 py-2 text-sm text-red-200">
+                {t(composerError)}
+              </p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={removePendingMedia}
+                disabled={isCompressingVideo}
+                className="min-h-12 flex-1 rounded-full border border-white/15 bg-white/[0.06] text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {t('Remove')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCompressAndSend()}
+                disabled={isCompressingVideo}
+                className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#0A84FF] text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {isCompressingVideo && <CircleNotch size={17} className="animate-spin" />}
+                {t(isCompressingVideo ? 'Compressing…' : 'Send compressed')}
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+      {!isFilteredView && !isGamesView && (
+        <CameraModal
+          isOpen={isCameraOpen}
+          captureMode="video"
+          onClose={() => setIsCameraOpen(false)}
+          onCapture={handleCameraCapture}
+        />
       )}
       <MemberProfileSheet
         profile={tripMembers.find((member) => member.user_id === selectedProfileId)?.profile || null}
@@ -2185,11 +2489,11 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         />
       )}
       <AnimatePresence>
-        {selectedPhoto && (
+        {selectedMedia && (
           <PhotoLightbox
-            key="message-photo-viewer"
-            photos={tripPhotos}
-            selectedPhotoId={selectedPhoto.id}
+            key="message-media-viewer"
+            photos={chatMedia}
+            selectedPhotoId={selectedMedia.id}
             onSelectPhoto={setSelectedPhotoId}
             onClose={() => setSelectedPhotoId(null)}
             showCloseButton={false}
@@ -2241,60 +2545,74 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
         document.body,
       )}
 
-      {createPortal(
+      {popupPortalTarget && createPortal(
         <AnimatePresence>
           {isCallMenuOpen && callMenuPosition && (
             <>
               <motion.button
                 type="button"
                 aria-label={t('Close call menu')}
-                className="fixed inset-0 z-[10000] cursor-default"
+                className="pointer-events-auto absolute inset-0 z-[18] cursor-default"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.12 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 onClick={() => setIsCallMenuOpen(false)}
               />
-              <motion.div
+              <LiquidGlass
+                as={motion.div}
+                radius={16}
                 style={{
-                  top: `${callMenuPosition.top}px`,
-                  right: `${callMenuPosition.right}px`,
-                  transformOrigin: 'top right',
-                  backgroundColor: 'rgba(32, 32, 36, 0.88)',
-                  backdropFilter: 'blur(24px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-                  width: 'min(18rem, calc(100vw - 1.5rem))',
+                  position: 'absolute',
+                  top: callMenuPosition.top,
+                  left: callMenuPosition.left,
+                  width: callMenuPosition.width,
+                  height: callMenuPosition.height,
+                  maxHeight: callMenuPosition.maxHeight,
+                  transformOrigin: callMenuPosition.buttonTransformOrigin,
                 }}
-                initial={{ opacity: 0, scale: 0.92, y: -5 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: -5 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
-                className="fixed z-[10001] box-border rounded-2xl border border-white/10 bg-[#202024]/90 p-2.5 shadow-2xl"
+                initial={{
+                  opacity: 0,
+                  scaleX: callMenuPosition.initialScaleX,
+                  scaleY: callMenuPosition.initialScaleY,
+                }}
+                animate={{ opacity: 1, scaleX: 1, scaleY: 1 }}
+                exit={{
+                  opacity: 0,
+                  scaleX: callMenuPosition.initialScaleX,
+                  scaleY: callMenuPosition.initialScaleY,
+                }}
+                transition={{
+                  scaleX: { type: 'spring', stiffness: 250, damping: 18, mass: 0.75 },
+                  scaleY: { type: 'spring', stiffness: 250, damping: 18, mass: 0.75 },
+                  opacity: { duration: 0.18, ease: 'easeOut' },
+                }}
+                className="pointer-events-auto z-[19] overflow-y-auto rounded-2xl p-2.5"
               >
-                <div className="px-3 py-2 text-sm font-semibold text-slate-400">{t('Start a call')}</div>
-                {([
-                  ['audio', t('Voice call'), PhoneCall],
-                  ['video', t('Video call'), VideoCamera],
-                ] as const).map(([kind, label, Icon]) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    onClick={() => {
-                      setIsCallMenuOpen(false);
-                      void call.startCall(kind, onlineMembers);
-                    }}
-                    className="flex min-h-14 w-full items-center gap-3 rounded-xl px-4 text-left text-base font-semibold text-white hover:bg-white/10"
-                  >
-                    <Icon size={19} className="text-sky-400" />
-                    {label}
-                  </button>
-                ))}
-                {call.callError && <div className="px-3 pb-2 pt-1 text-xs text-red-300">{call.callError}</div>}
-              </motion.div>
+                  <div className="px-3 py-2 text-sm font-semibold text-slate-400">{t('Start a call')}</div>
+                  {([
+                    ['audio', t('Voice call'), PhoneCall],
+                    ['video', t('Video call'), VideoCamera],
+                  ] as const).map(([kind, label, Icon]) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => {
+                        setIsCallMenuOpen(false);
+                        void call.startCall(kind, onlineMembers);
+                      }}
+                      className="flex min-h-14 w-full items-center gap-3 rounded-xl px-4 text-left text-base font-semibold text-white hover:bg-white/10"
+                    >
+                      <Icon size={19} className="text-sky-400" />
+                      {label}
+                    </button>
+                  ))}
+                  {call.callError && <div className="px-3 pb-2 pt-1 text-xs text-red-300">{call.callError}</div>}
+              </LiquidGlass>
             </>
           )}
         </AnimatePresence>,
-        document.body,
+        popupPortalTarget,
       )}
 
     </div>

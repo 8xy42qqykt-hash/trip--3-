@@ -16,6 +16,7 @@ import {
   SpotifyLogo,
   TiktokLogo,
   YoutubeLogo,
+  Play,
 } from '@phosphor-icons/react';
 import { Message, Reaction } from '../../types';
 import { Avatar } from '../common/Avatar';
@@ -28,6 +29,7 @@ import { GameSessionInviteCard } from './GameSessionInviteCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { StickerArtwork } from './StickerArtwork';
 import { findFirstLink, removeFirstLink } from '../../utils/links';
+import { LiquidGlass } from '../ui/LiquidGlass';
 
 interface ChatBubbleProps {
   message: Message;
@@ -49,6 +51,7 @@ interface ChatBubbleProps {
   onOpenDrawGame?: (gameId: string) => void;
   onOpenGameSession?: (gameId: string) => void;
   onOpenImage?: (imageUrl: string) => void;
+  onOpenVideo?: (videoUrl: string) => void;
 }
 
 const REACTION_ICON_MAP: Record<Reaction['kind'], React.ComponentType<any>> = {
@@ -141,7 +144,7 @@ const LinkPreview: React.FC<{
       onContextMenu={onContextMenu}
       onClick={onClick}
       data-link-preview="true"
-      className={`mt-1.5 block w-[min(72vw,340px)] max-w-full overflow-hidden border border-white/10 bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)] transition-transform active:scale-[0.99] select-none ${cardClassName}`}
+      className={`mt-1.5 block w-[min(72vw,340px)] max-w-full overflow-hidden border border-white/[0.04] bg-[#202024] text-left shadow-[0_6px_18px_rgba(0,0,0,0.24)] transition-transform active:scale-[0.99] select-none ${cardClassName}`}
       style={{
         WebkitTouchCallout: 'none',
         WebkitUserSelect: 'none',
@@ -351,6 +354,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   onOpenDrawGame,
   onOpenGameSession,
   onOpenImage,
+  onOpenVideo,
 }) => {
   const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -656,11 +660,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const isPollResult = message.type === 'poll_result' && message.metadata;
   const isGameSummary = message.type === 'text' && message.metadata?.gameSummary === true;
   const isImageOnly = message.type === 'image' && Boolean(message.image_url);
+  const isVideoOnly = message.type === 'video' && Boolean(message.image_url);
   const stickerId = typeof message.metadata?.stickerId === 'string' ? message.metadata.stickerId : null;
   const isSticker = message.type === 'text' && stickerId !== null;
   const callId = message.metadata?.callId;
   const linkPreview = message.metadata?.linkPreview as LinkPreviewData | undefined;
-  const canShowLinkPreview = !isImageOnly
+  const canShowLinkPreview = !isImageOnly && !isVideoOnly
     && Boolean(firstLink)
     && (message.type === 'text' || message.type === 'grocery_list' || message.type === 'meal' || message.type === 'plan')
     && !isSticker;
@@ -683,7 +688,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   // Top corner has the exact same roundness as bottom corner when multiple messages from same sender
   const getBubbleRadiusClasses = () => {
-    if (isImageOnly) return 'rounded-[22px]';
+    if (isImageOnly || isVideoOnly) return 'rounded-[22px]';
     if (isOwn) {
       return isFirstInGroup
         ? 'rounded-[22px] rounded-br-[6px]'
@@ -714,11 +719,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {replyMessage && (
             <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
               <div
-                className={`mb-0.5 max-w-[min(72vw,320px)] overflow-hidden rounded-[13px] border px-3 py-1.5 text-[11px] leading-snug ${
-                  isOwn
-                    ? 'border-white/20 bg-[#202024] text-slate-200'
-                    : 'border-white/15 bg-[#202024] text-slate-200'
-                }`}
+                className="mb-0.5 max-w-[min(72vw,320px)] overflow-hidden rounded-[13px] border border-white/[0.04] bg-[#202024] px-3 py-1.5 text-[11px] leading-snug text-slate-200"
               >
                 <div className="truncate font-semibold text-white/80">
                   {replyMessage.sender?.display_name || t('Member')}
@@ -778,25 +779,61 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             </div>
           )}
           {/* Image Bubble */}
-          {isImageOnly ? (
+          {isImageOnly || isVideoOnly ? (
             <div
               ref={bubbleRef}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-              onContextMenu={handleContextMenu}
-              onClick={() => {
+              onPointerDown={isImageOnly ? handlePointerDown : undefined}
+              onPointerMove={isImageOnly ? handlePointerMove : undefined}
+              onPointerUp={isImageOnly ? handlePointerUp : undefined}
+              onPointerCancel={isImageOnly ? handlePointerCancel : undefined}
+              onContextMenu={isImageOnly ? handleContextMenu : undefined}
+              onClick={isImageOnly ? () => {
                 if (!didLongPressRef.current) onOpenImage?.(message.image_url!);
+              } : isVideoOnly ? () => onOpenVideo?.(message.image_url!) : undefined}
+              onKeyDown={isVideoOnly ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onOpenVideo?.(message.image_url!);
+                }
+              } : undefined}
+              role={isVideoOnly ? 'button' : undefined}
+              tabIndex={isVideoOnly ? 0 : undefined}
+              aria-label={isVideoOnly ? t('Open video') : undefined}
+              className={`${isImageOnly || isVideoOnly ? 'chat-bubble-touch cursor-pointer' : 'relative'} bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 select-none`}
+              style={{
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+                visibility: showReactionPicker ? 'hidden' : undefined,
               }}
-              className="chat-bubble-touch cursor-pointer relative bg-transparent p-0 transition-opacity active:opacity-90 flex flex-col gap-1.5 [touch-action:pan-y] select-none"
-              style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
             >
-              <img
-                src={message.image_url!}
-                alt="Attachment"
-                className="rounded-[22px] max-h-80 w-auto object-cover select-none shadow-md block"
-              />
+              {isImageOnly ? (
+                <img
+                  src={message.image_url!}
+                  alt="Attachment"
+                  className="rounded-[22px] max-h-80 w-auto object-cover select-none shadow-md block"
+                />
+              ) : (
+                <div className="relative">
+                  <video
+                    src={message.image_url!}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="pointer-events-none block max-h-80 max-w-full rounded-[22px] bg-black object-contain shadow-md"
+                    aria-label={t('Video message')}
+                  />
+                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <LiquidGlass
+                      as="span"
+                      radius={999}
+                      className="flex h-12 w-12 items-center justify-center rounded-full text-white"
+                    >
+                      <Play size={22} weight="fill" />
+                    </LiquidGlass>
+                  </span>
+                </div>
+              )}
               {message.content && (
                 <p className="min-w-0 max-w-full px-1.5 text-base text-white whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {renderContentWithMentions(message.content, isOwn, members, () => didLongPressRef.current)}
@@ -816,12 +853,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   className={`chat-bubble-touch cursor-pointer relative min-w-0 max-w-full transition-opacity active:opacity-90 [overflow-wrap:anywhere] [touch-action:pan-y] ${
                     isSticker
                       ? 'bg-transparent p-0 shadow-none'
-                      : `px-4 py-2.5 text-[16px] leading-[1.4] border border-white/10 ${getBubbleRadiusClasses()} ${
+                      : `px-4 py-2.5 text-[16px] leading-[1.4] border ${isOwn ? 'border-white/10' : 'border-white/[0.04]'} ${getBubbleRadiusClasses()} ${
                         isOwn
                           ? 'bg-[#0A84FF] text-white shadow-xs'
                           : 'bg-[#262629] text-white shadow-xs'
                         } ${canShowLinkPreview ? 'min-w-[min(72vw,340px)]' : ''}`
                   }`}
+                  style={{ visibility: showReactionPicker ? 'hidden' : undefined }}
                 >
                 {/* Poll Result Message in Chat Log */}
                 {isSticker ? (
@@ -975,7 +1013,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                   event.stopPropagation();
                   toggleReactionDetails();
                 }}
-                className="flex items-center gap-1 rounded-full border border-white/15 px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.3)] select-none animate-calm-fade-in"
+                className="flex items-center gap-1 rounded-full border border-white/[0.04] px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.3)] select-none animate-calm-fade-in"
                 style={{
                   background: 'rgba(30, 30, 35, 0.92)',
                   backdropFilter: 'blur(20px) saturate(180%)',
@@ -1013,7 +1051,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                         y: reactionDetailsPosition.placement === 'below' ? -5 : 5,
                       }}
                       transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
-                      className="fixed z-[13000] box-border w-max max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.14] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+                      className="fixed z-[13000] box-border w-max max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto overscroll-contain rounded-[22px] border border-white/[0.04] bg-[#1c1c20]/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
                       style={{
                         top: reactionDetailsPosition.top,
                         left: reactionDetailsPosition.left,

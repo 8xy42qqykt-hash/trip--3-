@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -27,10 +28,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       const timer = setTimeout(() => {
         setIsMounted(false);
         setIsClosing(false);
-      }, 240);
+      }, 320);
       return () => clearTimeout(timer);
     }
   }, [isOpen, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    document.body.dataset.bottomSheetOpen = 'true';
+    return () => {
+      delete document.body.dataset.bottomSheetOpen;
+    };
+  }, [isMounted]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -75,15 +84,13 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const backdropAnimationClass = isClosing ? 'animate-backdrop-out' : 'animate-backdrop-in';
 
-  return (
+  return createPortal((
     <div className="fixed inset-0 z-50 flex flex-col justify-end select-none">
-      {/* Dimmed backdrop with guaranteed smooth animation on first mount */}
       <div
         onClick={onClose}
-        className={`fixed inset-0 bg-black/65 backdrop-blur-xs ${backdropAnimationClass}`}
+        className={`fixed inset-0 bg-black/55 ${backdropAnimationClass}`}
       />
 
-      {/* Sheet Content: ALWAYS smoothly slides up from the bottom */}
       <div
         role="dialog"
         aria-modal="true"
@@ -94,11 +101,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         style={{
           transform: isDraggingRef.current ? `translateY(${dragY}px)` : undefined,
           transition: isDraggingRef.current ? 'none' : undefined,
-          backdropFilter: 'blur(36px) saturate(200%)',
-          WebkitBackdropFilter: 'blur(36px) saturate(200%)',
-          backgroundImage: 'linear-gradient(to bottom, rgba(30, 30, 36, 0.96) 0%, rgba(12, 12, 14, 0.98) 58%, #000000 100%)',
+          backgroundImage: 'linear-gradient(to bottom, rgba(34, 34, 40, 0.98) 0%, rgba(16, 16, 18, 0.99) 58%, #000000 100%)',
         }}
-        className={`relative z-10 w-full max-w-lg mx-auto border-t border-white/[0.14] rounded-t-[32px] pt-3.5 px-6 pb-7 shadow-[0_-16px_48px_rgba(0,0,0,0.7)] ${sheetAnimationClass}`}
+        className={`relative z-10 w-full max-w-lg mx-auto border-t border-white/[0.04] rounded-t-[32px] pt-3.5 px-6 pb-7 shadow-[0_-16px_48px_rgba(0,0,0,0.7)] ${sheetAnimationClass}`}
       >
         {/* Grabber */}
         <div className="w-12 h-1.5 bg-white/30 rounded-full mx-auto mb-4 cursor-grab active:cursor-grabbing" />
@@ -107,5 +112,5 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 };

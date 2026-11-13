@@ -17,8 +17,6 @@
     --text-tertiary: #636366;
     --bubble-other: #262629;
     --bubble-self: #0A84FF;
-    --glass-bg: rgba(28, 28, 32, 0.72);
-    --glass-border: rgba(255, 255, 255, 0.08);
     --separator: rgba(84, 84, 88, 0.2);
   }
 
@@ -37,10 +35,11 @@
 
   html, body, #root {
     height: 100%;
+    min-height: 100dvh;
     width: 100%;
     margin: 0;
     padding: 0;
-    background-color: #000000;
+    background-color: transparent;
     color: #ffffff;
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     -webkit-font-smoothing: antialiased;
@@ -75,19 +74,113 @@
   }
 }
 
-.glass-surface {
-  background: rgba(28, 28, 32, 0.75);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.liquid-glass-content {
+  display: contents;
 }
 
-.glass-floating {
-  background: rgba(28, 28, 32, 0.85);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.35);
+button.liquid-glass-host:not(:disabled) {
+  transition:
+    scale 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 160ms ease-out;
+  filter: brightness(1);
+}
+
+button.liquid-glass-host:not(:disabled):active {
+  scale: 0.96;
+  filter: brightness(1.24);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.liquid-glass-host:not(:disabled) {
+    transition: none;
+  }
+
+  button.liquid-glass-host:not(:disabled):active {
+    scale: 1;
+  }
+}
+
+body[data-bottom-sheet-open="true"] #root {
+  overflow: hidden;
+  border-radius: 30px;
+  transform: scale(0.96);
+  transform-origin: center center;
+  transition:
+    border-radius 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+body[data-bottom-sheet-open="true"] {
+  background-color: #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-bottom-sheet-open="true"] #root {
+    transform: none;
+    border-radius: 0;
+  }
+}
+
+#root {
+  transition:
+    border-radius 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.video-scrubber {
+  height: 20px;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  cursor: pointer;
+}
+
+.video-scrubber::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    #fff 0 var(--video-progress, 0%),
+    rgba(255, 255, 255, 0.4) var(--video-progress, 0%) 100%
+  );
+}
+
+.video-scrubber::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.video-scrubber.is-dragging::-webkit-slider-thumb {
+  background: #fff;
+}
+
+.video-scrubber::-moz-range-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    #fff 0 var(--video-progress, 0%),
+    rgba(255, 255, 255, 0.4) var(--video-progress, 0%) 100%
+  );
+}
+
+.video-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.video-scrubber.is-dragging::-moz-range-thumb {
+  background: #fff;
 }
 
 .pt-safe {
@@ -377,19 +470,19 @@
 
 @keyframes sheetSlideUp {
   0% {
-    transform: translateY(100%);
+    transform: translateY(100%) scale(0.96);
   }
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes sheetSlideDown {
   0% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
   100% {
-    transform: translateY(100%);
+    transform: translateY(100%) scale(0.96);
   }
 }
 
@@ -423,19 +516,21 @@
 }
 
 .animate-sheet-up {
-  animation: sheetSlideUp 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: sheetSlideUp 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: center bottom;
 }
 
 .animate-sheet-down {
-  animation: sheetSlideDown 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: sheetSlideDown 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: center bottom;
 }
 
 .animate-backdrop-in {
-  animation: backdropFadeIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: backdropFadeIn 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-backdrop-out {
-  animation: backdropFadeOut 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: backdropFadeOut 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-pop-in {

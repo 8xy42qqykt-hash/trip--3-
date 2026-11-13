@@ -148,6 +148,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     clone.style.maxHeight = 'none';
     clone.style.overflow = 'visible';
     clone.style.pointerEvents = 'none';
+    clone.style.visibility = 'visible';
     container.replaceChildren(clone);
   }, [bubbleElement, message.id]);
 
@@ -172,7 +173,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 14, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 34 }}
         style={{
           transform: 'translateY(0)',
           transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -183,7 +184,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 34 }}
           style={{
             top: `${reactionBarTop}px`,
             left: `${reactionBarLeft}px`,
@@ -192,7 +193,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             WebkitBackdropFilter: 'blur(32px) saturate(190%)',
             backgroundColor: 'rgba(28, 28, 32, 0.94)',
           }}
-          className="absolute h-13 px-3 flex items-center justify-between border border-white/[0.14] rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.6)] pointer-events-auto animate-pop-in"
+          className="absolute h-13 px-3 flex items-center justify-between border border-white/[0.04] rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.6)] pointer-events-auto"
         >
           {REACTION_ICONS.map(({ kind, Icon }) => {
             const isSelected = currentReaction === kind;
@@ -220,7 +221,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 34 }}
           style={{
             top: `${targetBubbleTop}px`,
             left: `${targetBubbleLeft}px`,
@@ -236,7 +237,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 10, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 30, delay: 0.025 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 34, delay: 0.025 }}
           style={{
             top: `${actionMenuTop}px`,
             left: `${actionMenuLeft}px`,
@@ -245,7 +246,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
             WebkitBackdropFilter: 'blur(32px) saturate(190%)',
             backgroundColor: 'rgba(28, 28, 32, 0.94)',
           }}
-          className="absolute border border-white/[0.14] rounded-[22px] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.6)] flex flex-col pointer-events-auto"
+          className="absolute border border-white/[0.04] rounded-[22px] p-2 shadow-[0_16px_48px_rgba(0,0,0,0.6)] flex flex-col pointer-events-auto"
         >
           <button
             type="button"

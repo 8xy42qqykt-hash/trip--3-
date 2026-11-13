@@ -891,7 +891,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : 'msg_' + Math.random().toString(36).substring(2, 9),
       trip_id: currentTrip.id,
       user_id: user.id,
-      type: imageUrl ? 'image' : type || 'text',
+      type: type || (imageUrl ? 'image' : 'text'),
       content: cleanContent,
       image_url: imageUrl || null,
       reply_to: replyToId || null,

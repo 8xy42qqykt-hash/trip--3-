@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, animate, useMotionValue } from 'motion/react';
-import { ArrowLeft, ArrowRight, GameController, X } from '@phosphor-icons/react';
+import { GameController, X } from '@phosphor-icons/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -248,14 +248,13 @@ const MainAppContent: React.FC = () => {
   const prevTripIdRef = useRef<string | null>(null);
   const prevViewRef = useRef<AppViewKey>('trips');
   const deepLinkHandledRef = useRef(false);
-  const edgeSwipeRef = useRef<{ x: number; y: number; side: 'left' | 'right' | null; pointerId: number } | null>(null);
-  const edgeSwipeOffset = useMotionValue(0);
-  const [edgeSwipeSide, setEdgeSwipeSide] = useState<'left' | 'right' | null>(null);
-  const [canCommitEdgeSwipe, setCanCommitEdgeSwipe] = useState(false);
-  const edgeSwipeArmedRef = useRef(false);
-  const isHorizontalSwipeRef = useRef(false);
-  const [isGestureTransitioning, setIsGestureTransitioning] = useState(false);
-  const gestureTransitionTimerRef = useRef<number | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number; startedAt: number; pointerId: number } | null>(null);
+  const swipeOffset = useMotionValue(0);
+  const adjacentViewOffset = useMotionValue(0);
+  const [swipeNeighbor, setSwipeNeighbor] = useState<AppViewKey | null>(null);
+  const [isSwipeDragging, setIsSwipeDragging] = useState(false);
+  const swipeNeighborRef = useRef<AppViewKey | null>(null);
+  const swipeDirectionRef = useRef<number>(0);
   const tripExitDirectionRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -403,173 +402,156 @@ const MainAppContent: React.FC = () => {
     setTargetMention(mentionName);
   };
 
-  const handleEdgePointerDown = (event: React.PointerEvent<HTMLElement>) => {
-    if (event.pointerType === 'mouse' || !currentTrip || activeTab === 'trips') return;
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (target.closest('input, textarea, button, select, [contenteditable="true"], [data-no-edge-swipe], .chat-bubble-touch, .leaflet-container, [role="dialog"]')) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    edgeSwipeRef.current = { x: event.clientX, y: event.clientY, side: null, pointerId: event.pointerId };
-    edgeSwipeArmedRef.current = false;
-    isHorizontalSwipeRef.current = false;
-    edgeSwipeOffset.set(0);
+  const getAdjacentView = (view: AppViewKey, direction: number): AppViewKey | null => {
+    if (view === 'trips') return null;
+    const tabs: TabKey[] = ['messages', 'schedule', secondaryTab, 'my_trip', 'settings'];
+    const index = tabs.indexOf(view);
+    if (direction < 0) return index <= 0 ? 'trips' : tabs[index - 1];
+    return tabs[index + 1] || null;
   };
 
-  const handleEdgePointerMove = (event: React.PointerEvent<HTMLElement>) => {
-    const start = edgeSwipeRef.current;
+  const handleSwipePointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' || !currentTrip || activeView === 'trips') return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('input, textarea, button, select, video, [contenteditable="true"], [data-no-view-swipe], .chat-bubble-touch, .leaflet-container, [role="dialog"]')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    swipeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      startedAt: performance.now(),
+      pointerId: event.pointerId,
+    };
+    swipeNeighborRef.current = null;
+    swipeDirectionRef.current = 0;
+    setIsSwipeDragging(false);
+    swipeOffset.set(0);
+    adjacentViewOffset.set(0);
+  };
+
+  const handleSwipePointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    const start = swipeStartRef.current;
     if (!start || event.pointerId !== start.pointerId) return;
     const deltaX = event.clientX - start.x;
     const deltaY = event.clientY - start.y;
-    const threshold = window.innerWidth / 6;
-    if (edgeSwipeArmedRef.current) {
-      const returnedToEdge = start.side === 'left' ? deltaX <= 8 : deltaX >= -8;
-      if (returnedToEdge) {
-        edgeSwipeArmedRef.current = false;
-        setCanCommitEdgeSwipe(false);
-        setEdgeSwipeSide(null);
-        edgeSwipeOffset.set(0);
-        return;
-      }
-      event.preventDefault();
-      isHorizontalSwipeRef.current = true;
-      edgeSwipeOffset.set(start.side === 'left' ? threshold : -threshold);
+    if (Math.abs(deltaY) > 24 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      swipeStartRef.current = null;
       return;
     }
-    if (Math.abs(deltaY) > 20 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      edgeSwipeRef.current = null;
-      isHorizontalSwipeRef.current = false;
-      setEdgeSwipeSide(null);
-      setCanCommitEdgeSwipe(false);
-      edgeSwipeOffset.set(0);
-      return;
-    }
-    if (Math.abs(deltaX) < Math.abs(deltaY) || Math.abs(deltaX) < 6) return;
+    if (Math.abs(deltaX) < Math.abs(deltaY) || Math.abs(deltaX) < 8) return;
 
-    const side = deltaX > 0 ? 'left' : 'right';
-    start.side = side;
-    isHorizontalSwipeRef.current = true;
     event.preventDefault();
-    setEdgeSwipeSide(side);
-    const isValidDirection = side === 'left'
-      ? (activeTab === 'messages' || ['groceries', 'games', 'schedule', 'my_trip', 'settings'].includes(activeTab))
-      : activeTab !== 'settings';
-    const hasReachedThreshold = Math.abs(deltaX) >= threshold && isValidDirection;
-    if (hasReachedThreshold) {
-      edgeSwipeArmedRef.current = true;
+    setIsSwipeDragging(true);
+    const direction = deltaX > 0 ? -1 : 1;
+    const neighbor = getAdjacentView(activeView, direction);
+    if (swipeNeighborRef.current !== neighbor) {
+      swipeNeighborRef.current = neighbor;
+      setSwipeNeighbor(neighbor);
+      swipeDirectionRef.current = neighbor ? direction : 0;
     }
-    setCanCommitEdgeSwipe(edgeSwipeArmedRef.current);
-    edgeSwipeOffset.set(side === 'left'
-      ? Math.max(0, Math.min(threshold, deltaX))
-      : Math.min(0, Math.max(-threshold, deltaX)));
+    const width = window.innerWidth;
+    const offset = neighbor
+      ? Math.max(-width, Math.min(width, deltaX))
+      : Math.max(-width * 0.18, Math.min(width * 0.18, deltaX * 0.18));
+    swipeOffset.set(offset);
+    adjacentViewOffset.set(offset + (neighbor ? direction * width : 0));
   };
 
-  useEffect(() => {
-    const preventScrollDuringSwipe = (event: TouchEvent) => {
-      if (isHorizontalSwipeRef.current) event.preventDefault();
-    };
-    window.addEventListener('touchmove', preventScrollDuringSwipe, { passive: false });
-
-    const finishEdgeSwipe = (event: PointerEvent | null) => {
-      const start = edgeSwipeRef.current;
-      edgeSwipeRef.current = null;
-      isHorizontalSwipeRef.current = false;
-      const deltaX = event && start ? event.clientX - start.x : 0;
-      const returnedToEdge = start?.side === 'left' ? deltaX <= 8 : deltaX >= -8;
-      if (edgeSwipeArmedRef.current && returnedToEdge) {
-        edgeSwipeArmedRef.current = false;
-      }
-      const wasArmed = edgeSwipeArmedRef.current;
-      edgeSwipeArmedRef.current = false;
-      if (!start || !start.side || (event && event.pointerId !== start.pointerId)) {
-        setEdgeSwipeSide(null);
-        setCanCommitEdgeSwipe(false);
-        edgeSwipeOffset.set(0);
-        return;
-      }
-
-      if (start.side) setEdgeSwipeSide(start.side);
-      const isCommitGesture = wasArmed
-        && currentTrip
-        && activeTab !== 'trips';
-      const tabs = ['messages', 'schedule', secondaryTab, 'my_trip', 'settings'] as const;
-      let transitionDirection = 0;
-      let commitTransition: (() => void) | null = null;
-
-      if (isCommitGesture && start.side === 'left') {
-        if (activeTab === 'messages') {
-          transitionDirection = -1;
-          commitTransition = () => {
-            setSlideDirection(transitionDirection);
-            setIsKeyboardOpen(false);
-            tripExitDirectionRef.current = -1;
-            exitTrip();
-          };
-        } else {
-          const previousTab = tabs.indexOf(activeTab) - 1;
-          if (previousTab >= 0) {
-            transitionDirection = -1;
-            commitTransition = () => {
-              setSlideDirection(transitionDirection);
-              setActiveTab(tabs[previousTab]);
-              setIsKeyboardOpen(false);
-            };
-          }
-        }
-      } else if (isCommitGesture && start.side === 'right') {
-        const nextTab = tabs.indexOf(activeTab) + 1;
-        if (nextTab < tabs.length) {
-          transitionDirection = 1;
-          commitTransition = () => {
-            setSlideDirection(transitionDirection);
-            setActiveTab(tabs[nextTab]);
-            setIsKeyboardOpen(false);
-          };
-        }
-      }
-
-      if (commitTransition) {
-        setIsGestureTransitioning(true);
-        setEdgeSwipeSide(start.side);
-        const threshold = window.innerWidth / 6;
-        edgeSwipeOffset.set(start.side === 'left' ? threshold : -threshold);
-      }
-      const arrowExitDirection = transitionDirection > 0 ? -1 : 1;
-      animate(edgeSwipeOffset, commitTransition ? arrowExitDirection * (window.innerWidth + 64) : 0, {
-        duration: commitTransition ? 0.2 : 0.18,
-        ease: [0.22, 1, 0.36, 1],
-        onComplete: () => {
-          setEdgeSwipeSide(null);
-          setCanCommitEdgeSwipe(false);
-          if (!commitTransition) return;
-          commitTransition();
-          if (gestureTransitionTimerRef.current !== null) {
-            window.clearTimeout(gestureTransitionTimerRef.current);
-          }
-          gestureTransitionTimerRef.current = window.setTimeout(() => {
-            setIsGestureTransitioning(false);
-            gestureTransitionTimerRef.current = null;
-          }, 500);
-        },
-      });
-    };
-
-    const handlePointerUp = (event: PointerEvent) => finishEdgeSwipe(event);
-    const handlePointerCancel = () => finishEdgeSwipe(null);
-
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerCancel);
-    return () => {
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerCancel);
-      window.removeEventListener('touchmove', preventScrollDuringSwipe);
-    };
-  }, [activeTab, currentTrip?.id, edgeSwipeOffset, exitTrip]);
-
-  useEffect(() => () => {
-    if (gestureTransitionTimerRef.current !== null) {
-      window.clearTimeout(gestureTransitionTimerRef.current);
+  const handleSwipePointerUp = (event: React.PointerEvent<HTMLElement>, cancelled = false) => {
+    const start = swipeStartRef.current;
+    if (!start || event.pointerId !== start.pointerId) return;
+    swipeStartRef.current = null;
+    const neighbor = swipeNeighborRef.current;
+    if (!neighbor) {
+      setIsSwipeDragging(false);
+      swipeOffset.set(0);
+      adjacentViewOffset.set(0);
+      return;
     }
-  }, []);
+
+    const deltaX = event.clientX - start.x;
+    const elapsed = Math.max(1, performance.now() - start.startedAt);
+    const velocity = deltaX / elapsed;
+    const width = window.innerWidth;
+    const shouldCommit = !cancelled
+      && (Math.abs(deltaX) >= width * 0.22 || (Math.abs(deltaX) >= 42 && Math.abs(velocity) >= 0.45));
+    const target = shouldCommit ? (deltaX > 0 ? width : -width) : 0;
+    const neighborDirection = swipeDirectionRef.current;
+
+    animate(swipeOffset, target, {
+      duration: shouldCommit ? 0.22 : 0.18,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (value) => adjacentViewOffset.set(value + neighborDirection * width),
+      onComplete: () => {
+        if (shouldCommit) {
+          setSlideDirection(0);
+          setIsKeyboardOpen(false);
+          if (neighbor === 'trips') {
+            tripExitDirectionRef.current = 0;
+            exitTrip();
+          } else {
+            setActiveTab(neighbor);
+          }
+        }
+        swipeNeighborRef.current = null;
+        swipeDirectionRef.current = 0;
+        setSwipeNeighbor(null);
+        setIsSwipeDragging(false);
+        swipeOffset.set(0);
+        adjacentViewOffset.set(0);
+      },
+    });
+  };
+
+  const renderViewContent = (view: AppViewKey) => {
+    if (view === 'trips') {
+      return (
+        <TripGate
+          onTripSelecting={() => setSlideDirection(1)}
+          onTripSelected={() => setActiveTab('messages')}
+        />
+      );
+    }
+    if (view === 'messages') {
+      return (
+        <MessagesView
+          onKeyboardStateChange={setIsKeyboardOpen}
+          onPhotoViewerChange={setIsPhotoViewerOpen}
+          initialMention={targetMention}
+          onClearInitialMention={() => setTargetMention(undefined)}
+          onlineMembers={onlineMembers}
+          call={call}
+        />
+      );
+    }
+    if (view === 'groceries') {
+      return <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />;
+    }
+    if (view === 'games') {
+      return (
+        <MessagesView
+          viewMode="games"
+          onlineMembers={onlineMembers}
+          call={call}
+          gameOpenRequest={gameOpenRequest}
+          onGameOpenRequestHandled={() => setGameOpenRequest(null)}
+        />
+      );
+    }
+    if (view === 'schedule') {
+      return <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />;
+    }
+    if (view === 'my_trip') {
+      return <TripOverview onPhotoViewerChange={setIsPhotoViewerOpen} />;
+    }
+    return (
+      <SettingsView
+        onNavigateToMessages={handleNavigateToMessages}
+        secondaryTab={secondaryTab}
+        onSecondaryTabChange={handleSecondaryTabChange}
+      />
+    );
+  };
 
   // Splash screen until session resolves
   if (isLoading && !isForcedReady) {
@@ -590,9 +572,11 @@ const MainAppContent: React.FC = () => {
     <div className="fixed inset-0 h-[100dvh] w-full flex flex-col bg-black text-white overflow-hidden select-none">
       <main
         className="flex-1 w-full overflow-hidden relative"
-        onPointerDown={handleEdgePointerDown}
-        onPointerMove={handleEdgePointerMove}
-        style={{ touchAction: edgeSwipeSide ? 'none' : 'pan-y' }}
+        onPointerDown={handleSwipePointerDown}
+        onPointerMove={handleSwipePointerMove}
+        onPointerUp={handleSwipePointerUp}
+        onPointerCancel={(event) => handleSwipePointerUp(event, true)}
+        style={{ touchAction: 'pan-y' }}
       >
         <AnimatePresence initial={false} custom={slideDirection} mode="popLayout">
           <motion.div
@@ -619,53 +603,26 @@ const MainAppContent: React.FC = () => {
               x: { type: 'spring', stiffness: 380, damping: 36 },
               opacity: { duration: 0.15 },
             }}
-            className="absolute inset-0 w-full h-full overflow-hidden flex flex-col"
+            style={isSwipeDragging ? { x: swipeOffset } : undefined}
+            className="absolute inset-0 z-10 flex h-full w-full flex-col overflow-hidden"
             data-view-key={activeView}
             data-app-view="inactive"
           >
-            {activeView === 'trips' && (
-              <TripGate
-                onTripSelecting={() => setSlideDirection(1)}
-                onTripSelected={() => setActiveTab('messages')}
-              />
-            )}
-            {activeView === 'messages' && (
-              <MessagesView
-                onKeyboardStateChange={setIsKeyboardOpen}
-                onPhotoViewerChange={setIsPhotoViewerOpen}
-                initialMention={targetMention}
-                onClearInitialMention={() => setTargetMention(undefined)}
-                onlineMembers={onlineMembers}
-                call={call}
-              />
-            )}
-            {activeView === 'groceries' && (
-              <MessagesView viewMode="grocery_list" onlineMembers={onlineMembers} call={call} />
-            )}
-            {activeView === 'games' && (
-              <MessagesView
-                viewMode="games"
-                onlineMembers={onlineMembers}
-                call={call}
-                gameOpenRequest={gameOpenRequest}
-                onGameOpenRequestHandled={() => setGameOpenRequest(null)}
-              />
-            )}
-            {activeView === 'schedule' && (
-              <MessagesView viewMode="plan" onlineMembers={onlineMembers} call={call} />
-            )}
-            {activeView === 'my_trip' && (
-              <TripOverview onPhotoViewerChange={setIsPhotoViewerOpen} />
-            )}
-            {activeView === 'settings' && (
-              <SettingsView
-                onNavigateToMessages={handleNavigateToMessages}
-                secondaryTab={secondaryTab}
-                onSecondaryTabChange={handleSecondaryTabChange}
-              />
-            )}
+            {renderViewContent(activeView)}
           </motion.div>
         </AnimatePresence>
+        {swipeNeighbor && (
+          <motion.div
+            aria-hidden="true"
+            initial={false}
+            style={{ x: adjacentViewOffset }}
+            className="absolute inset-0 z-20 flex h-full w-full flex-col overflow-hidden"
+            data-view-key={swipeNeighbor}
+            data-app-view="inactive"
+          >
+            {renderViewContent(swipeNeighbor)}
+          </motion.div>
+        )}
       </main>
 
       {currentTrip && user && (
@@ -746,36 +703,6 @@ const MainAppContent: React.FC = () => {
       )}
       {activeTab === 'messages' && (call.activeCall || call.incomingCall) && (
         <CallOverlay call={call} userId={user?.id} />
-      )}
-      {edgeSwipeSide && (
-        <motion.div
-          aria-hidden="true"
-          className={`pointer-events-none fixed top-1/2 z-[13010] -translate-y-1/2 ${
-            edgeSwipeSide === 'left' ? 'left-2' : 'right-2'
-          }`}
-          style={{ x: edgeSwipeOffset }}
-        >
-          <motion.div
-            animate={{
-              backgroundColor: canCommitEdgeSwipe ? '#0A84FF' : 'rgba(0,0,0,0.6)',
-              borderColor: canCommitEdgeSwipe ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.2)',
-            }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="flex h-12 w-12 items-center justify-center rounded-full border text-white shadow-[0_4px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-          >
-            {edgeSwipeSide === 'left'
-              ? <ArrowRight size={22} weight="bold" />
-              : <ArrowLeft size={22} weight="bold" />}
-          </motion.div>
-        </motion.div>
-      )}
-      {isGestureTransitioning && (
-        <div
-          className="fixed inset-0 z-[13000] touch-none"
-          onWheel={(event) => event.preventDefault()}
-          onTouchMove={(event) => event.preventDefault()}
-          aria-hidden="true"
-        />
       )}
     </div>
   );

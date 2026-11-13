@@ -26,6 +26,11 @@ export interface ActiveCall {
   startedAt: number;
 }
 
+export interface CallMediaState {
+  microphoneMuted: boolean;
+  cameraEnabled: boolean;
+}
+
 export interface LastCallState {
   callId: string;
   startedAt: number;
@@ -114,6 +119,7 @@ export function useGroupCall(
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [participantMediaStates, setParticipantMediaStates] = useState<Record<string, CallMediaState>>({});
   const [callError, setCallError] = useState('');
   const [lastCallState, setLastCallState] = useState<LastCallState | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -123,6 +129,7 @@ export function useGroupCall(
   const incomingCallRef = useRef<CallInvite | null>(null);
   const participantsRef = useRef<CallParticipant[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const participantMediaStatesRef = useRef<Record<string, CallMediaState>>({});
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
   const pendingCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const userProfile: Profile = profile || {
@@ -154,6 +161,17 @@ export function useGroupCall(
     }
   }, []);
 
+  const updateParticipantMediaState = useCallback((participantId: string, mediaState: CallMediaState) => {
+    const next = { ...participantMediaStatesRef.current, [participantId]: mediaState };
+    participantMediaStatesRef.current = next;
+    setParticipantMediaStates(next);
+  }, []);
+
+  const resetParticipantMediaStates = useCallback((next: Record<string, CallMediaState> = {}) => {
+    participantMediaStatesRef.current = next;
+    setParticipantMediaStates(next);
+  }, []);
+
   const updateActiveCall = useCallback((call: ActiveCall | null) => {
     activeCallRef.current = call;
     setActiveCall(call);
@@ -167,6 +185,16 @@ export function useGroupCall(
     const result = await channel.send({ type: 'broadcast', event, payload });
     if (result !== 'ok') throw new Error(`Call signaling failed: ${result}`);
   }, []);
+
+  const broadcastMediaState = useCallback((callId: string) => {
+    if (!userId) return;
+    const mediaState = participantMediaStatesRef.current[userId];
+    if (!mediaState) return;
+    void send('call-media-state', { callId, userId, ...mediaState }).catch((error: unknown) => {
+      console.error('Could not share call media state:', error);
+      setCallError('Could not update your microphone or camera state for other participants.');
+    });
+  }, [send, userId]);
 
   const closePeer = useCallback((peerId: string) => {
     const peer = peersRef.current.get(peerId);
@@ -192,9 +220,10 @@ export function useGroupCall(
     localStreamRef.current = null;
     setLocalStream(null);
     setRemoteStreams({});
+    resetParticipantMediaStates();
     updateParticipants([]);
     updateActiveCall(null);
-  }, [updateActiveCall, updateParticipants]);
+  }, [resetParticipantMediaStates, updateActiveCall, updateParticipants]);
 
   const makePeer = useCallback(
     (peerId: string) => {
@@ -308,7 +337,12 @@ export function useGroupCall(
       if (invite.hostId !== userId && !activeCallRef.current) updateIncomingCall(invite);
     });
     channel.on('broadcast', { event: 'call-join' }, ({ payload }) => {
-      const data = payload as { callId: string; participant: CallParticipant; participants: CallParticipant[] };
+      const data = payload as {
+        callId: string;
+        participant: CallParticipant;
+        participants: CallParticipant[];
+        mediaState?: CallMediaState;
+      };
       const call = activeCallRef.current;
       const roster = mergeParticipants(data.participants || [], [data.participant]);
       if (call?.callId !== data.callId) {
@@ -332,6 +366,8 @@ export function useGroupCall(
       }
       const updatedRoster = mergeParticipants(participantsRef.current, roster);
       updateParticipants(updatedRoster);
+      if (data.mediaState) updateParticipantMediaState(data.participant.userId, data.mediaState);
+      broadcastMediaState(call.callId);
       void persistCallRoster(call.callId, updatedRoster.map((member) => member.userId))
         .catch((error: unknown) => console.error('Could not persist call participants:', error));
       void send('call-roster', { callId: call.callId, participants: updatedRoster }).catch(
@@ -350,6 +386,7 @@ export function useGroupCall(
       const roster = data.participants || [];
       if (call?.callId === data.callId) {
         updateParticipants(mergeParticipants(participantsRef.current, roster));
+        broadcastMediaState(call.callId);
         for (const member of roster) {
           void joinParticipant(member.userId, call.callId).catch((error: unknown) => {
             console.error('Could not establish peer connection:', error);
@@ -366,11 +403,27 @@ export function useGroupCall(
         });
       }
     });
+    channel.on('broadcast', { event: 'call-media-state' }, ({ payload }) => {
+      const data = payload as CallMediaState & { callId: string; userId: string };
+      if (
+        activeCallRef.current?.callId !== data.callId
+        || !data.userId
+        || typeof data.microphoneMuted !== 'boolean'
+        || typeof data.cameraEnabled !== 'boolean'
+      ) return;
+      updateParticipantMediaState(data.userId, {
+        microphoneMuted: data.microphoneMuted,
+        cameraEnabled: data.cameraEnabled,
+      });
+    });
     channel.on('broadcast', { event: 'call-leave' }, ({ payload }) => {
       const data = payload as { callId: string; userId: string };
       const call = activeCallRef.current;
       if (call?.callId !== data.callId) return;
       closePeer(data.userId);
+      const nextMediaStates = { ...participantMediaStatesRef.current };
+      delete nextMediaStates[data.userId];
+      resetParticipantMediaStates(nextMediaStates);
       const roster = participantsRef.current.filter((member) => member.userId !== data.userId);
       updateParticipants(roster);
       void persistCallRoster(call.callId, roster.map((member) => member.userId))
@@ -493,6 +546,9 @@ export function useGroupCall(
     updateActiveCall,
     updateIncomingCall,
     updateParticipants,
+    updateParticipantMediaState,
+    resetParticipantMediaStates,
+    broadcastMediaState,
   ]);
 
   const getMedia = useCallback(async (kind: CallKind) => {
@@ -526,6 +582,9 @@ export function useGroupCall(
         const roster = [me];
         localStreamRef.current = stream;
         setLocalStream(stream);
+        resetParticipantMediaStates(userId
+          ? { [userId]: { microphoneMuted: false, cameraEnabled: kind === 'video' } }
+          : {});
         updateParticipants(roster);
         updateActiveCall({ callId, kind, hostId: userId || '', startedAt });
         lastKnownCallRef.current = { callId, startedAt, participantIds: [userId || ''] };
@@ -558,7 +617,18 @@ export function useGroupCall(
         clearCall();
       }
     },
-    [clearCall, getMedia, send, tripId, updateActiveCall, updateIncomingCall, updateParticipants, userId, userProfile],
+    [
+      clearCall,
+      getMedia,
+      resetParticipantMediaStates,
+      send,
+      tripId,
+      updateActiveCall,
+      updateIncomingCall,
+      updateParticipants,
+      userId,
+      userProfile,
+    ],
   );
 
   const acceptCall = useCallback(async () => {
@@ -581,6 +651,13 @@ export function useGroupCall(
       const roster = [...invite.participants, me];
       localStreamRef.current = stream;
       setLocalStream(stream);
+      resetParticipantMediaStates({
+        ...invite.participants.reduce<Record<string, CallMediaState>>((states, participant) => ({
+          ...states,
+          [participant.userId]: { microphoneMuted: false, cameraEnabled: invite.kind === 'video' },
+        }), {}),
+        [userId]: { microphoneMuted: false, cameraEnabled: invite.kind === 'video' },
+      });
       updateParticipants(roster);
       updateActiveCall({
         callId: invite.callId,
@@ -602,6 +679,7 @@ export function useGroupCall(
         callId: invite.callId,
         participant: me,
         participants: roster,
+        mediaState: { microphoneMuted: false, cameraEnabled: invite.kind === 'video' },
       });
       await Promise.all(
         invite.participants.map((participant) => joinParticipant(participant.userId, invite.callId)),
@@ -619,6 +697,7 @@ export function useGroupCall(
     updateActiveCall,
     updateIncomingCall,
     updateParticipants,
+    resetParticipantMediaStates,
     userId,
     userProfile,
   ]);
@@ -724,18 +803,38 @@ export function useGroupCall(
   }, [acceptCall, tripId, updateIncomingCall, userId]);
 
   const toggleMicrophone = useCallback(() => {
-    localStreamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
+    const tracks = localStreamRef.current?.getAudioTracks() || [];
+    const microphoneOn = tracks.some((track) => !track.enabled);
+    tracks.forEach((track) => {
+      track.enabled = microphoneOn;
     });
-    return localStreamRef.current?.getAudioTracks().some((track) => track.enabled) ?? false;
-  }, []);
+    if (userId) {
+      const current = participantMediaStatesRef.current[userId] || {
+        microphoneMuted: false,
+        cameraEnabled: activeCallRef.current?.kind === 'video',
+      };
+      updateParticipantMediaState(userId, { ...current, microphoneMuted: !microphoneOn });
+      if (activeCallRef.current) broadcastMediaState(activeCallRef.current.callId);
+    }
+    return microphoneOn;
+  }, [broadcastMediaState, updateParticipantMediaState, userId]);
 
   const toggleCamera = useCallback(() => {
-    localStreamRef.current?.getVideoTracks().forEach((track) => {
-      track.enabled = !track.enabled;
+    const tracks = localStreamRef.current?.getVideoTracks() || [];
+    const cameraOn = tracks.some((track) => !track.enabled);
+    tracks.forEach((track) => {
+      track.enabled = cameraOn;
     });
-    return localStreamRef.current?.getVideoTracks().some((track) => track.enabled) ?? false;
-  }, []);
+    if (userId) {
+      const current = participantMediaStatesRef.current[userId] || {
+        microphoneMuted: false,
+        cameraEnabled: true,
+      };
+      updateParticipantMediaState(userId, { ...current, cameraEnabled: cameraOn });
+      if (activeCallRef.current) broadcastMediaState(activeCallRef.current.callId);
+    }
+    return cameraOn;
+  }, [broadcastMediaState, updateParticipantMediaState, userId]);
 
   return {
     incomingCall,
@@ -743,6 +842,7 @@ export function useGroupCall(
     participants,
     localStream,
     remoteStreams,
+    participantMediaStates,
     callError,
     lastCallState,
     clearCallError: () => setCallError(''),

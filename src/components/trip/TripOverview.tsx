@@ -21,6 +21,7 @@ import { Profile } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
 import { PhotoLightbox } from '../common/PhotoLightbox';
 import { TripMemberStack } from '../common/TripMemberStack';
+import { LiquidGlass } from '../ui/LiquidGlass';
 
 type ForecastHour = { time: string; temperature: number };
 type ForecastDay = {
@@ -483,6 +484,7 @@ export const TripOverview: React.FC<{ onPhotoViewerChange?: (isOpen: boolean) =>
             key="trip-photo-viewer"
             photos={lightboxPhotos}
             selectedPhotoId={selectedPhoto.id}
+            initialIndex={lightboxPhotos.findIndex((photo) => photo.id === selectedPhoto.id)}
             onSelectPhoto={setSelectedPhotoId}
             onClose={() => setSelectedPhotoId(null)}
             showCloseButton

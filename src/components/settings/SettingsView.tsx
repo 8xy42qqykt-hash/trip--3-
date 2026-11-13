@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Copy,
   Check,
@@ -27,11 +28,21 @@ import { CollapsingHeaderLayout } from '../common/CollapsingHeaderLayout';
 import { NotificationPermissionButton } from './NotificationPermissionButton';
 import { LocationSharingToggle } from './LocationSharingToggle';
 import { useLanguage } from '../../context/LanguageContext';
+import { LiquidGlass } from '../ui/LiquidGlass';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface SettingsViewProps {
   onNavigateToMessages?: (mentionName?: string) => void;
   secondaryTab?: 'groceries' | 'games';
   onSecondaryTabChange?: (tab: 'groceries' | 'games') => void;
+}
+
+interface LanguageMenuPosition {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  transformOrigin: 'bottom center' | 'top center';
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -41,6 +52,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
+  const [languageMenuPosition, setLanguageMenuPosition] = useState<LanguageMenuPosition | null>(null);
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const measureLanguageMenuPosition = React.useCallback(() => {
+    const button = languageButtonRef.current;
+    if (!button) return;
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(rect.width, Math.max(0, viewportWidth - 16));
+    const spaceAbove = Math.max(0, rect.top - viewportTop - 8);
+    const spaceBelow = Math.max(0, viewportTop + viewportHeight - rect.bottom - 8);
+    const opensAbove = spaceBelow < 100 && spaceAbove > spaceBelow;
+    const availableHeight = opensAbove ? spaceAbove : spaceBelow;
+    const height = Math.min(100, availableHeight);
+    const left = Math.max(viewportLeft + 8, Math.min(rect.left, viewportLeft + viewportWidth - width - 8));
+    const top = opensAbove
+      ? Math.max(viewportTop + 8, rect.top - height - 8)
+      : Math.min(viewportTop + viewportHeight - height - 8, rect.bottom + 8);
+    setLanguageMenuPosition({
+      left,
+      top,
+      width,
+      height,
+      transformOrigin: opensAbove ? 'bottom center' : 'top center',
+    });
+  }, []);
+  React.useEffect(() => {
+    if (!isLanguageMenuOpen) return;
+    const reposition = () => measureLanguageMenuPosition();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsLanguageMenuOpen(false);
+    };
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    window.visualViewport?.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('scroll', reposition);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+      window.visualViewport?.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('scroll', reposition);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isLanguageMenuOpen, measureLanguageMenuPosition]);
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
   const [appUpdateStatus, setAppUpdateStatus] = useState('');
   const { user, profile, updateProfile, signOut } = useAuth();
@@ -420,7 +479,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               type="button"
               disabled={uploadingAvatar}
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-white/20 bg-[#0A84FF] text-white flex items-center justify-center active:scale-90 cursor-pointer shadow-md transition-transform"
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-white/[0.1] bg-[#0A84FF] text-white flex items-center justify-center active:scale-90 cursor-pointer shadow-md transition-transform"
               title={t('Change avatar')}
             >
               <Camera size={15} weight="bold" />
@@ -449,12 +508,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     handleSaveName();
                   }
                 }}
-                className="h-10 px-4 rounded-full bg-white/10 text-[17px] text-center font-bold text-white outline-none border border-white/20"
+                className="h-10 px-4 rounded-full bg-white/10 text-[17px] text-center font-bold text-white outline-none border border-white/[0.04]"
               />
               <button
                 type="button"
                 onClick={handleSaveName}
-                className="rounded-full border border-white/[0.16] px-4 py-2 text-sm font-bold text-[#0A84FF] active-press cursor-pointer"
+                className="rounded-full border border-white/[0.04] px-4 py-2 text-sm font-bold text-[#0A84FF] active-press cursor-pointer"
               >
                 {t('Save')}
               </button>
@@ -480,7 +539,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 aria-label={`${t('Use profile color')} ${color}`}
                 aria-pressed={profile?.color === color && !profile?.avatar_url}
                 onClick={() => void updateProfile({ color, avatar_url: null })}
-                className="h-7 w-7 rounded-full border-2 border-white/20 shadow-sm active:scale-90"
+                className="h-7 w-7 rounded-full border-2 border-white/[0.04] shadow-sm active:scale-90"
                 style={{ backgroundColor: color }}
               />
             ))}
@@ -492,7 +551,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <LocationSharingToggle tripId={currentTrip.id} userId={user?.id} />
           <section className="space-y-2">
             <h3 className="text-base font-bold text-white">{t('Second navigation tab')}</h3>
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/[0.1] bg-[#1c1c1e] p-1.5">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/[0.04] bg-[#1c1c1e] p-1.5">
               {([
                 { value: 'games', label: t('Games') },
                 { value: 'groceries', label: t('Groceries') },
@@ -515,15 +574,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <h3 className="text-base font-bold text-white">{t('Language')}</h3>
             <div className="relative">
               <button
+                ref={languageButtonRef}
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={isLanguageMenuOpen}
                 aria-label={t('Language')}
-                onClick={() => setIsLanguageMenuOpen((open) => !open)}
+                onClick={() => {
+                  if (isLanguageMenuOpen) {
+                    setIsLanguageMenuOpen(false);
+                  } else {
+                    measureLanguageMenuPosition();
+                    setIsLanguageMenuOpen(true);
+                  }
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') setIsLanguageMenuOpen(false);
                 }}
-                className="flex min-h-12 w-full items-center justify-between rounded-full border border-white/[0.16] bg-[#1c1c1e] px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
+                className="flex min-h-12 w-full items-center justify-between rounded-full border border-white/[0.04] bg-[#1c1c1e] px-4 text-left text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.12]"
               >
                 <span>{language === 'fi' ? 'Suomi' : 'English'}</span>
                 <CaretDown
@@ -532,40 +599,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   className={`text-slate-400 transition-transform duration-200 ${isLanguageMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
-              {isLanguageMenuOpen && (
-                <div
-                  role="listbox"
-                  aria-label={t('Language')}
-                  className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-3xl border border-white/[0.16] bg-[#242428]/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-2xl animate-spring-in"
-                >
-                  {([
-                    { value: 'en', label: 'English' },
-                    { value: 'fi', label: 'Suomi' },
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={language === option.value}
-                      onClick={() => {
-                        setLanguage(option.value);
-                        void updateProfile({ language: option.value });
-                        setIsLanguageMenuOpen(false);
-                      }}
-                      className={`flex min-h-11 w-full items-center justify-between rounded-full px-4 text-left text-sm font-medium transition-colors ${
-                        language === option.value ? 'bg-white/[0.1] text-white' : 'text-slate-300 hover:bg-white/[0.06]'
-                      }`}
-                    >
-                      {option.label}
-                      {language === option.value && <Check size={17} weight="bold" className="text-[#0A84FF]" />}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </section>
         </div>
-        {isOwner && <section className="space-y-3 border-y border-white/[0.08] py-4">
+        {isOwner && <section className="space-y-3 border-y border-white/[0.04] py-4">
           <div>
             <h3 className="text-base font-bold text-white">{t('Invite people')}</h3>
             <p className="mt-1 text-xs text-slate-400">{t('Enter one or more email addresses, separated by commas or spaces. Invitees must accept before they can see this trip.')}</p>
@@ -577,13 +614,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             rows={2}
             inputMode="email"
             autoCapitalize="none"
-            className="w-full resize-none rounded-3xl border border-white/[0.16] bg-white/[0.06] px-4 py-3 text-[16px] text-white outline-none placeholder:text-slate-500"
+            className="w-full resize-none rounded-3xl border border-white/[0.04] bg-white/[0.06] px-4 py-3 text-[16px] text-white outline-none placeholder:text-slate-500"
           />
           <button
             type="button"
             onClick={() => void handleInvite()}
             disabled={isInviting || !inviteEmails.trim()}
-            className="h-12 w-full rounded-full border border-white/[0.18] bg-[#0A84FF] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#007AFF] disabled:opacity-50"
+            className="h-12 w-full rounded-full border border-white/[0.1] bg-[#0A84FF] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#007AFF] disabled:opacity-50"
           >
             {t(isInviting ? 'Sending…' : 'Send invitations')}
           </button>
@@ -651,14 +688,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   value={tripName}
                   onChange={(e) => setTripName(e.target.value)}
                   placeholder={t('e.g. Hawaii Summer 2026')}
-                  className="w-full h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-white text-[16px] outline-none"
+                  className="w-full h-12 rounded-full border border-white/[0.04] bg-white/10 px-4 text-white text-[16px] outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('start')}
-                  className="h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
+                  className="h-12 rounded-full border border-white/[0.04] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
                     <span className="text-[10px] text-slate-400 block leading-tight">{t('Start Date')}</span>
@@ -671,7 +708,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveDatePicker('end')}
-                  className="h-12 rounded-full border border-white/[0.16] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
+                  className="h-12 rounded-full border border-white/[0.04] bg-white/10 px-4 text-left flex items-center justify-between active:bg-white/15 cursor-pointer transition-colors"
                 >
                   <div className="truncate">
                     <span className="text-[10px] text-slate-400 block leading-tight">{t('End Date')}</span>
@@ -686,7 +723,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveTrip}
-                  className="w-full h-12 rounded-full border border-white/[0.18] bg-[#0A84FF] text-white font-bold text-sm active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
+                  className="w-full h-12 rounded-full border border-white/[0.1] bg-[#0A84FF] text-white font-bold text-sm active-press cursor-pointer shadow-sm hover:bg-[#007AFF]"
                 >
                   {t(savedTripNotice ? 'Saved!' : 'Save Changes')}
                 </button>
@@ -720,7 +757,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>{t('Members')} ({tripMembers.length})</span>
             <span className="text-[11px] text-slate-500 font-normal">{t('Tap or hold to inspect')}</span>
           </div>
-          <div className="divide-y divide-white/[0.08] overflow-hidden">
+          <div className="divide-y divide-white/[0.04] overflow-hidden">
             {tripMembers.map((m) => (
               <div
                 key={m.user_id}
@@ -774,7 +811,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             type="button"
             onClick={() => void handleAppUpdate()}
             disabled={isCheckingForUpdate}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.08] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.12] active-press disabled:opacity-60"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.04] bg-white/[0.08] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/[0.12] active-press disabled:opacity-60"
           >
             <ArrowClockwise size={18} weight="bold" className={isCheckingForUpdate ? 'animate-spin' : ''} />
             <span>{t('Update App')}</span>
@@ -787,13 +824,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <button
             type="button"
             onClick={signOut}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/15 px-4 text-sm font-bold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/25"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.04] bg-red-500/15 px-4 text-sm font-bold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/25"
           >
             <SignOut size={18} weight="bold" />
             <span>{t('Sign Out')}</span>
           </button>
         </div>
       </div>
+
+      {createPortal(
+        <AnimatePresence>
+          {isLanguageMenuOpen && languageMenuPosition && (
+            <>
+              <motion.button
+                type="button"
+                aria-label={t('Close language menu')}
+                onClick={() => setIsLanguageMenuOpen(false)}
+                className="fixed inset-0 z-[10999] cursor-default"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+              />
+              <LiquidGlass
+                as={motion.div}
+                role="listbox"
+                aria-label={t('Language')}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.94 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+                className="z-[11000] overflow-hidden rounded-3xl p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                tint="rgba(238,242,250,0.12)"
+                style={{
+                  position: 'fixed',
+                  left: languageMenuPosition.left,
+                  top: languageMenuPosition.top,
+                  width: languageMenuPosition.width,
+                  height: languageMenuPosition.height,
+                  maxHeight: languageMenuPosition.height,
+                  transformOrigin: languageMenuPosition.transformOrigin,
+                }}
+              >
+                {([
+                  { value: 'en', label: 'English' },
+                  { value: 'fi', label: 'Suomi' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={language === option.value}
+                    onClick={() => {
+                      setLanguage(option.value);
+                      void updateProfile({ language: option.value });
+                      setIsLanguageMenuOpen(false);
+                    }}
+                    className={`flex min-h-11 w-full items-center justify-between rounded-full px-4 text-left text-sm font-medium transition-colors ${
+                      language === option.value ? 'bg-white/[0.1] text-white' : 'text-slate-300 hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {option.label}
+                    {language === option.value && <Check size={17} weight="bold" className="text-[#0A84FF]" />}
+                  </button>
+                ))}
+              </LiquidGlass>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
 
       {/* Member Profile Bottom Sheet */}
       <BottomSheet
@@ -844,7 +944,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleChatWithMember}
-                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.18] bg-[#0A84FF] px-4 text-sm font-semibold text-white active-press cursor-pointer shadow-sm transition-colors hover:bg-[#007AFF]"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.1] bg-[#0A84FF] px-4 text-sm font-semibold text-white active-press cursor-pointer shadow-sm transition-colors hover:bg-[#007AFF]"
               >
                 <PaperPlaneTilt size={18} weight="bold" />
                 <span>{t('Send Message / Mention')}</span>
@@ -854,7 +954,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 type="button"
                 onClick={handleCopyMemberName}
-                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.16] bg-white/10 px-4 text-sm font-semibold text-white active-press cursor-pointer transition-colors hover:bg-white/15"
+                className="flex h-12 w-full items-center justify-center gap-2.5 rounded-full border border-white/[0.04] bg-white/10 px-4 text-sm font-semibold text-white active-press cursor-pointer transition-colors hover:bg-white/15"
               >
                 {copiedMemberName ? (
                   <>
@@ -882,7 +982,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           type="button"
                           disabled={isRemoving}
                           onClick={handleRemoveMember}
-                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.18] bg-red-600 px-4 text-xs font-bold text-white active-press cursor-pointer hover:bg-red-700"
+                          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border border-white/[0.04] bg-red-600 px-4 text-xs font-bold text-white active-press cursor-pointer hover:bg-red-700"
                         >
                           <Trash size={14} weight="bold" />
                           {t(isRemoving ? 'Removing...' : 'Yes, Remove')}
@@ -890,7 +990,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmRemove(false)}
-                          className="h-10 rounded-full border border-white/[0.16] bg-white/10 px-4 text-xs font-semibold text-slate-300 active-press cursor-pointer"
+                          className="h-10 rounded-full border border-white/[0.04] bg-white/10 px-4 text-xs font-semibold text-slate-300 active-press cursor-pointer"
                         >
                           {t('Cancel')}
                         </button>
@@ -900,7 +1000,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setConfirmRemove(true)}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.16] bg-red-500/10 px-4 text-sm font-semibold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/20"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-white/[0.04] bg-red-500/10 px-4 text-sm font-semibold text-red-400 active-press cursor-pointer transition-colors hover:bg-red-500/20"
                     >
                       <Trash size={18} weight="bold" />
                       <span>{t('Remove from Trip')}</span>

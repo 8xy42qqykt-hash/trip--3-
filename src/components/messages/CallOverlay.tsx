@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Microphone,
   MicrophoneSlash,
@@ -23,19 +24,64 @@ const formatDuration = (seconds: number) => {
   return `${minutes}:${remainder}`;
 };
 
+function getTileAspectRatio(stream: MediaStream | null, audioOnly: boolean, cameraEnabled: boolean) {
+  if (audioOnly || !cameraEnabled) return 1;
+  const aspectRatio = stream?.getVideoTracks()[0]?.getSettings().aspectRatio;
+  return typeof aspectRatio === 'number' && Number.isFinite(aspectRatio) && aspectRatio > 0
+    ? aspectRatio
+    : 16 / 9;
+}
+
+function getOptimalGridLayout(aspectRatios: number[], width: number, height: number) {
+  const gap = 12;
+  let bestLayout = { columns: 1, tileWidth: 0, area: 0 };
+
+  for (let columns = 1; columns <= aspectRatios.length; columns += 1) {
+    const rows = Math.ceil(aspectRatios.length / columns);
+    let rowHeightFactor = 0;
+    for (let row = 0; row < rows; row += 1) {
+      const ratiosInRow = aspectRatios.slice(row * columns, (row + 1) * columns);
+      rowHeightFactor += Math.max(...ratiosInRow.map((ratio) => 1 / ratio));
+    }
+
+    const widthLimited = (width - gap * (columns - 1)) / columns;
+    const heightLimited = (height - gap * (rows - 1)) / rowHeightFactor;
+    const tileWidth = Math.max(0, Math.min(widthLimited, heightLimited));
+    const area = tileWidth ** 2 * aspectRatios.reduce((sum, ratio) => sum + 1 / ratio, 0);
+    if (area > bestLayout.area) bestLayout = { columns, tileWidth, area };
+  }
+
+  return { columns: bestLayout.columns, tileWidth: bestLayout.tileWidth, gap };
+}
+
 const VideoTile: React.FC<{
   profile: CallParticipant['profile'];
   stream: MediaStream | null;
-  muted?: boolean;
+  playbackMuted: boolean;
+  microphoneMuted: boolean;
+  cameraEnabled: boolean;
+  aspectRatio: number;
   audioOnly: boolean;
   local?: boolean;
   spotlight?: boolean;
   onClick?: () => void;
-}> = ({ profile, stream, muted = false, audioOnly, local = false, spotlight = false, onClick }) => {
+}> = ({
+  profile,
+  stream,
+  playbackMuted,
+  microphoneMuted,
+  cameraEnabled,
+  aspectRatio,
+  audioOnly,
+  local = false,
+  spotlight = false,
+  onClick,
+}) => {
   const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [needsPlaybackTap, setNeedsPlaybackTap] = useState(false);
+  const videoEnabled = !audioOnly && cameraEnabled;
 
   useEffect(() => {
     const element = audioOnly ? audioRef.current : videoRef.current;
@@ -62,13 +108,11 @@ const VideoTile: React.FC<{
         }
       }}
       aria-label={`${t(spotlight ? 'Return to call grid from' : 'Spotlight')}: ${profile.display_name}`}
-      className={`relative min-w-0 overflow-hidden rounded-2xl bg-[#1c1c20] text-left transition-[flex-basis,transform] duration-300 ease-out ${
-        audioOnly ? 'aspect-square' : 'aspect-video'
-      }`}
+      className="relative w-full min-w-0 overflow-hidden rounded-2xl bg-[#1c1c20] text-left"
       style={{
-        aspectRatio: audioOnly
+        aspectRatio: audioOnly || !cameraEnabled
           ? '1 / 1'
-          : stream?.getVideoTracks()[0]?.getSettings().aspectRatio || '16 / 9',
+          : aspectRatio,
       }}
     >
       {stream && !audioOnly ? (
@@ -76,13 +120,16 @@ const VideoTile: React.FC<{
           ref={videoRef}
           autoPlay
           playsInline
-          muted={muted}
-          className={`absolute inset-0 h-full w-full bg-black object-contain ${local ? 'scale-x-[-1]' : ''}`}
+          muted={playbackMuted}
+          className={`absolute inset-0 h-full w-full bg-black object-contain ${local ? 'scale-x-[-1]' : ''} ${
+            videoEnabled ? '' : 'opacity-0'
+          }`}
         />
       ) : stream ? (
         <audio
           ref={audioRef}
           autoPlay
+          muted={playbackMuted}
           className="hidden"
         />
       ) : null}
@@ -104,7 +151,7 @@ const VideoTile: React.FC<{
           {t('Tap to enable')} {t(audioOnly ? 'audio' : 'video')}
         </button>
       )}
-      <div className={`${stream && !audioOnly ? 'hidden' : 'flex'} absolute inset-0 items-center justify-center`}>
+      <div className={`${stream && videoEnabled ? 'hidden' : 'flex'} absolute inset-0 items-center justify-center`}>
         <Avatar
           name={profile.display_name}
           avatarUrl={profile.avatar_url}
@@ -114,7 +161,7 @@ const VideoTile: React.FC<{
       </div>
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 pb-3 pt-8">
         <span className="text-sm font-semibold text-white">{profile.display_name}</span>
-        {muted && <MicrophoneSlash size={15} className="ml-2 inline text-white/80" />}
+        {microphoneMuted && <MicrophoneSlash size={15} className="ml-2 inline text-white/80" />}
       </div>
     </div>
   );
@@ -122,16 +169,14 @@ const VideoTile: React.FC<{
 
 export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
   const { t } = useLanguage();
-  const [isMicrophoneOn, setIsMicrophoneOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [spotlightId, setSpotlightId] = useState<string | null>(null);
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const stageRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!call.activeCall) {
       setElapsedSeconds(0);
-      setIsMicrophoneOn(true);
-      setIsCameraOn(true);
       return;
     }
     const updateDuration = () => {
@@ -142,107 +187,212 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
     return () => window.clearInterval(timer);
   }, [call.activeCall]);
 
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const updateSize = () => setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(stage);
+    updateSize();
+    return () => observer.disconnect();
+  }, [call.activeCall?.callId]);
+
+  useEffect(() => {
+    setSpotlightId(null);
+  }, [call.activeCall?.callId]);
+
   if (call.activeCall) {
+    const audioOnly = call.activeCall.kind === 'audio';
     const localParticipant = call.participants.find((member) => member.userId === userId);
     const others = call.participants.filter((member) => member.userId !== userId);
     const tiles = [
       ...(localParticipant
-        ? [{ participant: localParticipant, stream: call.localStream, muted: true }]
+        ? [{
+            participant: localParticipant,
+            stream: call.localStream,
+            playbackMuted: true,
+            microphoneMuted: call.participantMediaStates[localParticipant.userId]?.microphoneMuted ?? false,
+            cameraEnabled: !audioOnly
+              && (call.participantMediaStates[localParticipant.userId]?.cameraEnabled ?? true),
+          }]
         : []),
       ...others.map((participant) => ({
         participant,
         stream: call.remoteStreams[participant.userId] || null,
-        muted: false,
+        playbackMuted: false,
+        microphoneMuted: call.participantMediaStates[participant.userId]?.microphoneMuted ?? false,
+        cameraEnabled: !audioOnly
+          && (call.participantMediaStates[participant.userId]?.cameraEnabled ?? true),
       })),
-    ];
+    ].map((tile) => ({
+      ...tile,
+      aspectRatio: getTileAspectRatio(tile.stream, audioOnly, tile.cameraEnabled),
+    }));
     const spotlight = tiles.find(({ participant }) => participant.userId === spotlightId);
-    const columnLimit = window.innerWidth < 640 ? 2 : 3;
-    const columns = Math.min(columnLimit, Math.max(1, Math.ceil(Math.sqrt(tiles.length))));
+    const stageWidth = Math.max(0, (stageSize.width || window.innerWidth) - 24);
+    const stageHeight = Math.max(0, (stageSize.height || window.innerHeight * 0.68) - 16);
+    const gridLayout = getOptimalGridLayout(
+      tiles.map((tile) => tile.aspectRatio),
+      stageWidth,
+      stageHeight,
+    );
+    const spotlightOthers = tiles.filter(({ participant }) => participant.userId !== spotlightId);
+    const thumbnailGap = 8;
+    const thumbnailMaxHeight = Math.min(88, stageHeight * 0.22);
+    const thumbnailWidth = spotlightOthers.length > 0
+      ? Math.max(0, Math.min(
+          (stageWidth - thumbnailGap * (spotlightOthers.length - 1)) / spotlightOthers.length,
+          thumbnailMaxHeight * Math.min(...spotlightOthers.map((tile) => tile.aspectRatio)),
+        ))
+      : 0;
+    const thumbnailHeight = spotlightOthers.length > 0
+      ? Math.max(...spotlightOthers.map((tile) => thumbnailWidth / tile.aspectRatio))
+      : 0;
+    const spotlightWidth = spotlight
+      ? Math.max(0, Math.min(
+          stageWidth,
+          (stageHeight - thumbnailHeight - (spotlightOthers.length > 0 ? 12 : 0)) * spotlight.aspectRatio,
+        ))
+      : 0;
+    const localMediaState = userId ? call.participantMediaStates[userId] : undefined;
+    const isMicrophoneOn = !(localMediaState?.microphoneMuted ?? false);
+    const isCameraOn = localMediaState?.cameraEnabled ?? !audioOnly;
+    const layoutTransition = { type: 'spring' as const, stiffness: 300, damping: 30 };
 
     return createPortal((
       <section className="fixed inset-0 z-[9990] flex h-[100dvh] w-screen flex-col overflow-hidden bg-black text-white">
         <header
-          className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 pb-4"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
+          className="flex shrink-0 justify-center px-4 pb-2"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
         >
-          <div>
-            <div className="text-base font-bold">
-              {call.activeCall.kind === 'video' ? 'Video call' : 'Voice call'}
-            </div>
-            <div className="text-xs text-slate-400">
-              {formatDuration(elapsedSeconds)} · {call.participants.map((member) => member.profile.display_name).join(', ')}
-            </div>
-          </div>
+          <div className="text-sm font-medium tabular-nums text-white/75">{formatDuration(elapsedSeconds)}</div>
         </header>
 
         {call.callError && (
-          <div className="mb-3 flex items-center justify-between rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
+          <div className="mx-3 mb-2 flex shrink-0 items-center justify-between rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
             <span>{call.callError}</span>
             <button type="button" onClick={call.clearCallError} aria-label={t('Dismiss call error')}>×</button>
           </div>
         )}
 
-        <main className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto px-3 py-4">
+        <main
+          ref={stageRef}
+          className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 py-2"
+        >
           {spotlight ? (
-            <div className="mx-auto w-full max-w-5xl space-y-3">
-              <VideoTile
-                profile={spotlight.participant.profile}
-                stream={spotlight.stream}
-                muted={spotlight.muted}
-                local={spotlight.participant.userId === userId}
-                audioOnly={call.activeCall.kind === 'audio'}
-                spotlight
-                onClick={() => setSpotlightId(null)}
-              />
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {tiles.filter(({ participant }) => participant.userId !== spotlightId).map(({ participant, stream, muted }) => (
-                  <div key={participant.userId} className="w-28 shrink-0">
-                    <VideoTile
-                      profile={participant.profile}
-                      stream={stream}
-                      muted={muted}
-                      local={participant.userId === userId}
-                      audioOnly={call.activeCall!.kind === 'audio'}
-                      onClick={() => setSpotlightId(participant.userId)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div
-              className="mx-auto grid w-full max-w-6xl content-center justify-items-center gap-3"
-              style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-            >
-              {tiles.map(({ participant, stream, muted }) => (
-                <div
-                  key={participant.userId}
-                  className="w-full min-w-0 max-w-2xl transition-[width,transform] duration-300 ease-out"
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+              <motion.div
+                layout
+                transition={{ layout: layoutTransition }}
+                className="flex min-h-0 w-full flex-1 items-center justify-center"
+              >
+                <motion.div
+                  layout
+                  transition={{ layout: layoutTransition }}
+                  style={{ width: spotlightWidth }}
                 >
                   <VideoTile
-                    profile={participant.profile}
-                    stream={stream}
-                    muted={muted}
-                    local={participant.userId === userId}
-                    audioOnly={call.activeCall!.kind === 'audio'}
-                    onClick={() => setSpotlightId((current) => current === participant.userId ? null : participant.userId)}
+                    profile={spotlight.participant.profile}
+                    stream={spotlight.stream}
+                    playbackMuted={spotlight.playbackMuted}
+                    microphoneMuted={spotlight.microphoneMuted}
+                    cameraEnabled={spotlight.cameraEnabled}
+                    aspectRatio={spotlight.aspectRatio}
+                    local={spotlight.participant.userId === userId}
+                    audioOnly={audioOnly}
+                    spotlight
+                    onClick={() => setSpotlightId(null)}
                   />
-                </div>
-              ))}
+                </motion.div>
+              </motion.div>
+              {spotlightOthers.length > 0 && (
+                <motion.div
+                  layout
+                  transition={{ layout: layoutTransition }}
+                  className="flex shrink-0 items-center justify-center"
+                  style={{ gap: thumbnailGap }}
+                >
+                  <AnimatePresence initial={false}>
+                    {spotlightOthers.map((tile) => (
+                      <motion.div
+                        key={tile.participant.userId}
+                        layout
+                        initial={{ opacity: 0, scale: 0.94 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.94 }}
+                        transition={{ layout: layoutTransition, opacity: { duration: 0.18 } }}
+                        style={{ width: thumbnailWidth }}
+                      >
+                        <VideoTile
+                          profile={tile.participant.profile}
+                          stream={tile.stream}
+                          playbackMuted={tile.playbackMuted}
+                          microphoneMuted={tile.microphoneMuted}
+                          cameraEnabled={tile.cameraEnabled}
+                          aspectRatio={tile.aspectRatio}
+                          local={tile.participant.userId === userId}
+                          audioOnly={audioOnly}
+                          onClick={() => setSpotlightId(tile.participant.userId)}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
             </div>
+          ) : (
+            <motion.div
+              layout
+              transition={{ layout: layoutTransition }}
+              className="grid content-center justify-items-center"
+              style={{
+                gridTemplateColumns: `repeat(${gridLayout.columns}, ${gridLayout.tileWidth}px)`,
+                gap: gridLayout.gap,
+              }}
+            >
+              <AnimatePresence initial={false}>
+                {tiles.map((tile) => (
+                  <motion.div
+                    key={tile.participant.userId}
+                    layout
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.94 }}
+                    transition={{ layout: layoutTransition, opacity: { duration: 0.18 } }}
+                    style={{ width: gridLayout.tileWidth }}
+                  >
+                    <VideoTile
+                      profile={tile.participant.profile}
+                      stream={tile.stream}
+                      playbackMuted={tile.playbackMuted}
+                      microphoneMuted={tile.microphoneMuted}
+                      cameraEnabled={tile.cameraEnabled}
+                      aspectRatio={tile.aspectRatio}
+                      local={tile.participant.userId === userId}
+                      audioOnly={audioOnly}
+                      onClick={() => setSpotlightId((current) => (
+                        current === tile.participant.userId ? null : tile.participant.userId
+                      ))}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
           )}
           {others.length === 0 && (
-            <div className="py-2 text-center text-xs text-slate-400">{t('Waiting for others to join…')}</div>
+            <div className="absolute bottom-3 left-0 right-0 text-center text-xs text-slate-400">
+              {t('Waiting for others to join…')}
+            </div>
           )}
         </main>
 
         <footer
-          className="flex shrink-0 items-center justify-center gap-4 border-t border-white/10 px-4 pt-4"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}
+          className="flex shrink-0 items-center justify-center gap-4 px-4 pt-2"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           <button
             type="button"
-            onClick={() => setIsMicrophoneOn(call.toggleMicrophone())}
+            onClick={call.toggleMicrophone}
             aria-label={t(isMicrophoneOn ? 'Mute microphone' : 'Unmute microphone')}
             className={`flex h-11 w-11 items-center justify-center rounded-full ${
               isMicrophoneOn ? 'bg-white/15' : 'bg-red-500'
@@ -253,7 +403,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({ call, userId }) => {
           {call.activeCall.kind === 'video' && (
             <button
               type="button"
-              onClick={() => setIsCameraOn(call.toggleCamera())}
+              onClick={call.toggleCamera}
               aria-label={t(isCameraOn ? 'Turn camera off' : 'Turn camera on')}
               className={`flex h-11 w-11 items-center justify-center rounded-full ${
                 isCameraOn ? 'bg-white/15' : 'bg-red-500'

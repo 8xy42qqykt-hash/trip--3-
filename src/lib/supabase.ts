@@ -57,7 +57,12 @@ export const supabase = realClient;
 export const isCloudActive = Boolean(realClient);
 
 // Storage helper for uploading images (avatars, chat attachments)
-export async function uploadAsset(file: File | Blob, folder = 'chat'): Promise<string> {
+export async function uploadAsset(
+  file: File | Blob,
+  folder = 'chat',
+  options: { allowDataUrlFallback?: boolean } = {},
+): Promise<string> {
+  const allowDataUrlFallback = options.allowDataUrlFallback ?? true;
   if (realClient) {
     try {
       const ext = ('name' in file ? (file as File).name.split('.').pop() : 'jpg') || 'jpg';
@@ -67,14 +72,22 @@ export async function uploadAsset(file: File | Blob, folder = 'chat'): Promise<s
         .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
       if (uploadError) {
+        if (!allowDataUrlFallback) {
+          throw new Error(`Could not upload the attachment: ${uploadError.message}`);
+        }
         console.warn('Storage upload error, falling back to data URL:', uploadError);
       } else {
         const { data } = realClient.storage.from('trip-assets').getPublicUrl(filePath);
         return data.publicUrl;
       }
     } catch (e) {
+      if (!allowDataUrlFallback) throw e;
       console.warn('Storage error:', e);
     }
+  }
+
+  if (!allowDataUrlFallback) {
+    throw new Error('Cloud storage is unavailable. The video was not sent.');
   }
 
   // Fallback: convert to base64 Data URL for preview

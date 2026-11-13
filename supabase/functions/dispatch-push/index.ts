@@ -110,7 +110,11 @@ Deno.serve(async (request) => {
   const language = profiles?.find((profile) => profile.id === recipientId)?.language === 'fi' ? 'fi' : 'en';
   const isCall = latest.category === 'calls';
   const tripName = trip?.name || 'Trip';
-  const title = senderName;
+  const normalizeTitlePart = (value: string) => {
+    const singleLine = value.replace(/\s+/g, ' ').trim();
+    return singleLine.length > 22 ? `${singleLine.slice(0, 21).trimEnd()}…` : singleLine;
+  };
+  const title = `${normalizeTitlePart(senderName)} from ${normalizeTitlePart(tripName)}`;
   const callType = language === 'fi'
     ? /video/i.test(latest.preview) ? 'Videopuhelu' : 'Äänipuhelu'
     : /video/i.test(latest.preview) ? 'Video call' : 'Voice call';
@@ -166,8 +170,8 @@ Deno.serve(async (request) => {
         : `${latest.preview} (+${allowedEvents.length - 1} more update${allowedEvents.length === 2 ? '' : 's'})`
       : translatedPreview;
   const body = isCall
-    ? `${language === 'fi' ? 'Matkalta' : 'From'} ${tripName}\n${localizedCategory}\n${callType}`
-    : `${language === 'fi' ? 'Matkalta' : 'From'} ${tripName}\n${localizedCategory}\n${messagePreview}`;
+    ? `${localizedCategory}\n${callType}`
+    : `${localizedCategory}\n${messagePreview}`;
   const appBase = new URL(Deno.env.get('APP_PUBLIC_URL') || supabaseUrl);
   if (!appBase.pathname.endsWith('/')) appBase.pathname += '/';
   const destination = new URL((latest.destination || '/').replace(/^\/+/, ''), appBase).href;
